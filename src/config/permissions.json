@@ -1,0 +1,58 @@
+{
+  "SUPER_ADMIN": {
+    "users": ["create", "read", "update", "delete", "assign_role"],
+    "tenants": ["create", "read", "update", "delete", "suspend"],
+    "products": ["create", "read", "update", "delete"],
+    "categories": ["create", "read", "update", "delete"],
+    "brands": ["create", "read", "update", "delete"],
+    "suppliers": ["create", "read", "update", "delete"],
+    "branches": ["create", "read", "update", "delete"],
+    "warehouses": ["create", "read", "update", "delete"],
+    "orders": ["read", "view_all"],
+    "inventory": ["read", "view_all"],
+    "subscriptions": ["read", "update", "manage"],
+    "promotions": ["create", "read", "update", "delete"],
+    "notifications": ["create", "read", "update", "delete"],
+    "reports": ["read", "export"]
+  },
+  "TENANT_OWNER": {
+    "users": ["create", "read", "update", "assign_role"],
+    "tenants": ["read", "update"],
+    "products": ["create", "read", "update", "delete"],
+    "categories": ["create", "read", "update", "delete"],
+    "brands": ["create", "read", "update", "delete"],
+    "suppliers": ["create", "read", "update", "delete"],
+    "branches": ["create", "read", "update", "delete"],
+    "warehouses": ["create", "read", "update", "delete"],
+    "orders": ["read"],
+    "inventory": ["read"],
+    "promotions": ["create", "read", "update", "delete"],
+    "reports": ["read", "export"]
+  },
+  "BRANCH_MANAGER": {
+    "users": ["read", "create_staff"],
+    "products": ["read"],
+    "branches": ["read", "update"],
+    "orders": ["create", "read", "update"],
+    "inventory": ["read", "update"],
+    "promotions": ["read"],
+    "reports": ["read"]
+  },
+  "WAREHOUSE_MANAGER": {
+    "users": ["read", "create_staff"],
+    "products": ["read"],
+    "warehouses": ["read", "update"],
+    "inventory": ["read", "update", "manage"],
+    "stock_movement": ["create", "read", "update"],
+    "reports": ["read"]
+  },
+  "BRANCH_STAFF": {
+    "products": ["read"],
+    "orders": ["create", "read"],
+    "inventory": ["read"],
+    "branches": ["read"]
+  },
+  "CUSTOMER": {
+    "profile": ["read"]
+  }
+}
