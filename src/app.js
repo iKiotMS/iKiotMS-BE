@@ -2,17 +2,19 @@ const express = require("express");
 const { registerModules } = require("./modules");
 const { getConfig } = require("./config");
 const connectDB = require("./config/connectDB");
+const { setupSwagger } = require("./config/setupSwagger");
 require("dotenv").config();
 const createApp = () => {
   const app = express();
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
+  setupSwagger(app);
 
   app.get("/health", (_request, response) => {
     response.json({ status: "ok" });
   });
-  
+
   registerModules(app);
   return app;
 };
