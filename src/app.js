@@ -9,7 +9,6 @@ const createApp = () => {
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
-
   setupSwagger(app);
 
   app.get("/health", (_request, response) => {
