@@ -1,14 +1,27 @@
 const express = require("express");
+const cors = require("cors");
 const { registerModules } = require("./modules");
 const { getConfig } = require("./config");
 const connectDB = require("./config/connectDB");
 const { setupSwagger } = require("./config/setupSwagger");
+
 require("dotenv").config();
+
 const createApp = () => {
   const app = express();
 
+  app.use(
+    cors({
+      origin: [
+        "http://localhost:3000",
+      ],
+      credentials: true,
+    })
+  );
+
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
+
   setupSwagger(app);
 
   app.get("/health", (_request, response) => {
@@ -16,6 +29,7 @@ const createApp = () => {
   });
 
   registerModules(app);
+
   return app;
 };
 
