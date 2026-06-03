@@ -1,21 +1,21 @@
 const jwt = require("jsonwebtoken");
-const { User, RefreshToken } = require("../../../models");
+const { User, RefreshToken, Tenant } = require("../../../models");
 
 class AuthService {
-  async login(email, password, userAgent) {
-    const user = await User.findOne({ email }).lean();
+  async login(phoneNumber, password, userAgent) {
+    const user = await User.findOne({ phoneNumber }).lean();
 
     if (!user) {
-      throw new Error("Invalid email or password");
+      throw new Error("Invalid phone number or password");
     }
 
     if (user.status === "SUSPENDED" || user.status === "INACTIVE") {
       throw new Error("User account is not active");
     }
 
-    const passwordMatch = await this.validateCredentials(email, password);
+    const passwordMatch = await this.validateCredentials(phoneNumber, password);
     if (!passwordMatch) {
-      throw new Error("Invalid email or password");
+      throw new Error("Invalid phone number or password");
     }
 
     const tokens = this.generateTokens(user);
@@ -39,8 +39,8 @@ class AuthService {
     };
   }
 
-  async validateCredentials(email, password) {
-    const user = await User.findOne({ email });
+  async validateCredentials(phoneNumber, password) {
+    const user = await User.findOne({ phoneNumber });
 
     if (!user) {
       return false;
@@ -53,7 +53,7 @@ class AuthService {
     const accessToken = jwt.sign(
       {
         userId: user._id,
-        email: user.email,
+        phoneNumber: user.phoneNumber,
         role: user.role,
         tenantId: user.tenantId,
       },
@@ -124,6 +124,56 @@ class AuthService {
       { token: refreshToken, userId },
       { isRevoked: true },
     );
+  }
+
+  async register(userData) {
+    const {
+      email,
+      phoneNumber,
+      password,
+      firstName,
+      lastName,
+      tenantName,
+      tenantMainAddress,
+      tenantTaxNumber,
+    } = userData;
+    
+
+    const existingUser = await User.findOne({ phoneNumber });
+    if (existingUser) {
+      throw new Error("Phone number already in use");
+    }
+
+    const existingTenant = await Tenant.findOne({ name: tenantName });
+    if (existingTenant) {
+      throw new Error("Tenant name already in use");
+    }
+
+    const tenant = await Tenant.create({
+      name: tenantName,
+      phoneNumber: phoneNumber || "",
+      mainAddress: tenantMainAddress || "",
+      taxNumber: tenantTaxNumber || "",
+      tenantOwnerId: null,
+    });
+
+    const user = await User.create({
+      email,
+      phoneNumber,
+      password,
+      role: "TENANT_OWNER",
+      tenantId: tenant._id,
+      profile: {
+        firstName: firstName || "",
+        lastName: lastName || "",
+        phoneNumber: phoneNumber || "",
+      },
+    });
+
+    tenant.tenantOwnerId = user._id;
+    await tenant.save();
+
+    return { user, tenant };
   }
 }
 

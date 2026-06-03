@@ -19,4 +19,9 @@ module.exports = {
   StockMovementRequest: require("./StockMovementRequest"),
   Promotion: require("./Promotion"),
   Notification: require("./Notification"),
+  Attendance: require("./Attendance"),
+  Payslip: require("./Payslip"),
+  ShiftTemplate: require("./ShiftTemplate"),
+  WorkingSchedule: require("./WorkingSchedule"),
+  LeaveRequest: require("./LeaveRequest"),
 };

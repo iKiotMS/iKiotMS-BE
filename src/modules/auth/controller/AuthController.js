@@ -1,13 +1,21 @@
 const AuthService = require("../service/AuthService");
 const LoginRequestDTO = require("../dto/LoginRequestDTO");
 const LoginResponseDTO = require("../dto/LoginResponseDTO");
+const RegisterRequestDTO = require("../dto/RegisterRequestDTO");
+
+const { User } = require("../../../models");
+const { Tenant } = require("../../../models");
+const RefreshToken = require("../../../models/RefreshToken");
+const {
+  SubscriptionService,
+} = require("../../subscription/service/SubscriptionService");
 
 class AuthController {
   async login(req, res) {
     try {
-      const { email, password } = req.body;
+      const { phoneNumber, password } = req.body;
 
-      const loginDTO = new LoginRequestDTO(email, password);
+      const loginDTO = new LoginRequestDTO(phoneNumber, password);
       const validation = loginDTO.validate();
 
       if (!validation.isValid) {
@@ -19,7 +27,7 @@ class AuthController {
       }
 
       const userAgent = req.headers["user-agent"];
-      const result = await AuthService.login(email, password, userAgent);
+      const result = await AuthService.login(phoneNumber, password, userAgent);
 
       const response = new LoginResponseDTO(
         result.accessToken,
@@ -33,6 +41,55 @@ class AuthController {
         success: false,
         message: error.message || "Login failed",
       });
+    }
+  }
+
+  async register(req, res) {
+    try {
+      console.log("A");
+
+      const {
+        email,
+        password,
+        firstName,
+        lastName,
+        phoneNumber,
+        tenantName,
+        tenantPhoneNumber,
+        tenantMainAddress,
+        tenantTaxNumber,
+      } = req.body;
+
+      console.log("B");
+
+      const registerDTO = new RegisterRequestDTO(
+        email,
+        phoneNumber,
+        password,
+        firstName,
+        lastName,
+        tenantName,
+        tenantPhoneNumber,
+        tenantMainAddress,
+        tenantTaxNumber,
+      );
+
+      console.log("C");
+
+      const validation = registerDTO.validate();
+
+      console.log("D");
+
+      const { user, tenant } = await AuthService.register(registerDTO);
+
+      console.log("E");
+
+      res.status(201).json({
+        success: true,
+      });
+    } catch (error) {
+      console.error(error);
+      console.error(error.stack);
     }
   }
 
