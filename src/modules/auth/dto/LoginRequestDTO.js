@@ -1,16 +1,16 @@
 class LoginRequestDTO {
-  constructor(email, password) {
-    this.email = email;
+  constructor(phoneNumber, password) {
+    this.phoneNumber = phoneNumber;
     this.password = password;
   }
 
   validate() {
     const errors = [];
 
-    if (!this.email || typeof this.email !== "string") {
-      errors.push("Email is required and must be a string");
-    } else if (!this.email.includes("@")) {
-      errors.push("Email must be valid");
+    if (!this.phoneNumber || typeof this.phoneNumber !== "string") {
+      errors.push("Phone number is required and must be a string");
+    } else if (this.phoneNumber.trim().length < 10) {
+      errors.push("Phone number must be valid");
     }
 
     if (!this.password || typeof this.password !== "string") {
@@ -21,7 +21,7 @@ class LoginRequestDTO {
 
     return {
       isValid: errors.length === 0,
-      errors,
+      errors: errors,
     };
   }
 }

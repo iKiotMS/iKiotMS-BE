@@ -10,7 +10,6 @@ const tenantSchema = new mongoose.Schema(
     tenantOwnerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: [true, "Tenant owner is required"],
     },
     status: {
       type: String,

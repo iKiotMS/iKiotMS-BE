@@ -61,12 +61,21 @@ const productItemSchema = new mongoose.Schema(
     },
     productDetails: [
       {
+        id: {
+          type: mongoose.Schema.Types.ObjectId,
+          default: () => new mongoose.Types.ObjectId(),
+        },
         name: String,
         value: String,
       },
     ],
   },
   { timestamps: true },
+);
+
+productItemSchema.index(
+  { tenantId: 1, sku: 1 },
+  { unique: true, sparse: true },
 );
 
 module.exports = mongoose.model("ProductItem", productItemSchema);

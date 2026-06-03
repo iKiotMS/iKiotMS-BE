@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const notificationSchema = new mongoose.Schema(
   {
+    tenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tenant",
+      required: [true, "Tenant is required"],
+    },
     title: {
       type: String,
       required: [true, "Title is required"],
@@ -13,8 +18,8 @@ const notificationSchema = new mongoose.Schema(
       trim: true,
     },
     sendTo: {
-      type: String,
-      trim: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
     isGlobal: {
       type: Boolean,

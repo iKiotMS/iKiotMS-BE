@@ -6,7 +6,7 @@ class LoginResponseDTO {
     this.refreshToken = refreshToken;
     this.user = {
       id: user._id,
-      email: user.email,
+      phoneNumber: user.phoneNumber,
       role: user.role,
       tenantId: user.tenantId,
       firstName: user.profile?.firstName || "",

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const bcryptjs = require("bcryptjs");
 
 const userSchema = new mongoose.Schema(
   {
@@ -9,13 +10,17 @@ const userSchema = new mongoose.Schema(
     },
     email: {
       type: String,
-      required: [true, "Email is required"],
       lowercase: true,
       trim: true,
     },
     password: {
       type: String,
       required: [true, "Password is required"],
+    },
+    phoneNumber: {
+      type: String,
+      required: [true, "Phone number is required"],
+      trim: true,
     },
     role: {
       type: String,
@@ -37,9 +42,16 @@ const userSchema = new mongoose.Schema(
     lastLogin: {
       type: Date,
     },
-    phoneNumber: {
+    hireDate: {
+      type: Date,
+    },
+    baseSalary: {
+      type: Number,
+      min: [0, "Base salary cannot be negative"],
+    },
+    salaryType: {
       type: String,
-      trim: true,
+      enum: ["FULL_TIME", "PART_TIME"],
     },
     warehouseId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -64,15 +76,12 @@ const userSchema = new mongoose.Schema(
     },
   },
   { timestamps: true },
-)
+);
 
-userSchema.pre("save", async function (next) {
-  if (this.isModified("password")) {
-    const bcryptjs = require("bcryptjs");
-    const salt = await bcryptjs.genSalt(10);
-    this.password = await bcryptjs.hash(this.password, salt);
-  }
-  next();
+userSchema.pre("save", async function () {
+  if (!this.isModified("password")) return;
+
+  this.password = await bcryptjs.hash(this.password, 10);
 });
 
 userSchema.methods.comparePassword = async function (candidatePassword) {
