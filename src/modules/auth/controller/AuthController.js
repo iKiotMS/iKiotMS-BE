@@ -90,6 +90,10 @@ class AuthController {
     } catch (error) {
       console.error(error);
       console.error(error.stack);
+      return res.status(400).json({
+        success: false,
+        message: error.message || "Registration failed",
+      });
     }
   }
 
