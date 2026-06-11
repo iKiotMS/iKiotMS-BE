@@ -29,7 +29,7 @@ const userSchema = new mongoose.Schema(
         "TENANT_OWNER",
         "BRANCH_MANAGER",
         "WAREHOUSE_MANAGER",
-        "BRANCH_STAFF",
+        "STAFF",
         "CUSTOMER",
       ],
       required: [true, "Role is required"],
