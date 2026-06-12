@@ -11,10 +11,15 @@ const authorize = (module, action) => {
 
     const userRole = req.user.role;
 
-    if (!hasPermission(userRole, module, action)) {
+    const actions = Array.isArray(action) ? action : [action];
+    const isAllowed = actions.some((allowedAction) =>
+      hasPermission(userRole, module, allowedAction),
+    );
+
+    if (!isAllowed) {
       return res.status(403).json({
         success: false,
-        message: `Forbidden: You don't have permission to ${action} ${module}`,
+        message: `Forbidden: You don't have permission to ${actions.join(" or ")} ${module}`,
       });
     }
 

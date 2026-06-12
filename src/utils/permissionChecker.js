@@ -20,18 +20,18 @@ const validateRoleHierarchy = (assignerRole, assigneeRole) => {
       "TENANT_OWNER",
       "BRANCH_MANAGER",
       "WAREHOUSE_MANAGER",
-      "BRANCH_STAFF",
+      "STAFF",
       "CUSTOMER",
     ],
     TENANT_OWNER: [
       "BRANCH_MANAGER",
       "WAREHOUSE_MANAGER",
-      "BRANCH_STAFF",
+      "STAFF",
       "CUSTOMER",
     ],
-    BRANCH_MANAGER: ["BRANCH_STAFF"],
-    WAREHOUSE_MANAGER: ["BRANCH_STAFF"],
-    BRANCH_STAFF: [],
+    BRANCH_MANAGER: ["STAFF"],
+    WAREHOUSE_MANAGER: ["STAFF"],
+    STAFF: [],
     CUSTOMER: [],
   };
 

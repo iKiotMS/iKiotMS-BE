@@ -56,6 +56,8 @@ class AuthService {
         phoneNumber: user.phoneNumber,
         role: user.role,
         tenantId: user.tenantId,
+        branchId: user.branchId,
+        warehouseId: user.warehouseId,
       },
       process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET,
       { expiresIn: "15m" },
