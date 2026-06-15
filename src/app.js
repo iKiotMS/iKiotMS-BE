@@ -1,4 +1,5 @@
 const express = require("express");
+const path = require("path");
 const cors = require("cors");
 const { registerModules } = require("./modules");
 const { getConfig } = require("./config");
@@ -19,6 +20,9 @@ const createApp = () => {
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
+
+  // Serve uploaded files
+  app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));
 
   setupSwagger(app);
 
