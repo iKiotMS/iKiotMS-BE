@@ -61,6 +61,7 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Branch",
     },
+    accountNote: { type: String },
     profile: {
       firstName: String,
       lastName: String,
