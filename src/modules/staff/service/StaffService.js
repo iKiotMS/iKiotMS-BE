@@ -570,7 +570,10 @@ class StaffService extends BaseService {
 
     return {
       message: "Staff account deactivated successfully",
-      data: deactivatedAccount,
+      data: {
+        id: deactivatedAccount._id,
+        status: deactivatedAccount.status,
+      },
     };
   }
 
@@ -587,13 +590,31 @@ class StaffService extends BaseService {
     }
 
     staff.password = undefined;
-    staff.status = "INACTIVE";
+    staff.status = "DELETED";
     await staff.save();
 
+    const deletedAccount = await this.getStaffAccountResponse(staff._id);
+
     return {
-      message: "Staff deactivated successfully",
-      data: await this.getStaffAccountResponse(staff._id),
+      message: "Staff deleted successfully",
+      data: {
+        id: deletedAccount._id,
+        status: deletedAccount.status,
+      },
     };
+  }
+
+  getAvailableStaffRoles(userRole) {
+    return STAFF_ROLES.filter((role) =>
+      validateRoleHierarchy(userRole, role),
+    ).map((role) => ({
+      value: role,
+      label: role
+        .toLowerCase()
+        .split("_")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" "),
+    }));
   }
 }
 

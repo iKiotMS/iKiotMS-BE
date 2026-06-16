@@ -143,7 +143,6 @@ class AuthService {
       tenantMainAddress,
       tenantTaxNumber,
     } = userData;
-    
 
     const existingUser = await User.findOne({ phoneNumber });
     if (existingUser) {

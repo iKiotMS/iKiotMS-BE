@@ -83,7 +83,8 @@ class StaffController {
       const staffId = req.params.staffId;
 
       const result = await StaffService.deleteStaff({ tenantId, staffId });
-      res.status(200).json({ message: result.message });
+
+      res.status(200).json({ message: result.message, staff: result.data });
     } catch (error) {
       return res.status(400).json({ error: error.message });
     }
@@ -136,11 +137,20 @@ class StaffController {
         tenantId,
         staffId,
       });
-      const response = new StaffResponseDTO(result.data);
 
-      res.status(200).json({ message: result.message, staff: response });
+      res.status(200).json({ message: result.message, staff: result.data });
     } catch (error) {
       return res.status(400).json({ error: error.message });
+    }
+  }
+
+  async getAvailableRoles(req, res) {
+    try {
+      const roles = StaffService.getAvailableStaffRoles(req.user.role);
+
+      res.status(200).json({ data: roles });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
     }
   }
 }

@@ -16,8 +16,8 @@
     "reports": ["read", "export"]
   },
   "TENANT_OWNER": {
-    "users": ["create", "read", "update", "assign_role"],
-    "staff": ["create", "read", "update", "inactive", "assign_role", "suspend"],
+    "users": ["create", "read", "update", "delete", "assign_role"],
+    "staff": ["create", "read", "update", "delete", "assign_role", "suspend"],
     "tenants": ["read", "update"],
     "products": ["create", "read", "update", "delete"],
     "categories": ["create", "read", "update", "delete"],

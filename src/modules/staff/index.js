@@ -120,6 +120,26 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *           format: password
  *           minLength: 6
  *           example: "123456"
+ *     StaffRoleOption:
+ *       type: object
+ *       properties:
+ *         value:
+ *           type: string
+ *           enum: [BRANCH_MANAGER, WAREHOUSE_MANAGER, STAFF]
+ *           example: BRANCH_MANAGER
+ *         label:
+ *           type: string
+ *           example: Branch Manager
+ *     StaffStatusResult:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           example: 665aaa1234567890abcdef12
+ *         status:
+ *           type: string
+ *           enum: [INACTIVE, DELETED]
+ *           example: INACTIVE
  *     Staff:
  *       type: object
  *       properties:
@@ -266,6 +286,47 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Unauthorized
  *       403:
  *         description: Forbidden
+ * /staff/roles:
+ *   get:
+ *     tags:
+ *       - Staff
+ *     summary: Get available staff roles
+ *     description: Get staff roles that the authenticated user is allowed to assign.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Available staff roles retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/StaffRoleOption'
+ *             examples:
+ *               tenantOwner:
+ *                 summary: Tenant owner roles
+ *                 value:
+ *                   data:
+ *                     - value: BRANCH_MANAGER
+ *                       label: Branch Manager
+ *                     - value: WAREHOUSE_MANAGER
+ *                       label: Warehouse Manager
+ *                     - value: STAFF
+ *                       label: Staff
+ *               manager:
+ *                 summary: Manager roles
+ *                 value:
+ *                   data:
+ *                     - value: STAFF
+ *                       label: Staff
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
  * /staff/{staffId}:
  *   patch:
  *     tags:
@@ -313,6 +374,22 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *     responses:
  *       200:
  *         description: Staff deactivated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Staff deleted successfully
+ *                 staff:
+ *                   allOf:
+ *                     - $ref: '#/components/schemas/StaffStatusResult'
+ *                     - type: object
+ *                       properties:
+ *                         status:
+ *                           type: string
+ *                           example: DELETED
  *       400:
  *         description: Validation failed
  *       401:
@@ -429,7 +506,13 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *                   type: string
  *                   example: Staff account deactivated successfully
  *                 staff:
- *                   $ref: '#/components/schemas/Staff'
+ *                   allOf:
+ *                     - $ref: '#/components/schemas/StaffStatusResult'
+ *                     - type: object
+ *                       properties:
+ *                         status:
+ *                           type: string
+ *                           example: INACTIVE
  *       400:
  *         description: Validation failed
  *       401:
@@ -443,7 +526,7 @@ function registerStaffModule(app) {
   app.post(
     "/staff",
     verifyJwt,
-    authorize("staff", ["create",]),
+    authorize("staff", ["create"]),
     StaffController.create.bind(StaffController),
   );
 
@@ -457,7 +540,7 @@ function registerStaffModule(app) {
   app.patch(
     "/staff/:staffId",
     verifyJwt,
-    authorize("staff", ["update",]),
+    authorize("staff", ["update"]),
     StaffController.updateStaff.bind(StaffController),
   );
 
@@ -485,8 +568,15 @@ function registerStaffModule(app) {
   app.delete(
     "/staff/:staffId",
     verifyJwt,
-    authorize("staff", ["delete",]),
+    authorize("staff", ["delete"]),
     StaffController.deleteStaff.bind(StaffController),
+  );
+
+  app.get(
+    "/staff/roles",
+    verifyJwt,
+    authorize("staff", "read"),
+    StaffController.getAvailableRoles.bind(StaffController),
   );
 
   console.log(" Staff module registered");
