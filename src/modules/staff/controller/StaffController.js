@@ -1,6 +1,11 @@
 const StaffService = require("../service/StaffService");
+const StaffResponseDTO = require("../dto/StaffResponseDTO");
 
 class StaffController {
+  getRequestData(req) {
+    return req.body?.data || req.body || {};
+  }
+
   async create(req, res) {
     try {
       const tenantId = req.user.tenantId;
@@ -54,10 +59,16 @@ class StaffController {
   async updateStaff(req, res) {
     try {
       const tenantId = req.user.tenantId;
+      const userRole = req.user.role;
       const staffId = req.params.staffId;
-      const data = req.body.data;
+      const data = this.getRequestData(req);
 
-      const staff = await StaffService.updateStaff({ tenantId, staffId, data });
+      const staff = await StaffService.updateStaff({
+        tenantId,
+        staffId,
+        data,
+        userRole,
+      });
       const response = new StaffResponseDTO(staff.data);
 
       res.status(200).json({ message: staff.message, staff: response });
@@ -73,6 +84,61 @@ class StaffController {
 
       const result = await StaffService.deleteStaff({ tenantId, staffId });
       res.status(200).json({ message: result.message });
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
+  async createStaffAccount(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const staffId = req.params.staffId;
+      const data = this.getRequestData(req);
+
+      const result = await StaffService.createStaffAccount({
+        tenantId,
+        staffId,
+        data,
+      });
+      const response = new StaffResponseDTO(result.data);
+
+      res.status(201).json({ message: result.message, staff: response });
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
+  async updateStaffAccountPassword(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const staffId = req.params.staffId;
+      const data = this.getRequestData(req);
+
+      const result = await StaffService.updateStaffAccountPassword({
+        tenantId,
+        staffId,
+        data,
+      });
+      const response = new StaffResponseDTO(result.data);
+
+      res.status(200).json({ message: result.message, staff: response });
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
+  async deactivateStaffAccount(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const staffId = req.params.staffId;
+
+      const result = await StaffService.deactivateStaffAccount({
+        tenantId,
+        staffId,
+      });
+      const response = new StaffResponseDTO(result.data);
+
+      res.status(200).json({ message: result.message, staff: response });
     } catch (error) {
       return res.status(400).json({ error: error.message });
     }

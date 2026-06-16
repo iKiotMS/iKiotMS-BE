@@ -9,7 +9,11 @@ class AuthService {
       throw new Error("Invalid phone number or password");
     }
 
-    if (user.status === "SUSPENDED" || user.status === "INACTIVE") {
+    if (
+      user.status === "SUSPENDED" ||
+      user.status === "INACTIVE" ||
+      user.status === "DELETED"
+    ) {
       throw new Error("User account is not active");
     }
 
@@ -42,7 +46,7 @@ class AuthService {
   async validateCredentials(phoneNumber, password) {
     const user = await User.findOne({ phoneNumber });
 
-    if (!user) {
+    if (!user || !user.password) {
       return false;
     }
 

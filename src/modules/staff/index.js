@@ -39,7 +39,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       type: object
  *       required:
  *         - phoneNumber
- *         - password
  *         - role
  *       properties:
  *         email:
@@ -49,18 +48,10 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         phoneNumber:
  *           type: string
  *           example: "0901234567"
- *         password:
- *           type: string
- *           format: password
- *           example: "123456"
  *         role:
  *           type: string
  *           enum: [BRANCH_MANAGER, WAREHOUSE_MANAGER, STAFF]
  *           example: STAFF
- *         status:
- *           type: string
- *           enum: [ACTIVE, INACTIVE, SUSPENDED]
- *           example: ACTIVE
  *         hireDate:
  *           type: string
  *           format: date
@@ -94,10 +85,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *               type: string
  *               enum: [BRANCH_MANAGER, WAREHOUSE_MANAGER, STAFF]
  *               example: STAFF
- *             status:
- *               type: string
- *               enum: [ACTIVE, INACTIVE, SUSPENDED]
- *               example: ACTIVE
  *             hireDate:
  *               type: string
  *               format: date
@@ -117,6 +104,22 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *               example: 665abc1234567890abcdef12
  *             profile:
  *               $ref: '#/components/schemas/StaffProfile'
+ *     StaffAccountPasswordRequest:
+ *       type: object
+ *       required:
+ *         - newPassword
+ *         - reEnterPassword
+ *       properties:
+ *         newPassword:
+ *           type: string
+ *           format: password
+ *           minLength: 6
+ *           example: "123456"
+ *         reEnterPassword:
+ *           type: string
+ *           format: password
+ *           minLength: 6
+ *           example: "123456"
  *     Staff:
  *       type: object
  *       properties:
@@ -318,6 +321,123 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Forbidden
  *       404:
  *         description: Staff not found
+ * /staff/{staffId}/account:
+ *   post:
+ *     tags:
+ *       - Staff
+ *     summary: Create staff account
+ *     description: Create a login account for an inactive staff member by setting a password and changing status to ACTIVE.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: staffId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StaffAccountPasswordRequest'
+ *     responses:
+ *       201:
+ *         description: Staff account created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Staff account created successfully
+ *                 staff:
+ *                   $ref: '#/components/schemas/Staff'
+ *       400:
+ *         description: Validation failed
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Staff not found
+ * /staff/{staffId}/account/password:
+ *   patch:
+ *     tags:
+ *       - Staff
+ *     summary: Update staff account password
+ *     description: Update the password for an active staff account.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: staffId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StaffAccountPasswordRequest'
+ *     responses:
+ *       200:
+ *         description: Staff account password updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Staff account password updated successfully
+ *                 staff:
+ *                   $ref: '#/components/schemas/Staff'
+ *       400:
+ *         description: Validation failed
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Staff not found
+ * /staff/{staffId}/account/deactivate:
+ *   patch:
+ *     tags:
+ *       - Staff
+ *     summary: Deactivate staff account
+ *     description: Remove the staff password and set status to INACTIVE.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: staffId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Staff account deactivated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Staff account deactivated successfully
+ *                 staff:
+ *                   $ref: '#/components/schemas/Staff'
+ *       400:
+ *         description: Validation failed
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Staff not found
  */
 function registerStaffModule(app) {
   app.post(
@@ -339,6 +459,27 @@ function registerStaffModule(app) {
     verifyJwt,
     authorize("staff", ["update",]),
     StaffController.updateStaff.bind(StaffController),
+  );
+
+  app.post(
+    "/staff/:staffId/account",
+    verifyJwt,
+    authorize("staff", ["update"]),
+    StaffController.createStaffAccount.bind(StaffController),
+  );
+
+  app.patch(
+    "/staff/:staffId/account/password",
+    verifyJwt,
+    authorize("staff", ["update"]),
+    StaffController.updateStaffAccountPassword.bind(StaffController),
+  );
+
+  app.patch(
+    "/staff/:staffId/account/deactivate",
+    verifyJwt,
+    authorize("staff", ["update"]),
+    StaffController.deactivateStaffAccount.bind(StaffController),
   );
 
   app.delete(

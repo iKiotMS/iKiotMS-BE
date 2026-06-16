@@ -1,7 +1,11 @@
-const { User } = require("../../../models");
+const { User, Branch, Warehouse } = require("../../../models");
 const BaseService = require("../../../common/services/baseService");
 const { STAFF_ROLES } = require("../../../constants/role");
-const { createStaffDTO, updateStaffDTO } = require("../dto/StaffDTO");
+const {
+  createStaffDTO,
+  updateStaffDTO,
+  createStaffAccountDTO,
+} = require("../dto/StaffDTO");
 const { validateRoleHierarchy } = require("../../../utils/permissionChecker");
 
 class StaffService extends BaseService {
@@ -15,6 +19,32 @@ class StaffService extends BaseService {
       role: { $in: STAFF_ROLES },
       ...extra,
     };
+  }
+
+  validatePasswordCombo(data) {
+    const passwordCombo = createStaffAccountDTO(data || {});
+
+    if (!passwordCombo.newPassword || !passwordCombo.reEnterPassword) {
+      throw new Error("Password and confirmation password are required");
+    }
+
+    if (passwordCombo.newPassword.length < 6) {
+      throw new Error("Password must be at least 6 characters");
+    }
+
+    if (passwordCombo.newPassword !== passwordCombo.reEnterPassword) {
+      throw new Error("Passwords do not match");
+    }
+
+    return passwordCombo;
+  }
+
+  async getStaffAccountResponse(staffId) {
+    return await User.findById(staffId)
+      .select("-password")
+      .populate("branchId")
+      .populate("warehouseId")
+      .lean();
   }
 
   normalizeStaffRole(role) {
@@ -178,6 +208,120 @@ class StaffService extends BaseService {
     return requester?.warehouseId;
   }
 
+  async checkRoleAndBranchValidity(
+    role,
+    branchId,
+    warehouseId,
+    tenantId,
+    staffIdToExclude = null,
+  ) {
+    if (branchId) {
+      const branch = await Branch.findOne({
+        _id: branchId,
+        tenantId,
+      });
+
+      if (!branch) {
+        throw new Error("Branch not found");
+      }
+    }
+
+    if (warehouseId) {
+      const warehouse = await Warehouse.findOne({
+        _id: warehouseId,
+        tenantId,
+      });
+
+      if (!warehouse) {
+        throw new Error("Warehouse not found");
+      }
+    }
+
+    if (role === "BRANCH_MANAGER" && !branchId) {
+      throw new Error("Branch manager must be assigned to a branch");
+    }
+
+    if (role === "BRANCH_MANAGER" && branchId) {
+      const branchManagerFilter = {
+        tenantId,
+        branchId,
+        role: "BRANCH_MANAGER",
+      };
+
+      if (staffIdToExclude) {
+        branchManagerFilter._id = { $ne: staffIdToExclude };
+      }
+
+      const existingBranchManager = await User.findOne(branchManagerFilter);
+      if (existingBranchManager) {
+        throw new Error("This branch already has a branch manager assigned");
+      }
+    }
+
+    if (role === "WAREHOUSE_MANAGER" && !warehouseId) {
+      throw new Error("Warehouse manager must be assigned to a warehouse");
+    }
+
+    if (role === "WAREHOUSE_MANAGER" && warehouseId) {
+      const warehouseManagerFilter = {
+        tenantId,
+        warehouseId,
+        role: "WAREHOUSE_MANAGER",
+      };
+
+      if (staffIdToExclude) {
+        warehouseManagerFilter._id = { $ne: staffIdToExclude };
+      }
+
+      const existingWarehouseManager = await User.findOne(
+        warehouseManagerFilter,
+      );
+      if (existingWarehouseManager) {
+        throw new Error(
+          "This warehouse already has a warehouse manager assigned",
+        );
+      }
+    }
+  }
+
+  async checkStaffUniqueness({
+    tenantId,
+    phoneNumber,
+    email,
+    staffIdToExclude,
+  }) {
+    if (phoneNumber) {
+      const phoneFilter = { tenantId, phoneNumber };
+
+      if (staffIdToExclude) {
+        phoneFilter._id = { $ne: staffIdToExclude };
+      }
+
+      const existingUser = await User.findOne(phoneFilter);
+
+      if (existingUser) {
+        throw new Error("Phone number already exists");
+      }
+    }
+
+    if (email) {
+      const emailFilter = {
+        tenantId,
+        email: email.toLowerCase().trim(),
+      };
+
+      if (staffIdToExclude) {
+        emailFilter._id = { $ne: staffIdToExclude };
+      }
+
+      const existingEmail = await User.findOne(emailFilter);
+
+      if (existingEmail) {
+        throw new Error("Email already exists");
+      }
+    }
+  }
+
   async createStaff({ tenantId, data, userRole }) {
     this.checktenantId(tenantId);
     data.role = this.validateStaffRole(data.role, { required: true });
@@ -187,25 +331,18 @@ class StaffService extends BaseService {
         `Your role (${userRole}) do not have permission to create staff with role ${data.role}`,
       );
 
-    const existingUser = await User.findOne({
+    await this.checkRoleAndBranchValidity(
+      data.role,
+      data.branchId,
+      data.warehouseId,
+      tenantId,
+    );
+
+    await this.checkStaffUniqueness({
       tenantId,
       phoneNumber: data.phoneNumber,
+      email: data.email,
     });
-
-    if (existingUser) {
-      throw new Error("Phone number already exists");
-    }
-
-    if (data.email) {
-      const existingEmail = await User.findOne({
-        tenantId,
-        email: data.email.toLowerCase().trim(),
-      });
-
-      if (existingEmail) {
-        throw new Error("Email already exists");
-      }
-    }
 
     return await this.create(createStaffDTO(tenantId, data));
   }
@@ -278,13 +415,60 @@ class StaffService extends BaseService {
     });
   }
 
-  async updateStaff({ tenantId, staffId, data }) {
+  async updateStaff({ tenantId, staffId, data, userRole }) {
     this.checktenantId(tenantId);
-    await this.checkStaffId(staffId, tenantId);
+    data = data || {};
+
+    const currentStaff = await User.findOne(
+      this.getStaffFilter(tenantId, { _id: staffId }),
+    );
+
+    if (!currentStaff) {
+      throw new Error("Invalid staff ID");
+    }
 
     if (data.role) {
       data.role = this.validateStaffRole(data.role);
     }
+
+    if (Object.hasOwn(data, "password")) {
+      throw new Error("Password cannot be updated through this endpoint");
+    }
+
+    if (Object.hasOwn(data, "phoneNumber")) {
+      throw new Error("Phone number cannot be updated through this endpoint");
+    }
+
+    if (Object.hasOwn(data, "status")) {
+      throw new Error("Status cannot be updated through this endpoint");
+    }
+
+    const nextRole = data.role || currentStaff.role;
+    const nextBranchId =
+      data.branchId !== undefined ? data.branchId : currentStaff.branchId;
+    const nextWarehouseId =
+      data.warehouseId !== undefined
+        ? data.warehouseId
+        : currentStaff.warehouseId;
+
+    if (validateRoleHierarchy(userRole, nextRole) === false)
+      throw new Error(
+        `Your role (${userRole}) do not have permission to update staff with role ${nextRole}`,
+      );
+
+    await this.checkRoleAndBranchValidity(
+      nextRole,
+      nextBranchId,
+      nextWarehouseId,
+      tenantId,
+      staffId,
+    );
+
+    await this.checkStaffUniqueness({
+      tenantId,
+      email: data.email,
+      staffIdToExclude: staffId,
+    });
 
     const updatedStaff = await User.findOneAndUpdate(
       this.getStaffFilter(tenantId, { _id: staffId }),
@@ -307,14 +491,109 @@ class StaffService extends BaseService {
     };
   }
 
+  async createStaffAccount({ tenantId, staffId, data }) {
+    this.checktenantId(tenantId);
+    await this.checkStaffId(staffId, tenantId);
+
+    const passwordCombo = this.validatePasswordCombo(data);
+
+    const staff = await User.findOne(
+      this.getStaffFilter(tenantId, { _id: staffId }),
+    );
+
+    if (!staff) {
+      throw new Error("Staff not found");
+    }
+
+    if (staff.status === "ACTIVE" && staff.password) {
+      throw new Error("Staff account already exists");
+    }
+
+    staff.password = passwordCombo.newPassword;
+    staff.status = "ACTIVE";
+    await staff.save();
+
+    const createdAccount = await this.getStaffAccountResponse(staff._id);
+
+    return {
+      message: "Staff account created successfully",
+      data: createdAccount,
+    };
+  }
+
+  async updateStaffAccountPassword({ tenantId, staffId, data }) {
+    this.checktenantId(tenantId);
+    await this.checkStaffId(staffId, tenantId);
+
+    const passwordCombo = this.validatePasswordCombo(data);
+
+    const staff = await User.findOne(
+      this.getStaffFilter(tenantId, { _id: staffId }),
+    );
+
+    if (!staff) {
+      throw new Error("Staff not found");
+    }
+
+    if (staff.status !== "ACTIVE" || !staff.password) {
+      throw new Error("Staff account is not active");
+    }
+
+    staff.password = passwordCombo.newPassword;
+    await staff.save();
+
+    const updatedAccount = await this.getStaffAccountResponse(staff._id);
+
+    return {
+      message: "Staff account password updated successfully",
+      data: updatedAccount,
+    };
+  }
+
+  async deactivateStaffAccount({ tenantId, staffId }) {
+    this.checktenantId(tenantId);
+    await this.checkStaffId(staffId, tenantId);
+
+    const staff = await User.findOne(
+      this.getStaffFilter(tenantId, { _id: staffId }),
+    );
+
+    if (!staff) {
+      throw new Error("Staff not found");
+    }
+
+    staff.password = undefined;
+    staff.status = "INACTIVE";
+    await staff.save();
+
+    const deactivatedAccount = await this.getStaffAccountResponse(staff._id);
+
+    return {
+      message: "Staff account deactivated successfully",
+      data: deactivatedAccount,
+    };
+  }
+
   async deleteStaff({ tenantId, staffId }) {
     this.checktenantId(tenantId);
     await this.checkStaffId(staffId, tenantId);
 
-    return await this.updateOne(
+    const staff = await User.findOne(
       this.getStaffFilter(tenantId, { _id: staffId }),
-      { status: "INACTIVE" },
     );
+
+    if (!staff) {
+      throw new Error("Staff not found");
+    }
+
+    staff.password = undefined;
+    staff.status = "INACTIVE";
+    await staff.save();
+
+    return {
+      message: "Staff deactivated successfully",
+      data: await this.getStaffAccountResponse(staff._id),
+    };
   }
 }
 

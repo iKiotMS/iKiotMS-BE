@@ -3,9 +3,8 @@ const createStaffDTO = (tenantId, data) => {
     tenantId: tenantId,
     email: data.email,
     phoneNumber: data.phoneNumber,
-    password: data.password,
     role: data.role,
-    status: data.status,
+    status: "INACTIVE",
     hireDate: data.hireDate,
     baseSalary: data.baseSalary,
     salaryType: data.salaryType,
@@ -25,20 +24,52 @@ const createStaffDTO = (tenantId, data) => {
 };
 
 const updateStaffDTO = (data) => {
-  const staff = createStaffDTO(null, data);
-  delete staff.tenantId;
-  delete staff.password;
-  delete staff.phoneNumber;
+  const staff = {};
 
-  Object.keys(staff).forEach((key) => {
-    if (staff[key] === undefined) delete staff[key];
+  const staffFields = [
+    "email",
+    "role",
+    "hireDate",
+    "baseSalary",
+    "salaryType",
+    "warehouseId",
+    "branchId",
+    "accountNote",
+  ];
+
+  staffFields.forEach((field) => {
+    if (data[field] !== undefined) staff[field] = data[field];
   });
 
-  Object.keys(staff.profile || {}).forEach((key) => {
-    if (staff.profile[key] === undefined) delete staff.profile[key];
+  const profile = {};
+  const profileFields = [
+    "firstName",
+    "lastName",
+    "avatarUrl",
+    "dob",
+    "taxNumber",
+    "identificationId",
+    "address",
+    "gender",
+  ];
+
+  profileFields.forEach((field) => {
+    if (data.profile?.[field] !== undefined) {
+      profile[field] = data.profile[field];
+    }
   });
+
+  if (Object.keys(profile).length > 0) staff.profile = profile;
 
   return staff;
 };
 
-module.exports = { createStaffDTO, updateStaffDTO };
+const createStaffAccountDTO = (data) => {
+  return {
+    newPassword: data.newPassword,
+    reEnterPassword: data.reEnterPassword,
+    status: "ACTIVE",
+  };
+};
+
+module.exports = { createStaffDTO, updateStaffDTO, createStaffAccountDTO };

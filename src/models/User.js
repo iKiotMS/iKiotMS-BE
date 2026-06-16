@@ -15,7 +15,9 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, "Password is required"],
+      required: function () {
+        return ["ACTIVE", "SUSPENDED"].includes(this.status);
+      },
     },
     phoneNumber: {
       type: String,
@@ -36,7 +38,7 @@ const userSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["ACTIVE", "INACTIVE", "SUSPENDED"],
+      enum: ["ACTIVE", "INACTIVE", "SUSPENDED", "DELETED"],
       default: "ACTIVE",
     },
     lastLogin: {
@@ -81,6 +83,7 @@ const userSchema = new mongoose.Schema(
 
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
+  if (!this.password) return;
 
   this.password = await bcryptjs.hash(this.password, 10);
 });
