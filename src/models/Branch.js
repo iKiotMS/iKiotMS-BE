@@ -21,6 +21,23 @@ const branchSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    phoneNumber: {
+      type: [String],
+      required: true,
+      validate: [
+        {
+          validator: function (arr) {
+            return arr && arr.length > 0;
+          },
+          message: "Branch must have at least one phone number",
+        },
+      ],
+    },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
+    },
   },
   { timestamps: true },
 );
