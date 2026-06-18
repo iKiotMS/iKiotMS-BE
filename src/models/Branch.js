@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { BRANCH_STATUS } = require("../constants/branchConstants");
 
 const branchSchema = new mongoose.Schema(
   {
@@ -14,8 +15,8 @@ const branchSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["ACTIVE", "INACTIVE", "SUSPENDED"],
-      default: "ACTIVE",
+      enum: Object.values(BRANCH_STATUS),
+      default: BRANCH_STATUS.ACTIVE,
     },
     address: {
       type: String,
