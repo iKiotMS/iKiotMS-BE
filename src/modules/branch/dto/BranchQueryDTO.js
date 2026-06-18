@@ -1,3 +1,5 @@
+const { BRANCH_STATUS } = require("../../../constants/branchConstants");
+
 class BranchQueryDTO {
   constructor(query) {
     this.page = parseInt(query.page, 10) || 1;
@@ -17,13 +19,8 @@ class BranchQueryDTO {
       errors.push("Limit must be between 1 and 100");
     }
 
-    if (
-      this.status &&
-      !["ACTIVE", "INACTIVE", "SUSPENDED"].includes(this.status)
-    ) {
-      errors.push(
-        "Invalid status filter. Must be ACTIVE, INACTIVE, or SUSPENDED",
-      );
+    if (this.status && !Object.values(BRANCH_STATUS).includes(this.status)) {
+      errors.push(`Invalid status filter. Must be one of: ${Object.values(BRANCH_STATUS).join(", ")}`);
     }
 
     return {

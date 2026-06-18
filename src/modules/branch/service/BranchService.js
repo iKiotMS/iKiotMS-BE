@@ -1,4 +1,5 @@
 const Branch = require("../../../models/Branch");
+const { BRANCH_STATUS } = require("../../../constants/branchConstants");
 
 class BranchService {
   async createBranch(tenantId, branchData) {
@@ -73,7 +74,7 @@ class BranchService {
   async softDeleteBranch(tenantId, branchId) {
     const branch = await Branch.findOneAndUpdate(
       { _id: branchId, tenantId },
-      { $set: { status: "INACTIVE" } }, // Or SUSPENDED depending on business rules
+      { $set: { status: BRANCH_STATUS.INACTIVE } }, // Or SUSPENDED depending on business rules
       { new: true },
     );
 
