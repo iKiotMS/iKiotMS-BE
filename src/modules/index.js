@@ -4,6 +4,7 @@ const { registerSubscriptionModule } = require("./subscription");
 const { registerStaffModule } = require("./staff");
 const { registerUploadModule } = require("./upload");
 const { registerProductModule } = require("./product");
+const { registerBranchModule } = require("./branch");
 
 function registerModules(app) {
   registerAuthModule(app);
@@ -12,6 +13,7 @@ function registerModules(app) {
   registerStaffModule(app);
   registerUploadModule(app);
   registerProductModule(app);
+  registerBranchModule(app);
 }
 
 module.exports = { registerModules };
