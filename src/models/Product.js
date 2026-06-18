@@ -33,6 +33,12 @@ const productSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    images: [
+      {
+        url: { type: String, required: true },
+        isThumbnail: { type: Boolean, default: false },
+      },
+    ],
   },
   { timestamps: true },
 );

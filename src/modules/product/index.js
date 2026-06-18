@@ -1,0 +1,159 @@
+const ProductController = require("./controller/ProductController");
+const { verifyJwt } = require("../../middlewares/authMiddleware");
+
+/**
+ * @openapi
+ * /products:
+ *   post:
+ *     tags: [Products]
+ *     summary: Create a new product and its variants
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, items]
+ *             properties:
+ *               name: { type: string }
+ *               brandId: { type: string }
+ *               categoryId: { type: string }
+ *               categoryName: { type: string }
+ *               supplierId: { type: string }
+ *               status: { type: string, enum: [ACTIVE, INACTIVE], default: ACTIVE }
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     url: { type: string }
+ *                     isThumbnail: { type: boolean }
+ *               items:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [productCode, sku, retailPrice, costPrice]
+ *                   properties:
+ *                     productCode: { type: string }
+ *                     sku: { type: string }
+ *                     barcode: { type: string }
+ *                     description: { type: string }
+ *                     retailPrice: { type: number }
+ *                     costPrice: { type: number }
+ *                     VAT: { type: number }
+ *                     warrantyPeriod: { type: string }
+ *                     images:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           url: { type: string }
+ *                           isThumbnail: { type: boolean }
+ *     responses:
+ *       201:
+ *         description: Product created successfully
+ *       400:
+ *         description: Validation error or duplicate SKU
+ *   get:
+ *     tags: [Products]
+ *     summary: List products with search and filters
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Search by product name
+ *       - in: query
+ *         name: categoryId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
+ *     responses:
+ *       200:
+ *         description: List of products
+ * /products/{id}:
+ *   get:
+ *     tags: [Products]
+ *     summary: Get product details by ID
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Product details and its items
+ *       404:
+ *         description: Product not found
+ *   patch:
+ *     tags: [Products]
+ *     summary: Update a product
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string }
+ *               status: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     url: { type: string }
+ *                     isThumbnail: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Product updated
+ *       400:
+ *         description: Validation error
+ * /products/{id}/delete:
+ *   delete:
+ *     tags: [Products]
+ *     summary: Soft delete a product
+ *     description: Sets the product status to DISCONTINUED
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Product soft deleted
+ *       404:
+ *         description: Product not found
+ */
+const registerProductModule = (app) => {
+  app.post("/products", verifyJwt, ProductController.create.bind(ProductController));
+  app.get("/products", verifyJwt, ProductController.getList.bind(ProductController));
+  app.get("/products/:id", verifyJwt, ProductController.getDetail.bind(ProductController));
+  app.patch("/products/:id", verifyJwt, ProductController.update.bind(ProductController));
+  app.delete("/products/:id/delete", verifyJwt, ProductController.softDelete.bind(ProductController));
+
+  console.log("✓ Product module registered");
+};
+
+module.exports = { registerProductModule };
