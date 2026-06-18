@@ -47,6 +47,12 @@ const userSchema = new mongoose.Schema(
     hireDate: {
       type: Date,
     },
+
+    paySheetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PaySheet",
+      default: null,
+    },
     baseSalary: {
       type: Number,
       min: [0, "Base salary cannot be negative"],
