@@ -69,6 +69,12 @@ const productItemSchema = new mongoose.Schema(
         value: String,
       },
     ],
+    images: [
+      {
+        url: { type: String, required: true },
+        isThumbnail: { type: Boolean, default: false },
+      },
+    ],
   },
   { timestamps: true },
 );

@@ -28,6 +28,7 @@ class ProductService {
         categoryName: productData.categoryName,
         supplierId: productData.supplierId,
         status: productData.status,
+        images: productData.images,
       });
 
       await product.save({ session });

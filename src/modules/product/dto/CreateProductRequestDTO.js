@@ -6,6 +6,7 @@ class CreateProductRequestDTO {
     this.categoryName = data.categoryName;
     this.supplierId = data.supplierId;
     this.status = data.status || "ACTIVE";
+    this.images = Array.isArray(data.images) ? data.images : [];
     this.items = data.items || [];
   }
 
@@ -30,6 +31,9 @@ class CreateProductRequestDTO {
         }
         if (item.VAT !== undefined && (item.VAT < 0 || item.VAT > 100)) {
           errors.push(`Item[${index}]: VAT must be between 0 and 100`);
+        }
+        if (item.images !== undefined && !Array.isArray(item.images)) {
+          errors.push(`Item[${index}]: images must be an array`);
         }
       });
     }

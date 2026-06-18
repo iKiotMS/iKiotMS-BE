@@ -1,40 +1,34 @@
 const multer = require("multer");
-const path = require("path");
-const crypto = require("crypto");
+const { v2: cloudinary } = require("cloudinary");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+require("dotenv").config();
 
-// Configure multer storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, "../../../../public/uploads"));
-  },
-  filename: (req, file, cb) => {
-    // Generate a unique filename: timestamp + random hash + original extension
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + "-" + uniqueSuffix + ext);
-  },
+// Configure Cloudinary using credentials from environment variables
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// File filter to allow only images
-const fileFilter = (req, file, cb) => {
-  const allowedMimeTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error("Invalid file type. Only JPEG, PNG, GIF, and WEBP are allowed."), false);
-  }
-};
+// Configure Multer to use Cloudinary Storage
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "ikiot_uploads", // Tên thư mục trên Cloudinary
+    allowed_formats: ["jpg", "png", "jpeg", "webp", "gif"],
+    // transformation: [{ width: 1000, height: 1000, crop: "limit" }], // Tùy chọn resize ảnh tự động nếu cần
+  },
+});
 
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 5 * 1024 * 1024, // Giới hạn 5MB
   },
-  fileFilter: fileFilter,
 });
 
 class UploadController {
-  // Expose the multer single file middleware
+  // Expose middleware upload 1 file của multer
   get uploadMiddleware() {
     return upload.single("file");
   }
@@ -48,12 +42,12 @@ class UploadController {
         });
       }
 
-      // Generate the URL path for the client
-      const fileUrl = `/uploads/${req.file.filename}`;
+      // Multer-storage-cloudinary tự động upload và trả về URL an toàn trong req.file.path
+      const fileUrl = req.file.path;
 
       res.status(200).json({
         success: true,
-        message: "File uploaded successfully",
+        message: "File uploaded to Cloudinary successfully",
         data: {
           url: fileUrl,
         },

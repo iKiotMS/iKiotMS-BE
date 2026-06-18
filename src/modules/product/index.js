@@ -23,6 +23,13 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *               categoryName: { type: string }
  *               supplierId: { type: string }
  *               status: { type: string, enum: [ACTIVE, INACTIVE], default: ACTIVE }
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     url: { type: string }
+ *                     isThumbnail: { type: boolean }
  *               items:
  *                 type: array
  *                 items:
@@ -37,6 +44,13 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *                     costPrice: { type: number }
  *                     VAT: { type: number }
  *                     warrantyPeriod: { type: string }
+ *                     images:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           url: { type: string }
+ *                           isThumbnail: { type: boolean }
  *     responses:
  *       201:
  *         description: Product created successfully
@@ -102,6 +116,13 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *             properties:
  *               name: { type: string }
  *               status: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     url: { type: string }
+ *                     isThumbnail: { type: boolean }
  *     responses:
  *       200:
  *         description: Product updated

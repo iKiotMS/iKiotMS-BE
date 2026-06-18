@@ -7,6 +7,7 @@ class UpdateProductRequestDTO {
     if (data.categoryName !== undefined) this.categoryName = data.categoryName;
     if (data.supplierId !== undefined) this.supplierId = data.supplierId;
     if (data.status !== undefined) this.status = data.status;
+    if (data.images !== undefined) this.images = data.images;
   }
 
   validate() {
@@ -18,6 +19,10 @@ class UpdateProductRequestDTO {
 
     if (this.status !== undefined && !["ACTIVE", "INACTIVE", "DISCONTINUED"].includes(this.status)) {
       errors.push("Invalid status. Must be ACTIVE, INACTIVE, or DISCONTINUED");
+    }
+
+    if (this.images !== undefined && !Array.isArray(this.images)) {
+      errors.push("Images must be an array");
     }
 
     return {
