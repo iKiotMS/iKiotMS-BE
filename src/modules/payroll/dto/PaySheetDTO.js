@@ -37,10 +37,11 @@ const isValidPercentage = (value) => {
 };
 
 class PaySheetDTO {
-  constructor(tenantId, data = {}) {
+  constructor(tenantId, currentUserId, data = {}) {
     data = data || {};
 
     this.tenantId = tenantId;
+    this.createdBy = currentUserId;
     this.name = data?.name?.trim();
     this.basicPay = this.mapBasicPay(data.basicPay);
     this.overtime = this.mapOvertime(data.overtime);
@@ -371,6 +372,7 @@ class PaySheetDTO {
   toObject() {
     return {
       tenantId: this.tenantId,
+      createdBy: this.createdBy,
       name: this.name,
       basicPay: this.basicPay,
       overtime: this.overtime,
