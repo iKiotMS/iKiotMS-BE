@@ -47,13 +47,11 @@ const userSchema = new mongoose.Schema(
     hireDate: {
       type: Date,
     },
-    baseSalary: {
-      type: Number,
-      min: [0, "Base salary cannot be negative"],
-    },
-    salaryType: {
-      type: String,
-      enum: ["FULL_TIME", "PART_TIME"],
+
+    paySheetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PaySheet",
+      default: null,
     },
     warehouseId: {
       type: mongoose.Schema.Types.ObjectId,

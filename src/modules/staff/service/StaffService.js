@@ -47,13 +47,6 @@ class StaffService extends BaseService {
       .lean();
   }
 
-  normalizeStaffRole(role) {
-    if (!role || typeof role !== "string") {
-      return null;
-    }
-
-    return role.trim().toUpperCase();
-  }
 
   validateStaffRole(role, { required = false } = {}) {
     const normalizedRole = this.normalizeStaffRole(role);
@@ -96,16 +89,6 @@ class StaffService extends BaseService {
     }
   }
 
-  getPagination({ page = 1, recordPerPage = 10 } = {}) {
-    const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
-    const perPage = Math.max(parseInt(recordPerPage, 10) || 10, 1);
-
-    return {
-      page: pageNumber,
-      recordPerPage: perPage,
-      skip: (pageNumber - 1) * perPage,
-    };
-  }
 
   buildKeywordFilter(keyword) {
     if (!keyword || !String(keyword).trim()) {

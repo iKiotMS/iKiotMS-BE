@@ -3,6 +3,25 @@ class BaseService {
     this.model = model;
   }
 
+  normalizeStaffRole(role) {
+    if (!role || typeof role !== "string") {
+      return null;
+    }
+
+    return role.trim().toUpperCase();
+  }
+
+  getPagination({ page = 1, recordPerPage = 10 } = {}) {
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
+    const perPage = Math.max(parseInt(recordPerPage, 10) || 10, 1);
+
+    return {
+      page: pageNumber,
+      recordPerPage: perPage,
+      skip: (pageNumber - 1) * perPage,
+    };
+  }
+
   async create(data) {
     return await this.model.create(data);
   }
