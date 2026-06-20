@@ -29,7 +29,8 @@
     "inventory": ["read"],
     "promotions": ["create", "read", "update", "delete"],
     "reports": ["read", "export"],
-    "paysheets": ["create", "read", "update", "delete"]
+    "paysheets": ["create", "read", "update", "delete"],
+    "schedules": ["create", "read", "update", "delete"]
   },
   "BRANCH_MANAGER": {
     "users": ["read", "create_staff"],
@@ -40,7 +41,8 @@
     "inventory": ["read", "update"],
     "promotions": ["read"],
     "reports": ["read"],
-    "paysheets": ["create", "read", "update", "delete"]
+    "paysheets": ["create", "read", "update", "delete"],
+    "schedules": ["create", "read", "update", "delete"]
   },
   "WAREHOUSE_MANAGER": {
     "products": ["read"],
