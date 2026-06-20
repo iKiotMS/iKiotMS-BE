@@ -19,6 +19,11 @@ const shiftTemplateSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    status: {
+      type: String,
+      enum: ["ACTIVE", "DELETED"],
+      default: "ACTIVE",
+    },
   },
   { timestamps: true },
 );
