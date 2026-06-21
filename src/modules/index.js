@@ -7,6 +7,7 @@ const { registerProductModule } = require("./product");
 const { registerBranchModule } = require("./branch");
 const { registerPayrollModule } = require("./payroll");
 const { registerWarehouseModule } = require("./warehouse");
+const { registerScheduleModule } = require("./schedule");
 
 function registerModules(app) {
   registerAuthModule(app);
@@ -18,6 +19,7 @@ function registerModules(app) {
   registerBranchModule(app);
   registerPayrollModule(app);
   registerWarehouseModule(app);
+  registerScheduleModule(app);
 }
 
 module.exports = { registerModules };

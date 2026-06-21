@@ -1,0 +1,306 @@
+const ShiftTemplateController = require("./controller/ShiftTemplateController");
+const WorkingScheduleController = require("./controller/WorkingScheduleController");
+const { verifyJwt } = require("../../middlewares/authMiddleware");
+const { authorize } = require("../../middlewares/authorizationMiddleware");
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     ShiftTemplateRequest:
+ *       type: object
+ *       required: [name, startTime, endTime]
+ *       properties:
+ *         name:
+ *           type: string
+ *           example: Ca hành chính
+ *         startTime:
+ *           type: string
+ *           example: "08:00"
+ *         endTime:
+ *           type: string
+ *           example: "17:00"
+ *     WorkingScheduleBulkRequest:
+ *       type: object
+ *       required: [schedules]
+ *       properties:
+ *         schedules:
+ *           type: array
+ *           items:
+ *             type: object
+ *             required: [userId, shiftTemplateId, workDate]
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 example: 665aaa1234567890abcdef12
+ *               shiftTemplateId:
+ *                 type: string
+ *                 example: 665bbb1234567890abcdef12
+ *               workDate:
+ *                 type: string
+ *                 format: date
+ *                 example: "2026-06-20"
+ *
+ * /shift-templates:
+ *   post:
+ *     tags: [Schedule]
+ *     summary: Create shift template
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ShiftTemplateRequest'
+ *     responses:
+ *       201:
+ *         description: Created
+ *   get:
+ *     tags: [Schedule]
+ *     summary: Get shift templates
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: recordPerPage
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: name
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Shift template list
+ *
+ * /shift-templates/{shiftTemplateId}:
+ *   get:
+ *     tags: [Schedule]
+ *     summary: Get shift template by id
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: shiftTemplateId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Shift template detail
+ *   patch:
+ *     tags: [Schedule]
+ *     summary: Update shift template
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: shiftTemplateId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ShiftTemplateRequest'
+ *     responses:
+ *       200:
+ *         description: Updated
+ *   delete:
+ *     tags: [Schedule]
+ *     summary: Delete shift template
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: shiftTemplateId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Deleted
+ *
+ * /working-schedules/bulk:
+ *   post:
+ *     tags: [Schedule]
+ *     summary: Bulk create working schedules
+ *     description: Insert multiple scheduled shifts from the rostering UI. New records start with status SCHEDULED.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/WorkingScheduleBulkRequest'
+ *     responses:
+ *       201:
+ *         description: Created
+ *
+ * /working-schedules:
+ *   get:
+ *     tags: [Schedule]
+ *     summary: Get working schedules
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [SCHEDULED, COMPLETED, CANCELLED]
+ *     responses:
+ *       200:
+ *         description: Working schedule list
+ *
+ * /working-schedules/{scheduleId}:
+ *   get:
+ *     tags: [Schedule]
+ *     summary: Get working schedule by id
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: scheduleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Working schedule detail
+ *   patch:
+ *     tags: [Schedule]
+ *     summary: Update working schedule
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: scheduleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Updated
+ *   delete:
+ *     tags: [Schedule]
+ *     summary: Delete working schedule
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: scheduleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Deleted
+ */
+function registerScheduleModule(app) {
+  app.post(
+    "/shift-templates",
+    verifyJwt,
+    authorize("schedules", ["create"]),
+    ShiftTemplateController.createShiftTemplate.bind(ShiftTemplateController),
+  );
+
+  app.get(
+    "/shift-templates",
+    verifyJwt,
+    authorize("schedules", ["read"]),
+    ShiftTemplateController.getShiftTemplateList.bind(ShiftTemplateController),
+  );
+
+  app.get(
+    "/shift-templates/:shiftTemplateId",
+    verifyJwt,
+    authorize("schedules", ["read"]),
+    ShiftTemplateController.getShiftTemplateById.bind(ShiftTemplateController),
+  );
+
+  app.patch(
+    "/shift-templates/:shiftTemplateId",
+    verifyJwt,
+    authorize("schedules", ["update"]),
+    ShiftTemplateController.updateShiftTemplate.bind(ShiftTemplateController),
+  );
+
+  app.delete(
+    "/shift-templates/:shiftTemplateId",
+    verifyJwt,
+    authorize("schedules", ["delete"]),
+    ShiftTemplateController.deleteShiftTemplate.bind(ShiftTemplateController),
+  );
+
+  app.post(
+    "/working-schedules/bulk",
+    verifyJwt,
+    authorize("schedules", ["create"]),
+    WorkingScheduleController.createBulkWorkingSchedules.bind(
+      WorkingScheduleController,
+    ),
+  );
+
+  app.get(
+    "/working-schedules",
+    verifyJwt,
+    authorize("schedules", ["read"]),
+    WorkingScheduleController.getWorkingScheduleList.bind(
+      WorkingScheduleController,
+    ),
+  );
+
+  app.get(
+    "/working-schedules/:scheduleId",
+    verifyJwt,
+    authorize("schedules", ["read"]),
+    WorkingScheduleController.getWorkingScheduleById.bind(
+      WorkingScheduleController,
+    ),
+  );
+
+  app.patch(
+    "/working-schedules/:scheduleId",
+    verifyJwt,
+    authorize("schedules", ["update"]),
+    WorkingScheduleController.updateWorkingSchedule.bind(
+      WorkingScheduleController,
+    ),
+  );
+
+  app.delete(
+    "/working-schedules/:scheduleId",
+    verifyJwt,
+    authorize("schedules", ["delete"]),
+    WorkingScheduleController.deleteWorkingSchedule.bind(
+      WorkingScheduleController,
+    ),
+  );
+
+  console.log(" Schedule module registered");
+}
+
+module.exports = { registerScheduleModule };

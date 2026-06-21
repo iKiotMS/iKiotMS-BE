@@ -16,6 +16,10 @@ const workingScheduleSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "ShiftTemplate",
     },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
     workDate: {
       type: Date,
     },
@@ -24,6 +28,11 @@ const workingScheduleSchema = new mongoose.Schema(
     },
     endAt: {
       type: Date,
+    },
+    status: {
+      type: String,
+      enum: ["SCHEDULED", "COMPLETED", "CANCELLED"],
+      default: "SCHEDULED",
     },
   },
   { timestamps: true },
