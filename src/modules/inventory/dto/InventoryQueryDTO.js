@@ -1,12 +1,11 @@
-class ProductQueryDTO {
-  constructor(query = {}) {
-    this.page = parseInt(query.page) || 1;
-    this.limit = parseInt(query.limit) || 20;
-    this.search = query.search || "";
-    this.categoryId = query.categoryId;
-    this.status = query.status;
+class InventoryQueryDTO {
+  constructor(query) {
+    this.page = parseInt(query.page, 10) || 1;
+    this.limit = parseInt(query.limit, 10) || 10;
     this.locationId = query.locationId;
     this.locationType = query.locationType;
+    this.isLowStock = query.isLowStock === "true" || query.isLowStock === true;
+    this.search = query.search ? query.search.trim() : null;
   }
 
   validate() {
@@ -18,10 +17,6 @@ class ProductQueryDTO {
 
     if (this.limit < 1 || this.limit > 100) {
       errors.push("Limit must be between 1 and 100");
-    }
-
-    if (this.status && !["ACTIVE", "INACTIVE", "DISCONTINUED"].includes(this.status)) {
-      errors.push("Invalid status. Must be ACTIVE, INACTIVE, or DISCONTINUED");
     }
 
     if (this.locationId && !this.locationType) {
@@ -39,4 +34,4 @@ class ProductQueryDTO {
   }
 }
 
-module.exports = ProductQueryDTO;
+module.exports = InventoryQueryDTO;

@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { Product, ProductItem } = require("../../../models");
+const { Product, ProductItem, Inventory } = require("../../../models");
 
 class ProductService {
   async createProduct(tenantId, productData) {
@@ -55,7 +55,7 @@ class ProductService {
   }
 
   async getProducts(tenantId, query) {
-    const { page, limit, search, categoryId, status } = query;
+    const { page, limit, search, categoryId, status, locationId, locationType } = query;
     const skip = (page - 1) * limit;
 
     // Build the query object
@@ -74,6 +74,26 @@ class ProductService {
 
     if (search) {
       filter.name = { $regex: search, $options: "i" };
+    }
+
+    // Location Filter Logic
+    if (locationId && locationType) {
+      const inventories = await Inventory.find({
+        tenantId,
+        locationId,
+        locationType,
+      }).lean();
+
+      const productItemIds = inventories.map((i) => i.productItemId);
+
+      const productItems = await ProductItem.find({
+        tenantId,
+        _id: { $in: productItemIds },
+      }).lean();
+
+      const productIds = productItems.map((pi) => pi.productId);
+
+      filter._id = { $in: productIds };
     }
 
     const [data, total] = await Promise.all([

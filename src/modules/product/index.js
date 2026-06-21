@@ -78,6 +78,14 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
+ *       - in: query
+ *         name: locationId
+ *         schema: { type: string }
+ *         description: Filter products available at this branch/warehouse ID
+ *       - in: query
+ *         name: locationType
+ *         schema: { type: string, enum: [branch, warehouse] }
+ *         description: Required if locationId is provided
  *     responses:
  *       200:
  *         description: List of products
