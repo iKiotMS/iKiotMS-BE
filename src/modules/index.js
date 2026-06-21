@@ -6,6 +6,7 @@ const { registerUploadModule } = require("./upload");
 const { registerProductModule } = require("./product");
 const { registerBranchModule } = require("./branch");
 const { registerPayrollModule } = require("./payroll");
+const { registerWarehouseModule } = require("./warehouse");
 
 function registerModules(app) {
   registerAuthModule(app);
@@ -16,6 +17,7 @@ function registerModules(app) {
   registerProductModule(app);
   registerBranchModule(app);
   registerPayrollModule(app);
+  registerWarehouseModule(app);
 }
 
 module.exports = { registerModules };
