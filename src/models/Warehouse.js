@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { WAREHOUSE_STATUS } = require("../constants/warehouseConstants");
 
 const warehouseSchema = new mongoose.Schema(
   {
@@ -14,8 +15,8 @@ const warehouseSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["ACTIVE", "INACTIVE", "SUSPENDED"],
-      default: "ACTIVE",
+      enum: Object.values(WAREHOUSE_STATUS),
+      default: WAREHOUSE_STATUS.ACTIVE,
     },
     address: {
       type: String,
