@@ -32,6 +32,12 @@ class PaySheetService extends BaseService {
     ) {
       filter.createdBy = requesterId;
     }
+    if (filters.name) {
+      const escapedName = filters.name
+        .trim()
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // remove special characters for regex
+      filter.name = { $regex: escapedName, $options: "i" };
+    }
 
     return { ...filters, ...filter };
   }
