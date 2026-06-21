@@ -6,6 +6,10 @@ const { validateRoleHierarchy } = require("../../../utils/permissionChecker");
 const { BulkWorkingScheduleDTO } = require("../dto/WorkingScheduleDTO");
 
 class WorkingScheduleService {
+  //==================================================================================
+  //===========================    Helper Functions    ===============================
+  //==================================================================================
+
   // Chuẩn hóa page/recordPerPage và tính số record cần bỏ qua.
   getPagination({ page = 1, recordPerPage = 10 } = {}) {
     const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
@@ -96,6 +100,60 @@ class WorkingScheduleService {
     return shiftTemplatesById;
   }
 
+  async checkScheduleOverlaps(
+    tenantIds,
+    schedules,
+    ScheduleIdToExclude = null,
+  ) {
+    for (let i = 0; i < schedules.length; i++) {
+      const current = schedules[i];
+
+      for (let j = i + 1; j < schedules.length; j++) {
+        const next = schedules[j];
+
+        const sameUser = String(current.userId) === String(next.userId);
+        const isOverlapping =
+          current.startAt < next.endAt && current.endAt > next.startAt;
+
+        if (sameUser && isOverlapping) {
+          const error = new Error(
+            `Lịch làm việc bị trùng ca mẫu cho nhân viên ${current.userId} vào ngày ${this.getLocalDateText(current.workDate)}`,
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+      }
+
+      for (const schedule of schedules) {
+        const filter = {
+          tenantId,
+          userId: schedule.userId,
+          status: { $ne: "CANCELLED" },
+          startAt: { $lt: schedule.endAt },
+          endAt: { $gt: schedule.startAt },
+        };
+
+        if (ScheduleIdToExclude) {
+          filter._id = { $ne: ScheduleIdToExclude };
+        }
+
+        const existingSchedule = await WorkingSchedule.findOne(filter);
+
+        if (existingSchedule) {
+          const error = new Error(
+            "Nhân viên đã có lịch làm việc bị trùng thời gian",
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+      }
+    }
+  }
+
+  //==================================================================================
+  //===========================    Main Services    ==================================
+  //==================================================================================
+
   // Nhận danh sách phân ca từ FE, validate, tính startAt/endAt rồi insert nhiều record.
   async createBulkWorkingSchedules(tenantId, createdBy, data, userRole) {
     const dto = new BulkWorkingScheduleDTO(tenantId, createdBy, data);
@@ -146,6 +204,8 @@ class WorkingScheduleService {
         status: "SCHEDULED",
       };
     });
+
+    await this.checkScheduleOverlaps(tenantId, schedules);
 
     const createdSchedules = await WorkingSchedule.insertMany(schedules);
 
@@ -288,6 +348,12 @@ class WorkingScheduleService {
       throw error;
     }
 
+    if (existingSchedule.status === "COMPLETED") {
+      const error = new Error("Không thể cập nhật lịch làm việc đã hoàn thành");
+      error.statusCode = 400;
+      throw error;
+    }
+
     const updateData = {};
 
     if (data.userId !== undefined) {
@@ -318,6 +384,24 @@ class WorkingScheduleService {
       updateData.workDate = workDate;
       updateData.startAt = startAt;
       updateData.endAt = endAt;
+    }
+    // Nếu có thay đổi userId hoặc startAt/endAt thì phải check trùng lịch.
+    if (
+      updateData.userId !== undefined ||
+      updateData.startAt !== undefined ||
+      updateData.endAt !== undefined
+    ) {
+      await this.checkScheduleOverlaps(
+        tenantId,
+        [
+          {
+            userId: updateData.userId || existingSchedule.userId,
+            startAt: updateData.startAt || existingSchedule.startAt,
+            endAt: updateData.endAt || existingSchedule.endAt,
+          },
+        ],
+        scheduleId,
+      );
     }
 
     if (data.status !== undefined) {
@@ -359,7 +443,7 @@ class WorkingScheduleService {
 
   // Xóa một lịch làm việc khỏi tenant hiện tại.
   async deleteWorkingSchedule(tenantId, scheduleId) {
-    const schedule = await WorkingSchedule.findOneAndDelete({
+    const schedule = await WorkingSchedule.findOne({
       _id: scheduleId,
       tenantId,
     });
@@ -369,6 +453,16 @@ class WorkingScheduleService {
       error.statusCode = 404;
       throw error;
     }
+    if (schedule.status === "COMPLETED") {
+      const error = new Error("Không thể xóa lịch làm việc đã hoàn thành");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    await WorkingSchedule.deleteOne({
+      _id: scheduleId,
+      tenantId,
+    });
 
     // {
     //   message: "Xóa lịch làm việc thành công",
