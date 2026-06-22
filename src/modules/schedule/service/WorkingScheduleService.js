@@ -34,13 +34,13 @@ class WorkingScheduleService {
   // Ghép ngày làm việc + giờ ca mẫu thành Date đầy đủ.
   buildDateTime(workDate, timeText) {
     const dateText = this.getLocalDateText(workDate);
-    return new Date(`${dateText}T${timeText}`);
+    return new Date(`${dateText}T${timeText}:00.000Z`);
   }
 
-  // Lưu ngày làm việc ở mốc 00:00 theo timezone Việt Nam.
+  // Lưu ngày làm việc ở mốc 00:00 UTC để ISO string giữ nguyên ngày FE gửi.
   buildWorkDate(workDate) {
     const dateText = this.getLocalDateText(workDate);
-    return new Date(`${dateText}T00:00:00`); //YYYY-MM-DDT00:00:00
+    return new Date(`${dateText}T00:00:00.000Z`);
   }
 
   // Kiểm tra tất cả userId được phân ca có thuộc tenant và là staff hợp lệ.
@@ -100,11 +100,7 @@ class WorkingScheduleService {
     return shiftTemplatesById;
   }
 
-  async checkScheduleOverlaps(
-    tenantIds,
-    schedules,
-    ScheduleIdToExclude = null,
-  ) {
+  async checkScheduleOverlaps(tenantId, schedules, ScheduleIdToExclude = null) {
     for (let i = 0; i < schedules.length; i++) {
       const current = schedules[i];
 
@@ -150,6 +146,20 @@ class WorkingScheduleService {
     }
   }
 
+  configWorkAndEndDate(workDate, shiftTemplate) {
+    const startTime = shiftTemplate.startTime;
+    const endTime = shiftTemplate.endTime;
+
+    const startAt = this.buildDateTime(workDate, startTime);
+    const endAt = this.buildDateTime(workDate, endTime);
+
+    if (startTime > endTime) {
+      endAt.setUTCDate(endAt.getUTCDate() + 1);
+    }
+
+    return { startAt, endAt };
+  }
+
   //==================================================================================
   //===========================    Main Services    ==================================
   //==================================================================================
@@ -184,13 +194,9 @@ class WorkingScheduleService {
       const shiftTemplateId = String(schedule.shiftTemplateId);
       const shiftTemplate = shiftTemplatesById[shiftTemplateId];
       const workDate = this.buildWorkDate(schedule.workDate);
-      const startAt = this.buildDateTime(
+      const { startAt, endAt } = this.configWorkAndEndDate(
         schedule.workDate,
-        shiftTemplate.startTime,
-      );
-      const endAt = this.buildDateTime(
-        schedule.workDate,
-        shiftTemplate.endTime,
+        shiftTemplate,
       );
 
       return {
@@ -246,7 +252,18 @@ class WorkingScheduleService {
     const filter = { tenantId };
 
     if (userId) filter.userId = userId;
-    if (status) filter.status = String(status).trim().toUpperCase();
+    if (status) {
+      const normalizedStatus = String(status).trim().toUpperCase();
+      const allowedStatuses = ["SCHEDULED", "COMPLETED", "CANCELLED"];
+
+      if (!allowedStatuses.includes(normalizedStatus)) {
+        const error = new Error("Trạng thái lịch làm việc không hợp lệ");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      filter.status = normalizedStatus;
+    }
 
     if (startDate || endDate) {
       filter.workDate = {};
@@ -377,8 +394,10 @@ class WorkingScheduleService {
       const shiftTemplateId = String(shiftTemplateToUseId);
       const shiftTemplate = shiftTemplatesById[shiftTemplateId];
       const workDate = this.buildWorkDate(nextWorkDate);
-      const startAt = this.buildDateTime(nextWorkDate, shiftTemplate.startTime);
-      const endAt = this.buildDateTime(nextWorkDate, shiftTemplate.endTime);
+      const { startAt, endAt } = this.configWorkAndEndDate(
+        nextWorkDate,
+        shiftTemplate,
+      );
 
       updateData.shiftTemplateId = shiftTemplateToUseId;
       updateData.workDate = workDate;
@@ -459,10 +478,19 @@ class WorkingScheduleService {
       throw error;
     }
 
-    await WorkingSchedule.deleteOne({
-      _id: scheduleId,
-      tenantId,
-    });
+    await WorkingSchedule.findOneAndUpdate(
+      {
+        _id: scheduleId,
+        tenantId: tenantId,
+      },
+      {
+        status: "DELETED",
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
 
     // {
     //   message: "Xóa lịch làm việc thành công",

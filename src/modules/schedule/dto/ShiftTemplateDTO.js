@@ -29,15 +29,15 @@ class ShiftTemplateDTO {
       errors.push("Giờ kết thúc phải có định dạng HH:mm");
     }
 
-    if (
-      this.startTime &&
-      this.endTime &&
-      TIME_PATTERN.test(this.startTime) &&
-      TIME_PATTERN.test(this.endTime) &&
-      this.startTime >= this.endTime
-    ) {
-      errors.push("Giờ kết thúc phải sau giờ bắt đầu");
-    }
+    // if (
+    //   this.startTime &&
+    //   this.endTime &&
+    //   TIME_PATTERN.test(this.startTime) &&
+    //   TIME_PATTERN.test(this.endTime) &&
+    //   this.startTime >= this.endTime
+    // ) {
+    //   errors.push("Giờ kết thúc phải sau giờ bắt đầu");
+    // } --- IGNORE END TIME MUST BE AFTER START TIME ---
 
     const isValid = errors.length === 0;
 
