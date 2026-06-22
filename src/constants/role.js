@@ -1,0 +1,3 @@
+const STAFF_ROLES = ["BRANCH_MANAGER", "WAREHOUSE_MANAGER", "STAFF"];
+
+module.exports = { STAFF_ROLES };

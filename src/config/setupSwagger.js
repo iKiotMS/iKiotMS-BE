@@ -16,7 +16,11 @@ const options = {
       },
       {
         url: "https://ikiotms-be.onrender.com",
-        description: "Hosted dev server",
+        description: "Production server",
+      },
+      {
+        url: "https://ikiotms-be-dev.onrender.com/",
+        description: "Development server",
       },
     ],
     components: {

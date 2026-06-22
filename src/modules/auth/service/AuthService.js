@@ -9,7 +9,11 @@ class AuthService {
       throw new Error("Invalid phone number or password");
     }
 
-    if (user.status === "SUSPENDED" || user.status === "INACTIVE") {
+    if (
+      user.status === "SUSPENDED" ||
+      user.status === "INACTIVE" ||
+      user.status === "DELETED"
+    ) {
       throw new Error("User account is not active");
     }
 
@@ -42,7 +46,7 @@ class AuthService {
   async validateCredentials(phoneNumber, password) {
     const user = await User.findOne({ phoneNumber });
 
-    if (!user) {
+    if (!user || !user.password) {
       return false;
     }
 
@@ -56,6 +60,8 @@ class AuthService {
         phoneNumber: user.phoneNumber,
         role: user.role,
         tenantId: user.tenantId,
+        branchId: user.branchId,
+        warehouseId: user.warehouseId,
       },
       process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET,
       { expiresIn: "15m" },
@@ -137,7 +143,6 @@ class AuthService {
       tenantMainAddress,
       tenantTaxNumber,
     } = userData;
-    
 
     const existingUser = await User.findOne({ phoneNumber });
     if (existingUser) {

@@ -15,7 +15,9 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, "Password is required"],
+      required: function () {
+        return ["ACTIVE", "SUSPENDED"].includes(this.status);
+      },
     },
     phoneNumber: {
       type: String,
@@ -29,14 +31,14 @@ const userSchema = new mongoose.Schema(
         "TENANT_OWNER",
         "BRANCH_MANAGER",
         "WAREHOUSE_MANAGER",
-        "BRANCH_STAFF",
+        "STAFF",
         "CUSTOMER",
       ],
       required: [true, "Role is required"],
     },
     status: {
       type: String,
-      enum: ["ACTIVE", "INACTIVE", "SUSPENDED"],
+      enum: ["ACTIVE", "INACTIVE", "SUSPENDED", "DELETED"],
       default: "ACTIVE",
     },
     lastLogin: {
@@ -45,13 +47,11 @@ const userSchema = new mongoose.Schema(
     hireDate: {
       type: Date,
     },
-    baseSalary: {
-      type: Number,
-      min: [0, "Base salary cannot be negative"],
-    },
-    salaryType: {
-      type: String,
-      enum: ["FULL_TIME", "PART_TIME"],
+
+    paySheetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PaySheet",
+      default: null,
     },
     warehouseId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -61,6 +61,7 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Branch",
     },
+    accountNote: { type: String },
     profile: {
       firstName: String,
       lastName: String,
@@ -80,6 +81,7 @@ const userSchema = new mongoose.Schema(
 
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
+  if (!this.password) return;
 
   this.password = await bcryptjs.hash(this.password, 10);
 });

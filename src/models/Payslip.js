@@ -16,6 +16,11 @@ const payslipSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    paySheetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PaySheet",
+      required: [true, "Pay sheet is required"],
+    },
     status: {
       type: String,
       trim: true,
@@ -34,12 +39,33 @@ const payslipSchema = new mongoose.Schema(
       type: Number,
       min: [0, "Total worked hours cannot be negative"],
     },
+    basePay: {
+      type: Number,
+      default: 0,
+      min: [0, "Base pay cannot be negative"],
+    },
+    overtimePay: {
+      type: Number,
+      default: 0,
+      min: [0, "Overtime pay cannot be negative"],
+    },
+    bonus: {
+      type: Number,
+      default: 0,
+      min: [0, "Bonus total cannot be negative"],
+    },
+    allowance: {
+      type: Number,
+      default: 0,
+      min: [0, "Allowance total cannot be negative"],
+    },
     grossSalary: {
       type: Number,
       min: [0, "Gross salary cannot be negative"],
     },
     deduction: {
       type: Number,
+      default: 0,
       min: [0, "Deduction cannot be negative"],
     },
     netSalary: {

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { BRANCH_STATUS } = require("../constants/branchConstants");
 
 const branchSchema = new mongoose.Schema(
   {
@@ -14,12 +15,29 @@ const branchSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["ACTIVE", "INACTIVE", "SUSPENDED"],
-      default: "ACTIVE",
+      enum: Object.values(BRANCH_STATUS),
+      default: BRANCH_STATUS.ACTIVE,
     },
     address: {
       type: String,
       trim: true,
+    },
+    phoneNumber: {
+      type: [String],
+      required: true,
+      validate: [
+        {
+          validator: function (arr) {
+            return arr && arr.length > 0;
+          },
+          message: "Branch must have at least one phone number",
+        },
+      ],
+    },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true,
     },
   },
   { timestamps: true },
