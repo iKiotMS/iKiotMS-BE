@@ -21,9 +21,10 @@ class WorkingScheduleController {
 
       return res.status(201).json(result);
     } catch (error) {
-      return res
-        .status(error.statusCode || 400)
-        .json({ error: error.message });
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+      });
     }
   }
 
@@ -38,9 +39,10 @@ class WorkingScheduleController {
 
       return res.status(200).json(result);
     } catch (error) {
-      return res
-        .status(error.statusCode || 400)
-        .json({ error: error.message });
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+      });
     }
   }
 
@@ -56,9 +58,10 @@ class WorkingScheduleController {
 
       return res.status(200).json(result);
     } catch (error) {
-      return res
-        .status(error.statusCode || 400)
-        .json({ error: error.message });
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+      });
     }
   }
 
@@ -78,9 +81,10 @@ class WorkingScheduleController {
 
       return res.status(200).json(result);
     } catch (error) {
-      return res
-        .status(error.statusCode || 400)
-        .json({ error: error.message });
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+      });
     }
   }
 
@@ -96,9 +100,10 @@ class WorkingScheduleController {
 
       return res.status(200).json(result);
     } catch (error) {
-      return res
-        .status(error.statusCode || 400)
-        .json({ error: error.message });
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+      });
     }
   }
 }
