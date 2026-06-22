@@ -17,7 +17,7 @@ class WarehouseService {
     const { page, limit, search, status } = queryParams;
     const skip = (page - 1) * limit;
 
-    const filter = { tenantId };
+    const filter = { tenantId, status: { $ne: WAREHOUSE_STATUS.DELETED } };
 
     if (search) {
       filter.name = { $regex: search, $options: "i" };
@@ -68,7 +68,7 @@ class WarehouseService {
   async softDeleteWarehouse(tenantId, warehouseId) {
     const warehouse = await Warehouse.findOneAndUpdate(
       { _id: warehouseId, tenantId },
-      { $set: { status: WAREHOUSE_STATUS.INACTIVE } },
+      { $set: { status: WAREHOUSE_STATUS.DELETED } },
       { new: true }
     );
 
