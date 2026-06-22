@@ -19,7 +19,7 @@ class BranchService {
     const { page, limit, search, status } = queryParams;
     const skip = (page - 1) * limit;
 
-    const filter = { tenantId };
+    const filter = { tenantId, status: { $ne: BRANCH_STATUS.DELETED } };
 
     if (search) {
       filter.name = { $regex: search, $options: "i" };
@@ -74,7 +74,7 @@ class BranchService {
   async softDeleteBranch(tenantId, branchId) {
     const branch = await Branch.findOneAndUpdate(
       { _id: branchId, tenantId },
-      { $set: { status: BRANCH_STATUS.INACTIVE } }, // Or SUSPENDED depending on business rules
+      { $set: { status: BRANCH_STATUS.DELETED } },
       { new: true },
     );
 

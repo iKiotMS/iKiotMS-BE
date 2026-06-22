@@ -1,7 +1,7 @@
 const BRANCH_STATUS = Object.freeze({
   ACTIVE: "ACTIVE",
   INACTIVE: "INACTIVE",
-  SUSPENDED: "SUSPENDED",
+  DELETED: "DELETED",
 });
 
 module.exports = { BRANCH_STATUS };
