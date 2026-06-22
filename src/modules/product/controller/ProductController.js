@@ -2,6 +2,8 @@ const ProductService = require("../service/ProductService");
 const CreateProductRequestDTO = require("../dto/CreateProductRequestDTO");
 const UpdateProductRequestDTO = require("../dto/UpdateProductRequestDTO");
 const ProductQueryDTO = require("../dto/ProductQueryDTO");
+const CreateProductItemRequestDTO = require("../dto/CreateProductItemRequestDTO");
+const UpdateProductItemRequestDTO = require("../dto/UpdateProductItemRequestDTO");
 
 class ProductController {
   async create(req, res) {
@@ -141,6 +143,93 @@ class ProductController {
       res.status(400).json({
         success: false,
         message: error.message || "Failed to delete product",
+      });
+    }
+  }
+
+  // --- PRODUCT ITEM (VARIANT) HANDLERS ---
+
+  async createItem(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const { productId } = req.params;
+
+      const dto = new CreateProductItemRequestDTO(req.body);
+      const validation = dto.validate();
+
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: validation.errors,
+        });
+      }
+
+      const productItem = await ProductService.createProductItem(tenantId, productId, dto);
+
+      res.status(201).json({
+        success: true,
+        message: "Product item created successfully",
+        data: productItem,
+      });
+    } catch (error) {
+      console.error("Create product item error:", error);
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to create product item",
+      });
+    }
+  }
+
+  async updateItem(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const { itemId } = req.params;
+
+      const dto = new UpdateProductItemRequestDTO(req.body);
+      const validation = dto.validate();
+
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: validation.errors,
+        });
+      }
+
+      const productItem = await ProductService.updateProductItem(tenantId, itemId, dto);
+
+      res.status(200).json({
+        success: true,
+        message: "Product item updated successfully",
+        data: productItem,
+      });
+    } catch (error) {
+      console.error("Update product item error:", error);
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to update product item",
+      });
+    }
+  }
+
+  async deleteItem(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const { itemId } = req.params;
+
+      const productItem = await ProductService.deleteProductItem(tenantId, itemId);
+
+      res.status(200).json({
+        success: true,
+        message: "Product item deleted successfully",
+        data: productItem,
+      });
+    } catch (error) {
+      console.error("Delete product item error:", error);
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to delete product item",
       });
     }
   }

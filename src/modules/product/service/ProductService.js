@@ -162,6 +162,92 @@ class ProductService {
 
     return product;
   }
+
+  // --- PRODUCT ITEM (VARIANT) METHODS ---
+
+  async createProductItem(tenantId, productId, itemData) {
+    const product = await Product.findOne({ _id: productId, tenantId }).lean();
+    if (!product) {
+      throw new Error("Product not found");
+    }
+
+    const existingSku = await ProductItem.findOne({ tenantId, sku: itemData.sku }).lean();
+    if (existingSku) {
+      throw new Error(`SKU already exists: ${itemData.sku}`);
+    }
+
+    const productItem = new ProductItem({
+      ...itemData,
+      tenantId,
+      productId,
+      productName: product.name,
+    });
+
+    await productItem.save();
+    return productItem;
+  }
+
+  async updateProductItem(tenantId, itemId, updateData) {
+    // If SKU is being updated, check for duplicates
+    if (updateData.sku) {
+      const existingSku = await ProductItem.findOne({ 
+        tenantId, 
+        sku: updateData.sku, 
+        _id: { $ne: itemId } 
+      }).lean();
+      if (existingSku) {
+        throw new Error(`SKU already exists: ${updateData.sku}`);
+      }
+    }
+
+    const productItem = await ProductItem.findOneAndUpdate(
+      { _id: itemId, tenantId },
+      { $set: updateData },
+      { new: true },
+    );
+
+    if (!productItem) {
+      throw new Error("Product item not found");
+    }
+
+    return productItem;
+  }
+
+  async deleteProductItem(tenantId, itemId) {
+    // Check if there is any inventory with stock > 0 for this item
+    const activeInventoryCount = await Inventory.countDocuments({ 
+      tenantId, 
+      productItemId: itemId, 
+      stock: { $gt: 0 } 
+    });
+
+    if (activeInventoryCount > 0) {
+      throw new Error("Cannot delete product item: Active inventory exists with stock > 0");
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const productItem = await ProductItem.findOneAndDelete({ _id: itemId, tenantId }).session(session);
+      
+      if (!productItem) {
+        throw new Error("Product item not found");
+      }
+
+      // Also clean up zero-stock inventory records associated with this item
+      await Inventory.deleteMany({ tenantId, productItemId: itemId }).session(session);
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return productItem;
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+  }
 }
 
 module.exports = new ProductService();
