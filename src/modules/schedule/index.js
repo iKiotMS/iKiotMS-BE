@@ -201,6 +201,27 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         required: true
  *         schema:
  *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 example: 665aaa1234567890abcdef12
+ *               shiftTemplateId:
+ *                 type: string
+ *                 example: 665bbb1234567890abcdef12
+ *               workDate:
+ *                 type: string
+ *                 format: date
+ *                 example: "2026-06-20"
+ *               status:
+ *                 type: string
+ *                 enum: [SCHEDULED, COMPLETED, CANCELLED]
+ *                 example: SCHEDULED
  *     responses:
  *       200:
  *         description: Updated
