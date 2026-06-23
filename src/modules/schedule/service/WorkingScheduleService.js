@@ -125,7 +125,7 @@ class WorkingScheduleService {
         const filter = {
           tenantId,
           userId: schedule.userId,
-          status: { $ne: "CANCELLED" },
+          status: { $nin: ["CANCELLED", "DELETED"] },
           startAt: { $lt: schedule.endAt },
           endAt: { $gt: schedule.startAt },
         };
