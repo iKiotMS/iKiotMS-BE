@@ -36,9 +36,32 @@ const attendanceSchema = new mongoose.Schema(
     },
     status: {
       type: String,
+      enum: ["CHECKED_IN", "CHECKED_OUT", "ABSENT"],
       trim: true,
     },
+    checkInLocation:{
+      latitude: Number,
+      longitude:Number,
+      accuracy: Number,
+
+    },
+    checkOutLocation:{
+      latitude: Number,
+      longitude:Number,
+      accuracy: Number,
+
+    },
+    checkInIpAddress: {
+      type: String,
+      trim: true,
+    },
+    checkOutIpAddress: {
+      type: String,
+      trim: true,
+    },
+    
   },
+
   { timestamps: true },
 );
 

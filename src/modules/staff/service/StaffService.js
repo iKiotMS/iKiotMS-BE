@@ -47,7 +47,6 @@ class StaffService extends BaseService {
       .lean();
   }
 
-
   validateStaffRole(role, { required = false } = {}) {
     const normalizedRole = this.normalizeStaffRole(role);
 
@@ -88,7 +87,6 @@ class StaffService extends BaseService {
       throw new Error("Invalid staff ID");
     }
   }
-
 
   buildKeywordFilter(keyword) {
     if (!keyword || !String(keyword).trim()) {
@@ -191,6 +189,99 @@ class StaffService extends BaseService {
     return requester?.warehouseId;
   }
 
+  validateSingleWorkplaceAssignment(role, branchId, warehouseId) {
+    if (branchId && warehouseId) {
+      throw new Error(
+        "Staff can only be assigned to one branch or one warehouse",
+      );
+    }
+
+    if (role === "BRANCH_MANAGER" && !branchId) {
+      throw new Error("Branch manager must be assigned to a branch");
+    }
+
+    if (role === "BRANCH_MANAGER" && warehouseId) {
+      throw new Error("Branch manager cannot be assigned to a warehouse");
+    }
+
+    if (role === "WAREHOUSE_MANAGER" && !warehouseId) {
+      throw new Error("Warehouse manager must be assigned to a warehouse");
+    }
+
+    if (role === "WAREHOUSE_MANAGER" && branchId) {
+      throw new Error("Warehouse manager cannot be assigned to a branch");
+    }
+
+    if (role === "STAFF" && !branchId && !warehouseId) {
+      throw new Error("Staff must be assigned to a branch or warehouse");
+    }
+  }
+
+  normalizeWorkplaceUpdateData(data) {
+    // if API sends:
+    // { branchId: "..." }
+    // it automatically clears:
+    // warehouseId = null
+    if (data.branchId !== undefined && data.warehouseId === undefined) {
+      data.warehouseId = null;
+    }
+
+    // if API sends:
+    // { warehouseId: "..." }
+    // it clears:
+    // branchId = null
+    if (data.warehouseId !== undefined && data.branchId === undefined) {
+      data.branchId = null;
+    }
+
+    return data;
+  }
+
+  async getStaffWorkplace({ tenantId, staffId }) {
+    this.checktenantId(tenantId);
+
+    const staff = await User.findOne(
+      this.getStaffFilter(tenantId, { _id: staffId }),
+    )
+      .select("branchId warehouseId")
+      .populate("branchId")
+      .populate("warehouseId")
+      .lean();
+
+    if (!staff) {
+      throw new Error("Invalid staff ID");
+    }
+
+    if (staff.branchId && staff.warehouseId) {
+      throw new Error("Staff has invalid branch and warehouse assignment");
+    }
+
+    if (staff.branchId) {
+      return {
+        type: "BRANCH",
+        branchId: staff.branchId._id,
+        warehouseId: null,
+        workplace: staff.branchId,
+      };
+    }
+
+    if (staff.warehouseId) {
+      return {
+        type: "WAREHOUSE",
+        branchId: null,
+        warehouseId: staff.warehouseId._id,
+        workplace: staff.warehouseId,
+      };
+    }
+
+    return {
+      type: null,
+      branchId: null,
+      warehouseId: null,
+      workplace: null,
+    };
+  }
+
   async checkRoleAndBranchValidity(
     role,
     branchId,
@@ -198,6 +289,8 @@ class StaffService extends BaseService {
     tenantId,
     staffIdToExclude = null,
   ) {
+    this.validateSingleWorkplaceAssignment(role, branchId, warehouseId);
+
     if (branchId) {
       const branch = await Branch.findOne({
         _id: branchId,
@@ -220,10 +313,6 @@ class StaffService extends BaseService {
       }
     }
 
-    if (role === "BRANCH_MANAGER" && !branchId) {
-      throw new Error("Branch manager must be assigned to a branch");
-    }
-
     if (role === "BRANCH_MANAGER" && branchId) {
       const branchManagerFilter = {
         tenantId,
@@ -239,10 +328,6 @@ class StaffService extends BaseService {
       if (existingBranchManager) {
         throw new Error("This branch already has a branch manager assigned");
       }
-    }
-
-    if (role === "WAREHOUSE_MANAGER" && !warehouseId) {
-      throw new Error("Warehouse manager must be assigned to a warehouse");
     }
 
     if (role === "WAREHOUSE_MANAGER" && warehouseId) {
@@ -305,8 +390,13 @@ class StaffService extends BaseService {
     }
   }
 
+  //==============================================================================================
+  //==================================== Main Service Methods ====================================
+  //==============================================================================================
+
   async createStaff({ tenantId, data, userRole }) {
     this.checktenantId(tenantId);
+    data = this.normalizeWorkplaceUpdateData(data || {});
     data.role = this.validateStaffRole(data.role, { required: true });
 
     if (validateRoleHierarchy(userRole, data.role) === false)
@@ -400,7 +490,7 @@ class StaffService extends BaseService {
 
   async updateStaff({ tenantId, staffId, data, userRole }) {
     this.checktenantId(tenantId);
-    data = data || {};
+    data = this.normalizeWorkplaceUpdateData(data || {});
 
     const currentStaff = await User.findOne(
       this.getStaffFilter(tenantId, { _id: staffId }),
