@@ -51,6 +51,7 @@ class WorkingScheduleService {
       _id: { $in: uniqueUserIds },
       tenantId,
       role: { $in: STAFF_ROLES },
+      status: "ACTIVE",
     }).select("_id role");
 
     if (users.length !== uniqueUserIds.length) {
