@@ -27,6 +27,7 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *                   latitude: { type: number }
  *                   longitude: { type: number }
  *                   allowedRadiusMeters: { type: number }
+ *                   maxAccuracyMeters: { type: number }
  *     responses:
  *       201:
  *         description: Warehouse created successfully
@@ -97,6 +98,7 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *                   latitude: { type: number }
  *                   longitude: { type: number }
  *                   allowedRadiusMeters: { type: number }
+ *                   maxAccuracyMeters: { type: number }
  *     responses:
  *       200:
  *         description: Warehouse updated
