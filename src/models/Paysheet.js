@@ -16,6 +16,11 @@ const PaysheetSchema = new mongoose.Schema(
       required: [true, "Pay sheet name is required"],
       trim: true,
     },
+    status: {
+      type: String,
+      enum: ["ACTIVE", "DELETED"],
+      default: "ACTIVE",
+    },
 
     basicPay: {
       payType: {

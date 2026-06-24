@@ -24,8 +24,12 @@ class PaySheetService extends BaseService {
     }
   }
 
-  buildPaySheetFilter(tenantId, requesterId, requesterRole, filters) {
-    const filter = { tenantId };
+  buildPaySheetFilter(tenantId, requesterId, requesterRole, filters = {}) {
+    const filter = {
+      tenantId,
+      status: { $ne: "DELETED" },
+    };
+
     if (
       requesterRole === "BRANCH_MANAGER" ||
       requesterRole === "WAREHOUSE_MANAGER"
@@ -79,7 +83,7 @@ class PaySheetService extends BaseService {
     } = paySheet.toObject();
 
     const updatedPaySheet = await PaySheetModel.findOneAndUpdate(
-      { _id: paySheetId, tenantId },
+      { _id: paySheetId, tenantId, status: { $ne: "DELETED" } },
       { $set: updateData },
       { new: true, runValidators: true },
     );
@@ -134,7 +138,11 @@ class PaySheetService extends BaseService {
 
   async getPaySheetById(paySheetId, tenantId) {
     this.checkTenantId(tenantId);
-    const paySheet = await PaySheetModel.findOne({ _id: paySheetId, tenantId });
+    const paySheet = await PaySheetModel.findOne({
+      _id: paySheetId,
+      tenantId,
+      status: { $ne: "DELETED" },
+    });
 
     if (!paySheet) {
       const error = new Error("Không tìm thấy bảng lương");

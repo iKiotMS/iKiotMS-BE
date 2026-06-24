@@ -125,7 +125,7 @@ class WorkingScheduleService {
         const filter = {
           tenantId,
           userId: schedule.userId,
-          status: { $ne: "CANCELLED" },
+          status: { $nin: ["CANCELLED", "DELETED"] },
           startAt: { $lt: schedule.endAt },
           endAt: { $gt: schedule.startAt },
         };
@@ -250,7 +250,10 @@ class WorkingScheduleService {
     }
 
     const pagination = this.getPagination({ page, recordPerPage });
-    const filter = { tenantId };
+    const filter = {
+      tenantId,
+      status: { $ne: "DELETED" },
+    };
 
     if (userId) filter.userId = userId;
     if (status) {
@@ -333,6 +336,7 @@ class WorkingScheduleService {
     const schedule = await WorkingSchedule.findOne({
       _id: scheduleId,
       tenantId,
+      status: { $ne: "DELETED" },
     })
       .populate("userId", "phoneNumber profile role")
       .populate("shiftTemplateId");
@@ -358,6 +362,7 @@ class WorkingScheduleService {
     const existingSchedule = await WorkingSchedule.findOne({
       _id: scheduleId,
       tenantId,
+      status: { $ne: "DELETED" },
     });
 
     if (!existingSchedule) {
@@ -444,7 +449,7 @@ class WorkingScheduleService {
     }
 
     const updatedSchedule = await WorkingSchedule.findOneAndUpdate(
-      { _id: scheduleId, tenantId },
+      { _id: scheduleId, tenantId, status: { $ne: "DELETED" } },
       { $set: updateData },
       { new: true, runValidators: true },
     )
@@ -466,6 +471,7 @@ class WorkingScheduleService {
     const schedule = await WorkingSchedule.findOne({
       _id: scheduleId,
       tenantId,
+      status: { $ne: "DELETED" },
     });
 
     if (!schedule) {
@@ -483,6 +489,7 @@ class WorkingScheduleService {
       {
         _id: scheduleId,
         tenantId: tenantId,
+        status: { $ne: "DELETED" },
       },
       {
         status: "DELETED",
