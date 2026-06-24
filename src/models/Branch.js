@@ -46,6 +46,10 @@ const branchSchema = new mongoose.Schema(
         type: Number,
         default: 100,
       },
+      maxAccuracyMeters: {
+        type: Number,
+        default: 100,
+      },
     },
   },
   { timestamps: true },

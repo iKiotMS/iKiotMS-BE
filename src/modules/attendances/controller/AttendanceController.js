@@ -9,12 +9,12 @@ class AttendanceController {
     try {
       const tenantId = req.user.tenantId;
       const userId = req.user.userId;
+      const data = req.body?.data || req.body || {};
 
       const result = await takeAttendanceService.checkIn(
         tenantId,
         userId,
-        req.body,
-        req.ip,
+        data,
       );
 
       return res.status(201).json(result);

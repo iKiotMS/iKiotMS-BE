@@ -22,6 +22,18 @@ const warehouseSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    attendanceTakingLocation: {
+      latitude: Number,
+      longitude: Number,
+      allowedRadiusMeters: {
+        type: Number,
+        default: 100,
+      },
+      maxAccuracyMeters: {
+        type: Number,
+        default: 100,
+      },
+    },
   },
   { timestamps: true },
 );

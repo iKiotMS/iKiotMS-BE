@@ -35,6 +35,76 @@ class TakeAttendanceService {
     return EARTH_RADIUS_IN_METERS * c;
   };
 
+  getAttendanceTakingLocation(workplace) {
+    const location = workplace?.attendanceTakingLocation;
+
+    if (
+      !location ||
+      location.latitude === undefined ||
+      location.latitude === null ||
+      location.longitude === undefined ||
+      location.longitude === null
+    ) {
+      const error = new Error("Địa điểm chấm công chưa được cấu hình");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return location;
+  }
+
+  verifyStatus(workplace, data) {
+    const attendanceTakingLocation =
+      this.getAttendanceTakingLocation(workplace);
+    const targetLatitude = attendanceTakingLocation.latitude;
+    const targetLongitude = attendanceTakingLocation.longitude;
+    const allowedRadiusMeters =
+      attendanceTakingLocation.allowedRadiusMeters || 100;
+    const maxAccuracyMeters = attendanceTakingLocation.maxAccuracyMeters || 100;
+
+    const distance = this.calculateDistanceInMeters(
+      data.latitude,
+      data.longitude,
+      targetLatitude,
+      targetLongitude,
+    );
+
+    if (data.accuracy > maxAccuracyMeters) {
+      const error = new Error(
+        `Độ chính xác của vị trí (${data.accuracy}m) không đủ để chấm công`,
+      );
+      error.statusCode = 422;
+      error.errors = {
+        verificationStatus: DISTANCE_VERIFICATION_STATUS.LOW_ACCURACY,
+        accuracy: data.accuracy,
+        maxAccuracyMeters,
+        distance,
+        allowedRadiusMeters,
+      };
+      throw error;
+    }
+
+    if (distance > allowedRadiusMeters) {
+      const error = new Error("Bạn đang ở ngoài khu vực chấm công cho phép");
+      error.statusCode = 403;
+      error.errors = {
+        verificationStatus: DISTANCE_VERIFICATION_STATUS.OUT_OF_RANGE,
+        accuracy: data.accuracy,
+        maxAccuracyMeters,
+        distance,
+        allowedRadiusMeters,
+      };
+      throw error;
+    }
+
+    return {
+      verificationStatus: DISTANCE_VERIFICATION_STATUS.VERIFIED,
+      distance,
+      allowedRadiusMeters,
+      maxAccuracyMeters,
+    };
+  }
+
   async checkIn(tenantId, userId, data) {
     let newAttendanceRecord = new AttendanceDTO(tenantId, userId, data);
     const validation = newAttendanceRecord.validate();
@@ -58,52 +128,52 @@ class TakeAttendanceService {
       throw error;
     }
 
+    const existingAttendance = await Attendance.findOne({
+      tenantId,
+      userId,
+      scheduleId: schedule._id,
+    });
+
+    if (existingAttendance) {
+      const error = new Error("Nhân viên đã check-in cho lịch làm việc này");
+      error.statusCode = 409;
+      throw error;
+    }
+
     const staffWorkplace = await StaffService.getStaffWorkplace({
       tenantId,
       staffId: userId,
     });
 
-    
-
     const workplace = staffWorkplace?.workplace;
-
-    if (!workplace?.attendanceTakingLocation) {
-      const error = new Error("Địa điểm chấm công chưa được cấu hình");
-      error.statusCode = 400;
-      throw error;
-    }
-    const targetLatitude = workplace.attendanceTakingLocation.latitude;
-    const targetLongitude = workplace.attendanceTakingLocation.longitude;
-
-    const distance = this.calculateDistanceInMeters(
-      data.latitude,
-      data.longitude,
-      targetLatitude,
-      targetLongitude,
-    );
-
-    let verificationStatus = DISTANCE_VERIFICATION_STATUS.VERIFIED;
-
-    if (newAttendanceRecord.checkInLocation.accuracy > 100) {
-      verificationStatus = DISTANCE_VERIFICATION_STATUS.LOW_ACCURACY;
-    } else if (distance > 100) {
-      verificationStatus = DISTANCE_VERIFICATION_STATUS.OUT_OF_RANGE;
-    }
+    const geoResult = this.verifyStatus(workplace, {
+      latitude: newAttendanceRecord.checkInLocation.latitude,
+      longitude: newAttendanceRecord.checkInLocation.longitude,
+      accuracy: newAttendanceRecord.checkInLocation.accuracy,
+    });
 
     const attendance = await Attendance.create({
-      
-      
-      
+      tenantId,
+      userId,
+      scheduleId: schedule._id,
       actualCheckinAt: new Date(),
-      checkinLocation,
-      checkinIpAddress: ipAddress,
-      
+      checkInLocation: {
+        latitude: newAttendanceRecord.checkInLocation.latitude,
+        longitude: newAttendanceRecord.checkInLocation.longitude,
+        accuracy: newAttendanceRecord.checkInLocation.accuracy,
+        distance: geoResult.distance,
+        verificationStatus: geoResult.verificationStatus,
+      },
+      status: "CHECKED_IN",
     });
 
     return {
       success: true,
       message: "Check-in thành công",
-      data: attendance,
+      data: {
+        attendance,
+        geo: geoResult,
+      },
     };
   }
 }

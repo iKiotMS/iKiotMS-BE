@@ -34,7 +34,7 @@ class AttendanceDTO {
       errors.push("Thiếu thông tin accuracy(độ chính xác) ");
     }
 
-    if(thí.checkInLocation.latitude < -90 || this.checkInLocation.latitude > 90) {
+    if(this.checkInLocation.latitude < -90 || this.checkInLocation.latitude > 90) {
       errors.push("Thông tin latitude(vĩ độ)  không hợp lệ");
     }
     if(this.checkInLocation.longitude < -180 || this.checkInLocation.longitude > 180) {
