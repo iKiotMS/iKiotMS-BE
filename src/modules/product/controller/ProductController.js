@@ -9,8 +9,11 @@ class ProductController {
   async create(req, res) {
     try {
       const tenantId = req.user.tenantId; // Assume tenantId is populated by verifyJwt
+      const subscription = req.subscription;
       if (!tenantId) {
-        return res.status(403).json({ success: false, message: "Tenant context missing" });
+        return res
+          .status(403)
+          .json({ success: false, message: "Tenant context missing" });
       }
 
       const dto = new CreateProductRequestDTO(req.body);
@@ -24,7 +27,11 @@ class ProductController {
         });
       }
 
-      const product = await ProductService.createProduct(tenantId, dto);
+      const product = await ProductService.createProduct(
+        tenantId,
+        dto,
+        subscription,
+      );
 
       res.status(201).json({
         success: true,
@@ -44,7 +51,9 @@ class ProductController {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) {
-        return res.status(403).json({ success: false, message: "Tenant context missing" });
+        return res
+          .status(403)
+          .json({ success: false, message: "Tenant context missing" });
       }
 
       const queryDTO = new ProductQueryDTO(req.query);
@@ -165,7 +174,11 @@ class ProductController {
         });
       }
 
-      const productItem = await ProductService.createProductItem(tenantId, productId, dto);
+      const productItem = await ProductService.createProductItem(
+        tenantId,
+        productId,
+        dto,
+      );
 
       res.status(201).json({
         success: true,
@@ -197,7 +210,11 @@ class ProductController {
         });
       }
 
-      const productItem = await ProductService.updateProductItem(tenantId, itemId, dto);
+      const productItem = await ProductService.updateProductItem(
+        tenantId,
+        itemId,
+        dto,
+      );
 
       res.status(200).json({
         success: true,
@@ -218,7 +235,10 @@ class ProductController {
       const tenantId = req.user.tenantId;
       const { itemId } = req.params;
 
-      const productItem = await ProductService.deleteProductItem(tenantId, itemId);
+      const productItem = await ProductService.deleteProductItem(
+        tenantId,
+        itemId,
+      );
 
       res.status(200).json({
         success: true,

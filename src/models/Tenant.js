@@ -28,6 +28,12 @@ const tenantSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    banking: {
+      accountNumber: { type: String, trim: true },
+      bankName: { type: String, trim: true },
+      accountName: { type: String, trim: true },
+      sepayWebhookApiKey: { type: String, select: false }, // hidden by default
+    },
   },
   { timestamps: true },
 );

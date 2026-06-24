@@ -1,5 +1,8 @@
 const BranchController = require("./controller/BranchController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
+const {
+  requireActiveSubscription,
+} = require("../../middlewares/subscriptionMiddleware");
 
 /**
  * @openapi
@@ -116,15 +119,44 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  */
 const registerBranchModule = (app) => {
   const branchRoutes = [
-    { method: "post", path: "/branches", handler: BranchController.create.bind(BranchController), protected: true },
-    { method: "get", path: "/branches", handler: BranchController.getList.bind(BranchController), protected: true },
-    { method: "get", path: "/branches/:id", handler: BranchController.getById.bind(BranchController), protected: true },
-    { method: "patch", path: "/branches/:id", handler: BranchController.update.bind(BranchController), protected: true },
-    { method: "delete", path: "/branches/:id/delete", handler: BranchController.softDelete.bind(BranchController), protected: true },
+    {
+      method: "post",
+      path: "/branches",
+      handler: BranchController.create.bind(BranchController),
+      protected: true,
+    },
+    {
+      method: "get",
+      path: "/branches",
+      handler: BranchController.getList.bind(BranchController),
+      protected: true,
+    },
+    {
+      method: "get",
+      path: "/branches/:id",
+      handler: BranchController.getById.bind(BranchController),
+      protected: true,
+    },
+    {
+      method: "patch",
+      path: "/branches/:id",
+      handler: BranchController.update.bind(BranchController),
+      protected: true,
+    },
+    {
+      method: "delete",
+      path: "/branches/:id/delete",
+      handler: BranchController.softDelete.bind(BranchController),
+      protected: true,
+    },
   ];
 
   branchRoutes.forEach((route) => {
-    const handlers = route.protected ? [verifyJwt, route.handler] : [route.handler];
+    const handlers = route.protected
+      ? route.path === "/branches" && route.method === "post"
+        ? [verifyJwt, requireActiveSubscription, route.handler]
+        : [verifyJwt, route.handler]
+      : [route.handler];
     app[route.method](route.path, ...handlers);
   });
 

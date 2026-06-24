@@ -2,11 +2,28 @@ const mongoose = require("mongoose");
 const { Product, ProductItem, Inventory } = require("../../../models");
 
 class ProductService {
-  async createProduct(tenantId, productData) {
+  async createProduct(tenantId, productData, subscription) {
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
+      // Check product quota
+      if (subscription) {
+        const maxProducts = subscription.currentQuotaSnapshot.maxProducts;
+        if (maxProducts > 0) {
+          // -1 means unlimited
+          const activeProductCount = await Product.countDocuments({
+            tenantId,
+            status: { $ne: "DISCONTINUED" },
+          });
+          if (activeProductCount >= maxProducts) {
+            throw new Error(
+              `Product limit reached. Your plan allows ${maxProducts} products. Current: ${activeProductCount}`,
+            );
+          }
+        }
+      }
+
       // 1. Validate SKU Uniqueness for all items
       const skus = productData.items.map((item) => item.sku);
       const existingItems = await ProductItem.find({
@@ -55,7 +72,15 @@ class ProductService {
   }
 
   async getProducts(tenantId, query) {
-    const { page, limit, search, categoryId, status, locationId, locationType } = query;
+    const {
+      page,
+      limit,
+      search,
+      categoryId,
+      status,
+      locationId,
+      locationType,
+    } = query;
     const skip = (page - 1) * limit;
 
     // Build the query object
@@ -171,7 +196,10 @@ class ProductService {
       throw new Error("Product not found");
     }
 
-    const existingSku = await ProductItem.findOne({ tenantId, sku: itemData.sku }).lean();
+    const existingSku = await ProductItem.findOne({
+      tenantId,
+      sku: itemData.sku,
+    }).lean();
     if (existingSku) {
       throw new Error(`SKU already exists: ${itemData.sku}`);
     }
@@ -190,10 +218,10 @@ class ProductService {
   async updateProductItem(tenantId, itemId, updateData) {
     // If SKU is being updated, check for duplicates
     if (updateData.sku) {
-      const existingSku = await ProductItem.findOne({ 
-        tenantId, 
-        sku: updateData.sku, 
-        _id: { $ne: itemId } 
+      const existingSku = await ProductItem.findOne({
+        tenantId,
+        sku: updateData.sku,
+        _id: { $ne: itemId },
       }).lean();
       if (existingSku) {
         throw new Error(`SKU already exists: ${updateData.sku}`);
@@ -215,28 +243,35 @@ class ProductService {
 
   async deleteProductItem(tenantId, itemId) {
     // Check if there is any inventory with stock > 0 for this item
-    const activeInventoryCount = await Inventory.countDocuments({ 
-      tenantId, 
-      productItemId: itemId, 
-      stock: { $gt: 0 } 
+    const activeInventoryCount = await Inventory.countDocuments({
+      tenantId,
+      productItemId: itemId,
+      stock: { $gt: 0 },
     });
 
     if (activeInventoryCount > 0) {
-      throw new Error("Cannot delete product item: Active inventory exists with stock > 0");
+      throw new Error(
+        "Cannot delete product item: Active inventory exists with stock > 0",
+      );
     }
 
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-      const productItem = await ProductItem.findOneAndDelete({ _id: itemId, tenantId }).session(session);
-      
+      const productItem = await ProductItem.findOneAndDelete({
+        _id: itemId,
+        tenantId,
+      }).session(session);
+
       if (!productItem) {
         throw new Error("Product item not found");
       }
 
       // Also clean up zero-stock inventory records associated with this item
-      await Inventory.deleteMany({ tenantId, productItemId: itemId }).session(session);
+      await Inventory.deleteMany({ tenantId, productItemId: itemId }).session(
+        session,
+      );
 
       await session.commitTransaction();
       session.endSession();

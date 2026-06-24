@@ -7,6 +7,7 @@ class BranchController {
   async create(req, res) {
     try {
       const tenantId = req.user.tenantId;
+      const subscription = req.subscription;
       const dto = new CreateBranchRequestDTO(req.body);
       const validation = dto.validate();
 
@@ -18,7 +19,11 @@ class BranchController {
         });
       }
 
-      const branch = await BranchService.createBranch(tenantId, dto);
+      const branch = await BranchService.createBranch(
+        tenantId,
+        dto,
+        subscription,
+      );
 
       res.status(201).json({
         success: true,
