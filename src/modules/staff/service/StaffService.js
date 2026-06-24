@@ -17,6 +17,7 @@ class StaffService extends BaseService {
     return {
       tenantId,
       role: { $in: STAFF_ROLES },
+      status: { $ne: "DELETED" },
       ...extra,
     };
   }
@@ -81,6 +82,7 @@ class StaffService extends BaseService {
       _id: staffId,
       role: { $in: STAFF_ROLES },
       tenantId,
+      status: { $ne: "DELETED" },
     });
 
     if (!staff) {
