@@ -7,6 +7,7 @@ class WarehouseService {
       tenantId,
       name: warehouseData.name,
       address: warehouseData.address,
+      attendanceTakingLocation: warehouseData.attendanceTakingLocation,
     });
 
     await warehouse.save();

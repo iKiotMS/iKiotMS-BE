@@ -25,14 +25,7 @@ const warehouseSchema = new mongoose.Schema(
     attendanceTakingLocation: {
       latitude: Number,
       longitude: Number,
-      allowedRadiusMeters: {
-        type: Number,
-        default: 100,
-      },
-      maxAccuracyMeters: {
-        type: Number,
-        default: 100,
-      },
+      allowedRadiusMeters: Number,
     },
   },
   { timestamps: true },
