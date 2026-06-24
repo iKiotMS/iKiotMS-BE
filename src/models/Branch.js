@@ -39,6 +39,11 @@ const branchSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
+    attendanceTakingLocation: {
+      latitude: Number,
+      longitude: Number,
+      allowedRadiusMeters: Number,
+    },
   },
   { timestamps: true },
 );

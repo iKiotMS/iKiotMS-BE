@@ -7,6 +7,7 @@ class UpdateBranchRequestDTO {
     if (data.address !== undefined) this.address = data.address;
     if (data.email !== undefined) this.email = data.email;
     if (data.status !== undefined) this.status = data.status;
+    if (data.attendanceTakingLocation !== undefined) this.attendanceTakingLocation = data.attendanceTakingLocation;
   }
 
   validate() {
@@ -44,8 +45,19 @@ class UpdateBranchRequestDTO {
       errors.push("Address must be a string");
     }
 
-    if (this.status !== undefined && !Object.values(BRANCH_STATUS).includes(this.status)) {
-      errors.push(`Invalid status. Must be one of: ${Object.values(BRANCH_STATUS).join(", ")}`);
+    if (
+      this.status !== undefined &&
+      !Object.values(BRANCH_STATUS).includes(this.status)
+    ) {
+      errors.push(
+        `Invalid status. Must be one of: ${Object.values(BRANCH_STATUS).join(", ")}`,
+      );
+    }
+
+    if (this.attendanceTakingLocation !== undefined) {
+      if (typeof this.attendanceTakingLocation !== "object") {
+        errors.push("attendanceTakingLocation must be an object");
+      }
     }
 
     return {
