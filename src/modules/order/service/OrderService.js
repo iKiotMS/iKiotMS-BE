@@ -24,12 +24,17 @@ class OrderService {
     const { customerId, branchId, paymentMethod, items, grandTotal, customerPay, note } = dto;
 
     // Pre-flight checks (outside transaction for read performance)
-    const [customer, branch] = await Promise.all([
+    const [customer, branch, tenant] = await Promise.all([
       Customer.findOne({ _id: customerId, tenantId }).lean(),
       Branch.findOne({ _id: branchId, tenantId }).lean(),
+      paymentMethod === "SEPAY" ? Tenant.findById(tenantId).select("+banking.sepayWebhookApiKey").lean() : null,
     ]);
     if (!customer) throw new Error("Customer not found");
     if (!branch) throw new Error("Branch not found");
+
+    if (paymentMethod === "SEPAY" && (!tenant?.banking?.accountNumber || !tenant?.banking?.bankName)) {
+      throw new Error("Tenant has not configured banking information for SEPAY payment");
+    }
 
     for (const item of items) {
       const [productItem, inventory] = await Promise.all([
@@ -108,13 +113,8 @@ class OrderService {
       await session.commitTransaction();
 
       let qrUrl;
-      if (isSepay) {
-        const tenant = await Tenant.findById(tenantId)
-          .select("+banking.sepayWebhookApiKey")
-          .lean();
-        if (tenant?.banking) {
-          qrUrl = sepayService.buildTenantQrUrl(tenant.banking, grandTotal, paymentReference);
-        }
+      if (isSepay && tenant?.banking) {
+        qrUrl = sepayService.buildTenantQrUrl(tenant.banking, grandTotal, paymentReference);
       }
 
       return { order, qrUrl };

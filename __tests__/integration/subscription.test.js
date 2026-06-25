@@ -1,7 +1,7 @@
 const request = require("supertest");
 const mongoose = require("mongoose");
-const { createApp } = require("../src/app");
-const { User, Tenant, Plan, Subscription } = require("../src/models");
+const { createApp } = require("../../src/app");
+const { User, Tenant, Plan, Subscription, Branch } = require("../../src/models");
 const jwt = require("jsonwebtoken");
 
 let app;
@@ -21,6 +21,7 @@ describe("Subscription API - Plan Upgrade", () => {
     await Tenant.deleteMany({});
     await Plan.deleteMany({});
     await Subscription.deleteMany({});
+    await Branch.deleteMany({});
   });
 
   const createPlans = async () => {

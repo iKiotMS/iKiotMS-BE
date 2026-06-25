@@ -1,7 +1,7 @@
 const request = require("supertest");
 const mongoose = require("mongoose");
-const { createApp } = require("../src/app");
-const { User, Tenant, Plan, Subscription, Product } = require("../src/models");
+const { createApp } = require("../../src/app");
+const { User, Tenant, Plan, Subscription, Product, Branch } = require("../../src/models");
 const jwt = require("jsonwebtoken");
 
 let app;
@@ -22,6 +22,7 @@ describe("Product API - Quota Checks", () => {
     await Plan.deleteMany({});
     await Subscription.deleteMany({});
     await Product.deleteMany({});
+    await Branch.deleteMany({});
   });
 
   const createTestTenant = async (planCode = "TRIAL") => {

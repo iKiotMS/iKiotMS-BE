@@ -39,7 +39,6 @@ class ProductController {
         data: product,
       });
     } catch (error) {
-      console.error("Create product error:", error);
       res.status(400).json({
         success: false,
         message: error.message || "Failed to create product",
@@ -186,7 +185,6 @@ class ProductController {
         data: productItem,
       });
     } catch (error) {
-      console.error("Create product item error:", error);
       res.status(400).json({
         success: false,
         message: error.message || "Failed to create product item",
@@ -222,7 +220,6 @@ class ProductController {
         data: productItem,
       });
     } catch (error) {
-      console.error("Update product item error:", error);
       res.status(400).json({
         success: false,
         message: error.message || "Failed to update product item",
@@ -246,7 +243,6 @@ class ProductController {
         data: productItem,
       });
     } catch (error) {
-      console.error("Delete product item error:", error);
       res.status(400).json({
         success: false,
         message: error.message || "Failed to delete product item",

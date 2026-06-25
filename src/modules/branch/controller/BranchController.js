@@ -31,8 +31,7 @@ class BranchController {
         data: branch,
       });
     } catch (error) {
-      console.error("Create branch error:", error);
-      res.status(500).json({
+      res.status(400).json({
         success: false,
         message: error.message || "Failed to create branch",
       });

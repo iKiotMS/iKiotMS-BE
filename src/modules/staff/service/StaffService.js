@@ -419,14 +419,14 @@ class StaffService extends BaseService {
       const maxUsers = subscription.currentQuotaSnapshot.maxUsers;
       if (maxUsers > 0) {
         // -1 means unlimited
-        const activeStaffCount = await User.countDocuments({
+        const staffCount = await User.countDocuments({
           tenantId,
           role: { $in: STAFF_ROLES },
-          status: "ACTIVE",
+          status: { $ne: "DELETED" },
         });
-        if (activeStaffCount >= maxUsers) {
+        if (staffCount >= maxUsers) {
           throw new Error(
-            `User limit reached. Your plan allows ${maxUsers} users. Current: ${activeStaffCount}`,
+            `User limit reached. Your plan allows ${maxUsers} users. Current: ${staffCount}`,
           );
         }
       }

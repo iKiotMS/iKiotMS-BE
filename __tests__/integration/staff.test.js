@@ -1,13 +1,14 @@
 const request = require("supertest");
 const mongoose = require("mongoose");
-const { createApp } = require("../src/app");
+const { createApp } = require("../../src/app");
 const {
   User,
   Tenant,
   Plan,
   Subscription,
   RefreshToken,
-} = require("../src/models");
+  Branch,
+} = require("../../src/models");
 const jwt = require("jsonwebtoken");
 
 let app;
@@ -30,6 +31,7 @@ describe("Staff API - Quota Checks", () => {
     await Plan.deleteMany({});
     await Subscription.deleteMany({});
     await RefreshToken.deleteMany({});
+    await Branch.deleteMany({});
   });
 
   const createTestTenant = async (planCode = "TRIAL") => {
@@ -72,6 +74,14 @@ describe("Staff API - Quota Checks", () => {
     tenant.tenantOwnerId = owner._id;
     await tenant.save();
 
+    // Create a branch for staff to be assigned to
+    const branch = await Branch.create({
+      tenantId: tenant._id,
+      name: "Test Branch",
+      phoneNumber: ["0901234567"],
+      address: "Test Address",
+    });
+
     // Create subscription
     const subscription = await Subscription.create({
       tenantId: tenant._id,
@@ -90,7 +100,7 @@ describe("Staff API - Quota Checks", () => {
       },
     });
 
-    return { tenant: tenant._id, owner, plan, subscription };
+    return { tenant: tenant._id, owner, plan, subscription, branch };
   };
 
   const generateToken = (user) => {
@@ -107,7 +117,7 @@ describe("Staff API - Quota Checks", () => {
   };
 
   test("Trial plan: Create staff ≤ 2 users - should succeed", async () => {
-    const { owner } = await createTestTenant("TRIAL");
+    const { owner, branch } = await createTestTenant("TRIAL");
     const token = generateToken(owner);
 
     const response = await request(app)
@@ -116,9 +126,8 @@ describe("Staff API - Quota Checks", () => {
       .send({
         email: "staff1@test.com",
         phoneNumber: "0901234567",
-        password: "Staff@123",
         role: "STAFF",
-        status: "ACTIVE",
+        branchId: branch._id.toString(),
       });
 
     expect(response.status).toBe(201);
@@ -126,7 +135,7 @@ describe("Staff API - Quota Checks", () => {
   });
 
   test("Trial plan: Create 3rd user - should fail with quota error", async () => {
-    const { owner } = await createTestTenant("TRIAL");
+    const { owner, branch } = await createTestTenant("TRIAL");
     const token = generateToken(owner);
 
     // Create 2 staff (limit is 2)
@@ -137,9 +146,8 @@ describe("Staff API - Quota Checks", () => {
         .send({
           email: `staff${i}@test.com`,
           phoneNumber: `090123456${i}`,
-          password: "Staff@123",
           role: "STAFF",
-          status: "ACTIVE",
+          branchId: branch._id.toString(),
         });
     }
 
@@ -150,9 +158,8 @@ describe("Staff API - Quota Checks", () => {
       .send({
         email: "staff3@test.com",
         phoneNumber: "0901234567",
-        password: "Staff@123",
         role: "STAFF",
-        status: "ACTIVE",
+        branchId: branch._id.toString(),
       });
 
     expect(response.status).toBe(400);
@@ -160,7 +167,7 @@ describe("Staff API - Quota Checks", () => {
   });
 
   test("Plus plan: Create staff ≤ 5 users - should succeed", async () => {
-    const { owner } = await createTestTenant("PLUS");
+    const { owner, branch } = await createTestTenant("PLUS");
     const token = generateToken(owner);
 
     // Create 5 staff
@@ -171,9 +178,8 @@ describe("Staff API - Quota Checks", () => {
         .send({
           email: `staff${i}@test.com`,
           phoneNumber: `090123456${i}`,
-          password: "Staff@123",
           role: "STAFF",
-          status: "ACTIVE",
+          branchId: branch._id.toString(),
         });
 
       expect(response.status).toBe(201);
@@ -181,7 +187,7 @@ describe("Staff API - Quota Checks", () => {
   });
 
   test("Pro plan: Create unlimited staff - should succeed", async () => {
-    const { owner } = await createTestTenant("PRO");
+    const { owner, branch } = await createTestTenant("PRO");
     const token = generateToken(owner);
 
     // Create 10 staff (well beyond any typical limit)
@@ -192,9 +198,8 @@ describe("Staff API - Quota Checks", () => {
         .send({
           email: `staff${i}@test.com`,
           phoneNumber: `090123456${i}`,
-          password: "Staff@123",
           role: "STAFF",
-          status: "ACTIVE",
+          branchId: branch._id.toString(),
         });
 
       expect(response.status).toBe(201);
@@ -254,6 +259,6 @@ describe("Staff API - Quota Checks", () => {
       });
 
     expect(response.status).toBe(403);
-    expect(response.body.message).toContain("EXPIRED");
+    expect(response.body.message.toUpperCase()).toContain("EXPIRED");
   });
 });
