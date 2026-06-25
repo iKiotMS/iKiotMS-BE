@@ -19,7 +19,7 @@ const cashFlowSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ["CASH", "BANK_TRANSFER", "MOMO", "VNPAY"],
+      enum: ["CASH", "BANK_TRANSFER", "MOMO", "VNPAY", "SEPAY"],
     },
     branchId: {
       type: mongoose.Schema.Types.ObjectId,

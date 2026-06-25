@@ -11,8 +11,14 @@ class StaffController {
       const tenantId = req.user.tenantId;
       const userRole = req.user.role;
       const data = req.body;
+      const subscription = req.subscription;
 
-      const staff = await StaffService.createStaff({ tenantId, data, userRole });
+      const staff = await StaffService.createStaff({
+        tenantId,
+        data,
+        userRole,
+        subscription,
+      });
 
       res.status(201).json(staff);
     } catch (error) {

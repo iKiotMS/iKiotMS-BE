@@ -3,70 +3,90 @@ const { Product, ProductItem, Inventory } = require("../../../models");
 const InventoryService = require("../../inventory/service/InventoryService");
 
 class ProductService {
-  async createProduct(tenantId, productData) {
+  async createProduct(tenantId, productData, subscription) {
     const session = await mongoose.startSession();
     session.startTransaction();
-
-    try {
-      // 1. Validate SKU Uniqueness for all items
-      const skus = productData.items.map((item) => item.sku);
-      const existingItems = await ProductItem.find({
-        tenantId,
-        sku: { $in: skus },
-      }).session(session);
-
-      if (existingItems.length > 0) {
-        const duplicateSkus = existingItems.map((i) => i.sku).join(", ");
-        throw new Error(`SKUs already exist in this tenant: ${duplicateSkus}`);
-      }
-
-      // 2. Create the base Product
-      const product = new Product({
-        tenantId,
-        name: productData.name,
-        brandId: productData.brandId,
-        categoryId: productData.categoryId,
-        categoryName: productData.categoryName,
-        supplierId: productData.supplierId,
-        status: productData.status,
-        images: productData.images,
-      });
-
-      await product.save({ session });
-
-      // 3. Create ProductItems (variants)
-      const productItemsData = productData.items.map((item) => ({
-        ...item,
-        tenantId,
-        productId: product._id,
-        productName: productData.name,
-      }));
-
-      const insertedItems = await ProductItem.insertMany(productItemsData, {
-        session,
-      });
-
-      // 4. Initialize Stock
-      for (let i = 0; i < insertedItems.length; i++) {
-        const itemDto = productData.items[i];
-        if (itemDto.initialStock && itemDto.initialStock.length > 0) {
-          await InventoryService.initializeStock(
-            tenantId,
-            insertedItems[i]._id,
-            itemDto.initialStock,
-            session,
+    // Check product quota
+    if (subscription) {
+      const maxProducts = subscription.currentQuotaSnapshot.maxProducts;
+      if (maxProducts > 0) {
+        // -1 means unlimited
+        const activeProductCount = await Product.countDocuments({
+          tenantId,
+          status: { $ne: "DISCONTINUED" },
+        });
+        if (activeProductCount >= maxProducts) {
+          throw new Error(
+            `Product limit reached. Your plan allows ${maxProducts} products. Current: ${activeProductCount}`,
           );
         }
       }
 
-      await session.commitTransaction();
-      session.endSession();
+      try {
+        // 1. Validate SKU Uniqueness for all items
+        const skus = productData.items.map((item) => item.sku);
+        const existingItems = await ProductItem.find({
+          tenantId,
+          sku: { $in: skus },
+        }).session(session);
+
+        if (existingItems.length > 0) {
+          const duplicateSkus = existingItems.map((i) => i.sku).join(", ");
+          throw new Error(
+            `SKUs already exist in this tenant: ${duplicateSkus}`,
+          );
+        }
+
+        // 2. Create the base Product
+        const product = new Product({
+          tenantId,
+          name: productData.name,
+          brandId: productData.brandId,
+          categoryId: productData.categoryId,
+          categoryName: productData.categoryName,
+          supplierId: productData.supplierId,
+          status: productData.status,
+          images: productData.images,
+        });
+
+        await product.save({ session });
+
+        // 3. Create ProductItems (variants)
+        const productItemsData = productData.items.map((item) => ({
+          ...item,
+          tenantId,
+          productId: product._id,
+          productName: productData.name,
+        }));
+
+        const insertedItems = await ProductItem.insertMany(productItemsData, {
+          session,
+        });
+
+        // 4. Initialize Stock
+        for (let i = 0; i < insertedItems.length; i++) {
+          const itemDto = productData.items[i];
+          if (itemDto.initialStock && itemDto.initialStock.length > 0) {
+            await InventoryService.initializeStock(
+              tenantId,
+              insertedItems[i]._id,
+              itemDto.initialStock,
+              session,
+            );
+          }
+        }
+
+        await session.commitTransaction();
+        session.endSession();
+
+        return product;
+      } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        throw error;
+      }
 
       return product;
-    } catch (error) {
-      await session.abortTransaction();
-      session.endSession();
-      throw error;
     }
   }
 

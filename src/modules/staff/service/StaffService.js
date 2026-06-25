@@ -392,11 +392,7 @@ class StaffService extends BaseService {
     }
   }
 
-  //==============================================================================================
-  //==================================== Main Service Methods ====================================
-  //==============================================================================================
-
-  async createStaff({ tenantId, data, userRole }) {
+  async createStaff({ tenantId, data, userRole, subscription }) {
     this.checktenantId(tenantId);
     data = this.normalizeWorkplaceUpdateData(data || {});
     data.role = this.validateStaffRole(data.role, { required: true });
@@ -414,6 +410,29 @@ class StaffService extends BaseService {
     );
 
     await this.checkStaffUniqueness({
+      tenantId,
+      phoneNumber: data.phoneNumber,
+      email: data.email,
+    });
+    // Check user quota
+    if (subscription) {
+      const maxUsers = subscription.currentQuotaSnapshot.maxUsers;
+      if (maxUsers > 0) {
+        // -1 means unlimited
+        const staffCount = await User.countDocuments({
+          tenantId,
+          role: { $in: STAFF_ROLES },
+          status: { $ne: "DELETED" },
+        });
+        if (staffCount >= maxUsers) {
+          throw new Error(
+            `User limit reached. Your plan allows ${maxUsers} users. Current: ${staffCount}`,
+          );
+        }
+      }
+    }
+
+    const existingUser = await User.findOne({
       tenantId,
       phoneNumber: data.phoneNumber,
       email: data.email,

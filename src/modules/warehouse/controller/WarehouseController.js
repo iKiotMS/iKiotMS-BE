@@ -26,7 +26,6 @@ class WarehouseController {
         data: warehouse,
       });
     } catch (error) {
-      console.error("Create warehouse error:", error);
       res.status(500).json({
         success: false,
         message: error.message || "Failed to create warehouse",

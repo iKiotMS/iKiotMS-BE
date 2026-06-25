@@ -1,6 +1,9 @@
 const StaffController = require("./controller/StaffController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
 const { authorize } = require("../../middlewares/authorizationMiddleware");
+const {
+  requireActiveSubscription,
+} = require("../../middlewares/subscriptionMiddleware");
 
 /**
  * @openapi
@@ -526,6 +529,7 @@ function registerStaffModule(app) {
   app.post(
     "/staff",
     verifyJwt,
+    requireActiveSubscription,
     authorize("staff", ["create"]),
     StaffController.create.bind(StaffController),
   );

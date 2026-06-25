@@ -43,9 +43,14 @@ const subscriptionInvoiceSchema = new mongoose.Schema(
     paidAt: {
       type: Date,
     },
+    paymentReference: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     paymentMethod: {
       type: String,
-      enum: ["BANK_TRANSFER", "MOMO", "VNPAY"],
+      enum: ["BANK_TRANSFER", "MOMO", "VNPAY", "SEPAY"],
     },
     transactionRef: {
       type: String,

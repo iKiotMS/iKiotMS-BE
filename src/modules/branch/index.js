@@ -1,5 +1,8 @@
 const BranchController = require("./controller/BranchController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
+const {
+  requireActiveSubscription,
+} = require("../../middlewares/subscriptionMiddleware");
 
 /**
  * @openapi
@@ -164,7 +167,9 @@ const registerBranchModule = (app) => {
 
   branchRoutes.forEach((route) => {
     const handlers = route.protected
-      ? [verifyJwt, route.handler]
+      ? route.path === "/branches" && route.method === "post"
+        ? [verifyJwt, requireActiveSubscription, route.handler]
+        : [verifyJwt, route.handler]
       : [route.handler];
     app[route.method](route.path, ...handlers);
   });
