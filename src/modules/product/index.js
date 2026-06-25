@@ -44,6 +44,14 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *                     costPrice: { type: number }
  *                     VAT: { type: number }
  *                     warrantyPeriod: { type: string }
+ *                     initialStock:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           locationId: { type: string }
+ *                           locationType: { type: string, enum: [branch, warehouse] }
+ *                           stock: { type: number }
  *                     images:
  *                       type: array
  *                       items:
@@ -85,10 +93,40 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *       - in: query
  *         name: locationType
  *         schema: { type: string, enum: [branch, warehouse] }
- *         description: Required if locationId is provided
+ *         description: Filter by location type (e.g. all branches, or all warehouses)
  *     responses:
  *       200:
- *         description: List of products
+ *         description: List of products with variants and stock
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       name: { type: string }
+ *                       totalStock: { type: number, description: "Total stock across all items and locations" }
+ *                       items:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             sku: { type: string }
+ *                             totalStock: { type: number }
+ *                             stockDetails:
+ *                               type: array
+ *                               items:
+ *                                 type: object
+ *                                 properties:
+ *                                   locationId: { type: string }
+ *                                   locationType: { type: string }
+ *                                   stock: { type: number }
+ *                 pagination:
+ *                   type: object
  * /products/{id}:
  *   get:
  *     tags: [Products]
@@ -180,6 +218,14 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *               costPrice: { type: number }
  *               VAT: { type: number }
  *               warrantyPeriod: { type: string }
+ *               initialStock:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     locationId: { type: string }
+ *                     locationType: { type: string, enum: [branch, warehouse] }
+ *                     stock: { type: number }
  *               images:
  *                 type: array
  *                 items:

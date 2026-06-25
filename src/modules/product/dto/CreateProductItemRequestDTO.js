@@ -10,6 +10,7 @@ class CreateProductItemRequestDTO {
     this.VAT = data.VAT;
     this.productDetails = data.productDetails;
     this.images = data.images;
+    this.initialStock = data.initialStock;
   }
 
   validate() {
@@ -41,6 +42,24 @@ class CreateProductItemRequestDTO {
 
     if (this.productDetails !== undefined && !Array.isArray(this.productDetails)) {
       errors.push("Product details must be an array");
+    }
+
+    if (this.initialStock !== undefined) {
+      if (!Array.isArray(this.initialStock)) {
+        errors.push("initialStock must be an array");
+      } else {
+        this.initialStock.forEach((stockItem, index) => {
+          if (!stockItem.locationId) {
+            errors.push(`initialStock[${index}].locationId is required`);
+          }
+          if (!["branch", "warehouse"].includes(stockItem.locationType)) {
+            errors.push(`initialStock[${index}].locationType must be 'branch' or 'warehouse'`);
+          }
+          if (stockItem.stock === undefined || typeof stockItem.stock !== "number" || stockItem.stock < 0) {
+            errors.push(`initialStock[${index}].stock must be a non-negative number`);
+          }
+        });
+      }
     }
 
     return {
