@@ -1,4 +1,10 @@
-const { Subscription, Tenant, User, Plan, SubscriptionInvoice } = require("../../../models");
+const {
+  Subscription,
+  Tenant,
+  User,
+  Plan,
+  SubscriptionInvoice,
+} = require("../../../models");
 const sepayService = require("../../../services/sepayService");
 
 class SubscriptionService {
@@ -182,39 +188,53 @@ class SubscriptionService {
     const subscription = await this.getSubscriptionByTenantId(tenantId);
 
     if (!subscription) {
-      return { hasTrial: false, status: "NO_SUBSCRIPTION" };
+      return { status: "NO_SUBSCRIPTION" };
     }
 
     const now = new Date();
 
     if (subscription.status === "TRIAL") {
-      if (now > subscription.trialEndDate) {
-        // Trial has expired
+      if (now > new Date(subscription.trialEndDate)) {
+        await Subscription.findByIdAndUpdate(subscription._id, {
+          status: "EXPIRED",
+        });
         return {
-          hasTrial: false,
-          status: "EXPIRED_TRIAL",
+          status: "EXPIRED",
           daysOverdue: Math.ceil(
-            (now - subscription.trialEndDate) / (24 * 60 * 60 * 1000),
+            (now - new Date(subscription.trialEndDate)) / 86400000,
           ),
         };
-      } else {
-        // Trial is active
-        const daysLeft = Math.ceil(
-          (subscription.trialEndDate - now) / (24 * 60 * 60 * 1000),
-        );
-        return {
-          hasTrial: true,
-          status: "ACTIVE_TRIAL",
-          daysLeft: daysLeft,
-          trialEndDate: subscription.trialEndDate,
-        };
       }
+      return {
+        status: "TRIAL",
+        daysLeft: Math.ceil(
+          (new Date(subscription.trialEndDate) - now) / 86400000,
+        ),
+        trialEndDate: subscription.trialEndDate,
+      };
     }
 
-    return {
-      hasTrial: subscription.status === "TRIAL",
-      status: subscription.status,
-    };
+    if (subscription.status === "ACTIVE") {
+      if (now > new Date(subscription.endDate)) {
+        await Subscription.findByIdAndUpdate(subscription._id, {
+          status: "EXPIRED",
+        });
+        return {
+          status: "EXPIRED",
+          daysOverdue: Math.ceil(
+            (now - new Date(subscription.endDate)) / 86400000,
+          ),
+        };
+      }
+      return {
+        status: "ACTIVE",
+        daysLeft: Math.ceil((new Date(subscription.endDate) - now) / 86400000),
+        endDate: subscription.endDate,
+        planCode: subscription.planId?.planCode,
+      };
+    }
+
+    return { status: subscription.status };
   }
 
   async initiateUpgrade(tenantId, userId, planCode) {
@@ -224,16 +244,19 @@ class SubscriptionService {
     const newPlan = await Plan.findOne({ planCode, isActive: true });
     if (!newPlan) throw new Error(`Plan ${planCode} not found or inactive`);
 
-    if (newPlan.price === 0) throw new Error("Use free-trial endpoint for free plans");
+    if (newPlan.price === 0)
+      throw new Error("Use free-trial endpoint for free plans");
 
     // Cancel any stale pending invoice for the same tenant+plan
     await SubscriptionInvoice.updateMany(
-      { tenantId, planId: newPlan._id, status: 'PENDING' },
-      { status: 'FAILED' },
+      { tenantId, planId: newPlan._id, status: "PENDING" },
+      { status: "FAILED" },
     );
 
     const billingStart = new Date();
-    const billingEnd = new Date(billingStart.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const billingEnd = new Date(
+      billingStart.getTime() + 30 * 24 * 60 * 60 * 1000,
+    );
 
     const paymentReference = sepayService.generatePaymentReference();
 
@@ -242,10 +265,10 @@ class SubscriptionService {
       tenantId,
       planId: newPlan._id,
       amount: newPlan.price,
-      currency: 'VND',
-      status: 'PENDING',
+      currency: "VND",
+      status: "PENDING",
       paymentReference,
-      paymentMethod: 'SEPAY',
+      paymentMethod: "SEPAY",
       billingPeriodStart: billingStart,
       billingPeriodEnd: billingEnd,
     });
@@ -271,10 +294,12 @@ class SubscriptionService {
 
     const oldPlanId = subscription.planId;
     const billingStart = new Date();
-    const billingEnd = new Date(billingStart.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const billingEnd = new Date(
+      billingStart.getTime() + 30 * 24 * 60 * 60 * 1000,
+    );
 
     subscription.planId = plan._id;
-    subscription.status = 'ACTIVE';
+    subscription.status = "ACTIVE";
     subscription.startDate = billingStart;
     subscription.endDate = billingEnd;
     subscription.trialEndDate = null;
@@ -284,7 +309,7 @@ class SubscriptionService {
       maxProducts: plan.maxProducts,
     };
     subscription.historyLogs.push({
-      event: 'UPGRADED',
+      event: "UPGRADED",
       fromPlanId: oldPlanId,
       toPlanId: plan._id,
       changedAt: new Date(),
@@ -293,9 +318,10 @@ class SubscriptionService {
     });
     await subscription.save();
 
-    invoice.status = 'PAID';
+    invoice.status = "PAID";
     invoice.paidAt = new Date();
-    invoice.transactionRef = sepayPayload.referenceCode ?? String(sepayPayload.id);
+    invoice.transactionRef =
+      sepayPayload.referenceCode ?? String(sepayPayload.id);
     await invoice.save();
 
     return subscription;
@@ -324,7 +350,7 @@ class SubscriptionService {
       // 4. Update subscription
       const oldPlanId = currentSubscription.planId;
       currentSubscription.planId = newPlan._id;
-      currentSubscription.status = 'ACTIVE';
+      currentSubscription.status = "ACTIVE";
       currentSubscription.startDate = new Date();
       currentSubscription.endDate = new Date(
         Date.now() + 30 * 24 * 60 * 60 * 1000,
@@ -340,7 +366,7 @@ class SubscriptionService {
 
       // 6. Log the upgrade
       currentSubscription.historyLogs.push({
-        event: 'UPGRADED',
+        event: "UPGRADED",
         fromPlanId: oldPlanId,
         toPlanId: newPlan._id,
         changedAt: new Date(),

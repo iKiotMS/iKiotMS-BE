@@ -37,6 +37,28 @@ const requireActiveSubscription = async (req, res, next) => {
       });
     }
 
+    const now = new Date();
+
+    // Lazy expiry — trial
+    if (subscription.status === "TRIAL" && now > new Date(subscription.trialEndDate)) {
+      await Subscription.findByIdAndUpdate(subscription._id, { status: "EXPIRED" });
+      invalidateSubscriptionCache(tenantId);
+      return res.status(403).json({
+        success: false,
+        message: "Free trial has expired. Please upgrade your plan to continue.",
+      });
+    }
+
+    // Lazy expiry — paid plan
+    if (subscription.status === "ACTIVE" && now > new Date(subscription.endDate)) {
+      await Subscription.findByIdAndUpdate(subscription._id, { status: "EXPIRED" });
+      invalidateSubscriptionCache(tenantId);
+      return res.status(403).json({
+        success: false,
+        message: "Subscription has expired. Please renew your plan to continue.",
+      });
+    }
+
     if (["EXPIRED", "CANCELLED"].includes(subscription.status)) {
       return res.status(403).json({
         success: false,

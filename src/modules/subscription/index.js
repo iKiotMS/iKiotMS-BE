@@ -27,7 +27,7 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Unauthorized
  *       500:
  *         description: Server error
- * /subscription/trial-status:
+ * /subscription/status:
  *   get:
  *     tags:
  *       - Subscription
@@ -42,7 +42,7 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Unauthorized
  *       500:
  *         description: Failed to check trial status
- * /subscription/upgrade:
+ * /subscription/upgrade/{tenantId}:
  *   post:
  *     tags:
  *       - Subscription
@@ -50,6 +50,12 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *     description: Directly change tenant subscription to PLUS or PRO plan without payment
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tenantId
+ *         required: true
+ *         schema:
+ *           type: string
  *     requestBody:
  *       required: true
  *       content:
@@ -170,7 +176,7 @@ const registerSubscriptionModule = (app) => {
     },
     {
       method: "get",
-      path: "/subscription/trial-status",
+      path: "/subscription/status",
       handler: SubscriptionController.checkTrialStatus.bind(
         SubscriptionController,
       ),
@@ -178,7 +184,7 @@ const registerSubscriptionModule = (app) => {
     },
     {
       method: "post",
-      path: "/subscription/upgrade",
+      path: "/subscription/upgrade/:tenantId",
       handler: SubscriptionController.upgradePlan.bind(SubscriptionController),
       protected: true,
     },
@@ -197,6 +203,22 @@ const registerSubscriptionModule = (app) => {
         SubscriptionController,
       ),
       protected: false,
+    },
+    {
+      method: "post",
+      path: "/webhook/sepay/order",
+      handler: SubscriptionController.handleSepayOrderWebhook.bind(
+        SubscriptionController,
+      ),
+      protected: false,
+    },
+    {
+      method: "get",
+      path: "/subscription/invoice/:invoiceId/status",
+      handler: SubscriptionController.getInvoiceStatus.bind(
+        SubscriptionController,
+      ),
+      protected: true,
     },
   ];
 
