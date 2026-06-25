@@ -1,5 +1,8 @@
 const SubscriptionService = require("../service/SubscriptionService");
-const { Plan, SubscriptionInvoice, Order, CashFlow } = require("../../../models");
+const {
+  Plan,
+  SubscriptionInvoice,
+} = require("../../../models");
 const sepayService = require("../../../services/sepayService");
 
 class SubscriptionController {
@@ -147,21 +150,21 @@ class SubscriptionController {
         data: result,
       });
     } catch (error) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: error.message || "Failed to initiate upgrade",
-        });
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to initiate upgrade",
+      });
     }
   }
 
   async handleSepayWebhook(req, res) {
     try {
       const payload = req.body;
+      const header =
+        req.headers["authorization"] || req.headers["Authorization"] || "";
 
       // Verify SePay API key
-      if (!sepayService.verifyWebhookKey(payload.apiKey)) {
+      if (!sepayService.verifyWebhookKey(header.split(" ")[1] ?? "")) {
         return res
           .status(401)
           .json({ success: false, message: "Invalid API key" });
@@ -189,12 +192,10 @@ class SubscriptionController {
       });
 
       if (!invoice) {
-        return res
-          .status(200)
-          .json({
-            success: true,
-            message: "Invoice not found or already processed",
-          });
+        return res.status(200).json({
+          success: true,
+          message: "Invoice not found or already processed",
+        });
       }
 
       // Verify amount
@@ -219,65 +220,7 @@ class SubscriptionController {
     }
   }
 
-  async handleSepayOrderWebhook(req, res) {
-    try {
-      const payload = req.body;
-
-      if (payload.transferType !== "in") {
-        return res.status(200).json({ success: true });
-      }
-
-      // Identify tenant by their unique SePay webhook API key
-      const tenant = await sepayService.findTenantByWebhookKey(payload.apiKey);
-      if (!tenant) {
-        return res.status(200).json({ success: true, message: "Unknown API key" });
-      }
-
-      // Extract order reference from transfer content
-      const paymentReference = sepayService.extractOrderRef(payload.content ?? "");
-      if (!paymentReference) {
-        return res.status(200).json({ success: true, message: "No order reference found" });
-      }
-
-      // Find pending SEPAY order belonging to this tenant
-      const order = await Order.findOne({
-        paymentReference,
-        paymentStatus: "PENDING",
-        paymentMethod: "SEPAY",
-        tenantId: tenant._id,
-      });
-
-      if (!order) {
-        return res.status(200).json({ success: true, message: "Order not found or already paid" });
-      }
-
-      if (payload.transferAmount < order.grandTotal) {
-        console.warn(
-          `SePay order: underpaid for order ${order._id}. Expected ${order.grandTotal}, got ${payload.transferAmount}`,
-        );
-        return res.status(200).json({ success: true, message: "Underpaid — ignored" });
-      }
-
-      order.status = "COMPLETED";
-      order.sepayTransactionId = payload.id;
-      await order.save();
-
-      await CashFlow.create({
-        tenantId: order.tenantId,
-        branchId: order.branchId,
-        orderId: order._id,
-        flowType: "INCOME",
-        amount: payload.transferAmount,
-        paymentMethod: "SEPAY",
-        description: `SePay - ${order.paymentReference}`,
-      });
-
-      res.status(200).json({ success: true, message: "Order payment confirmed" });
-    } catch (error) {
-      console.error("SePay order webhook error:", error);
-      res.status(200).json({ success: false, message: error.message });
-    }
-  }
 }
+
 
 module.exports = new SubscriptionController();

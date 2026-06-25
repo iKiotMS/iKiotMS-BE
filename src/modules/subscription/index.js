@@ -157,37 +157,6 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *     responses:
  *       200:
  *         description: Webhook processed
- * /webhook/sepay/order:
- *   post:
- *     tags:
- *       - Webhook
- *     summary: SePay order payment webhook
- *     description: Called by SePay when a bank transfer hits a tenant's account. Marks the matching order as PAID.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               id:
- *                 type: integer
- *               content:
- *                 type: string
- *                 description: Transfer note — must contain the order reference (e.g. ORD1A2B3C)
- *               transferType:
- *                 type: string
- *                 enum: [in, out]
- *               transferAmount:
- *                 type: number
- *               referenceCode:
- *                 type: string
- *               apiKey:
- *                 type: string
- *                 description: Tenant's SePay webhook API key — used to identify which tenant received the payment
- *     responses:
- *       200:
- *         description: Webhook processed
  */
 const registerSubscriptionModule = (app) => {
   const subscriptionRoutes = [
@@ -225,14 +194,6 @@ const registerSubscriptionModule = (app) => {
       method: "post",
       path: "/webhook/sepay",
       handler: SubscriptionController.handleSepayWebhook.bind(
-        SubscriptionController,
-      ),
-      protected: false,
-    },
-    {
-      method: "post",
-      path: "/webhook/sepay/order",
-      handler: SubscriptionController.handleSepayOrderWebhook.bind(
         SubscriptionController,
       ),
       protected: false,
