@@ -175,25 +175,19 @@ class ProductService {
 
         // Group items by productId
         const itemMap = {};
-        items.forEach((item) => {
+        items.forEach(item => {
           const pId = item.productId.toString();
           if (!itemMap[pId]) itemMap[pId] = [];
-
+          
           item.stockDetails = inventoryMap[item._id.toString()] || [];
-          item.totalStock = item.stockDetails.reduce(
-            (sum, inv) => sum + inv.stock,
-            0,
-          );
+          item.stock = item.stockDetails.reduce((sum, inv) => sum + inv.stock, 0);
           itemMap[pId].push(item);
         });
 
         // Attach items to products
-        data.forEach((product) => {
+        data.forEach(product => {
           product.items = itemMap[product._id.toString()] || [];
-          product.totalStock = product.items.reduce(
-            (sum, item) => sum + item.totalStock,
-            0,
-          );
+          product.totalStock = product.items.reduce((sum, item) => sum + item.stock, 0);
         });
       } else {
         data.forEach((product) => {
@@ -221,6 +215,33 @@ class ProductService {
     }
 
     const items = await ProductItem.find({ productId, tenantId }).lean();
+
+    if (items.length > 0) {
+      const itemIds = items.map((i) => i._id);
+      const inventories = await Inventory.find({ tenantId, productItemId: { $in: itemIds } }).lean();
+      
+      const inventoryMap = {};
+      inventories.forEach(inv => {
+        const id = inv.productItemId.toString();
+        if (!inventoryMap[id]) inventoryMap[id] = [];
+        inventoryMap[id].push({
+          locationId: inv.locationId,
+          locationType: inv.locationType,
+          stock: inv.stock
+        });
+      });
+      
+      let totalStock = 0;
+      items.forEach(item => {
+        item.stockDetails = inventoryMap[item._id.toString()] || [];
+        item.stock = item.stockDetails.reduce((sum, inv) => sum + inv.stock, 0);
+        totalStock += item.stock;
+      });
+      
+      product.totalStock = totalStock;
+    } else {
+      product.totalStock = 0;
+    }
 
     return {
       ...product,
