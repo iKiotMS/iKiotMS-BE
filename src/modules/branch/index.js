@@ -29,6 +29,12 @@ const {
  *                 items: { type: string }
  *               address: { type: string }
  *               email: { type: string }
+ *               attendanceTakingLocation:
+ *                 type: object
+ *                 properties:
+ *                   latitude: { type: number }
+ *                   longitude: { type: number }
+ *                   allowedRadiusMeters: { type: number }
  *     responses:
  *       201:
  *         description: Branch created successfully
@@ -50,7 +56,7 @@ const {
  *         schema: { type: string }
  *       - name: status
  *         in: query
- *         schema: { type: string, enum: [ACTIVE, INACTIVE, SUSPENDED] }
+ *         schema: { type: string, enum: [ACTIVE, INACTIVE, DELETED] }
  *     responses:
  *       200:
  *         description: List of branches
@@ -96,7 +102,13 @@ const {
  *                 items: { type: string }
  *               address: { type: string }
  *               email: { type: string }
- *               status: { type: string, enum: [ACTIVE, INACTIVE, SUSPENDED] }
+ *               status: { type: string, enum: [ACTIVE, INACTIVE, DELETED] }
+ *               attendanceTakingLocation:
+ *                 type: object
+ *                 properties:
+ *                   latitude: { type: number }
+ *                   longitude: { type: number }
+ *                   allowedRadiusMeters: { type: number }
  *     responses:
  *       200:
  *         description: Branch updated

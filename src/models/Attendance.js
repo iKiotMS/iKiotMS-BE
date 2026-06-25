@@ -15,6 +15,7 @@ const attendanceSchema = new mongoose.Schema(
     scheduleId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "WorkingSchedule",
+      required: [true, "Working schedule is required"],
     },
     actualCheckinAt: {
       type: Date,
@@ -36,9 +37,33 @@ const attendanceSchema = new mongoose.Schema(
     },
     status: {
       type: String,
+      enum: ["CHECKED_IN", "CHECKED_OUT", "ABSENT"],
       trim: true,
     },
+    checkInLocation: {
+      latitude: Number,
+      longitude: Number,
+      accuracy: Number,
+      distance: Number,
+      verificationStatus: {
+        type: String,
+        enum: ["VERIFIED", "LOW_ACCURACY", "OUT_OF_RANGE", "NO_LOCATION"],
+        default: "VERIFIED",
+      },
+    },
+    checkOutLocation: {
+      latitude: Number,
+      longitude: Number,
+      accuracy: Number,
+      distance: Number,
+      verificationStatus: {
+        type: String,
+        enum: ["VERIFIED", "LOW_ACCURACY", "OUT_OF_RANGE", "NO_LOCATION"],
+        default: "VERIFIED",
+      },
+    },
   },
+
   { timestamps: true },
 );
 

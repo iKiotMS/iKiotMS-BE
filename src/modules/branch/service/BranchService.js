@@ -26,6 +26,7 @@ class BranchService {
       phoneNumber: branchData.phoneNumber,
       address: branchData.address,
       email: branchData.email,
+      attendanceTakingLocation: branchData.attendanceTakingLocation,
     });
 
     await branch.save();

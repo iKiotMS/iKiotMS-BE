@@ -49,7 +49,8 @@
     "warehouses": ["read", "update"],
     "inventory": ["read", "update", "manage"],
     "stock_movement": ["create", "read", "update"],
-    "reports": ["read"]
+    "reports": ["read"],
+    "schedules": ["read"]
   },
   "STAFF": {
     "products": ["read"],
