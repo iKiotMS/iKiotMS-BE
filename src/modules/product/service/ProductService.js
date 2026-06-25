@@ -1,8 +1,11 @@
 const mongoose = require("mongoose");
 const { Product, ProductItem, Inventory } = require("../../../models");
+const InventoryService = require("../../inventory/service/InventoryService");
 
 class ProductService {
   async createProduct(tenantId, productData, subscription) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
     // Check product quota
     if (subscription) {
       const maxProducts = subscription.currentQuotaSnapshot.maxProducts;
@@ -18,45 +21,73 @@ class ProductService {
           );
         }
       }
+
+      try {
+        // 1. Validate SKU Uniqueness for all items
+        const skus = productData.items.map((item) => item.sku);
+        const existingItems = await ProductItem.find({
+          tenantId,
+          sku: { $in: skus },
+        }).session(session);
+
+        if (existingItems.length > 0) {
+          const duplicateSkus = existingItems.map((i) => i.sku).join(", ");
+          throw new Error(
+            `SKUs already exist in this tenant: ${duplicateSkus}`,
+          );
+        }
+
+        // 2. Create the base Product
+        const product = new Product({
+          tenantId,
+          name: productData.name,
+          brandId: productData.brandId,
+          categoryId: productData.categoryId,
+          categoryName: productData.categoryName,
+          supplierId: productData.supplierId,
+          status: productData.status,
+          images: productData.images,
+        });
+
+        await product.save({ session });
+
+        // 3. Create ProductItems (variants)
+        const productItemsData = productData.items.map((item) => ({
+          ...item,
+          tenantId,
+          productId: product._id,
+          productName: productData.name,
+        }));
+
+        const insertedItems = await ProductItem.insertMany(productItemsData, {
+          session,
+        });
+
+        // 4. Initialize Stock
+        for (let i = 0; i < insertedItems.length; i++) {
+          const itemDto = productData.items[i];
+          if (itemDto.initialStock && itemDto.initialStock.length > 0) {
+            await InventoryService.initializeStock(
+              tenantId,
+              insertedItems[i]._id,
+              itemDto.initialStock,
+              session,
+            );
+          }
+        }
+
+        await session.commitTransaction();
+        session.endSession();
+
+        return product;
+      } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+        throw error;
+      }
+
+      return product;
     }
-
-    // 1. Validate SKU Uniqueness for all items
-    const skus = productData.items.map((item) => item.sku);
-    const existingItems = await ProductItem.find({
-      tenantId,
-      sku: { $in: skus },
-    });
-
-    if (existingItems.length > 0) {
-      const duplicateSkus = existingItems.map((i) => i.sku).join(", ");
-      throw new Error(`SKUs already exist in this tenant: ${duplicateSkus}`);
-    }
-
-    // 2. Create the base Product
-    const product = new Product({
-      tenantId,
-      name: productData.name,
-      brandId: productData.brandId,
-      categoryId: productData.categoryId,
-      categoryName: productData.categoryName,
-      supplierId: productData.supplierId,
-      status: productData.status,
-      images: productData.images,
-    });
-
-    await product.save();
-
-    // 3. Create ProductItems (variants)
-    const productItemsData = productData.items.map((item) => ({
-      ...item,
-      tenantId,
-      productId: product._id,
-      productName: productData.name,
-    }));
-
-    await ProductItem.insertMany(productItemsData);
-
-    return product;
   }
 
   async getProducts(tenantId, query) {
@@ -90,14 +121,14 @@ class ProductService {
     }
 
     // Location Filter Logic
-    if (locationId && locationType) {
-      const inventories = await Inventory.find({
-        tenantId,
-        locationId,
-        locationType,
-      }).lean();
+    if (locationType || locationId) {
+      const invFilter = { tenantId };
+      if (locationType) invFilter.locationType = locationType;
+      if (locationId) invFilter.locationId = locationId;
 
-      const productItemIds = inventories.map((i) => i.productItemId);
+      const filterInventories = await Inventory.find(invFilter).lean();
+
+      const productItemIds = filterInventories.map((i) => i.productItemId);
 
       const productItems = await ProductItem.find({
         tenantId,
@@ -113,6 +144,64 @@ class ProductService {
       Product.find(filter).skip(skip).limit(limit).lean(),
       Product.countDocuments(filter),
     ]);
+
+    if (data.length > 0) {
+      const productIds = data.map((p) => p._id);
+      const items = await ProductItem.find({
+        tenantId,
+        productId: { $in: productIds },
+      }).lean();
+
+      if (items.length > 0) {
+        const itemIds = items.map((i) => i._id);
+
+        const invQuery = { tenantId, productItemId: { $in: itemIds } };
+        if (locationType) invQuery.locationType = locationType;
+        if (locationId) invQuery.locationId = locationId;
+
+        const inventories = await Inventory.find(invQuery).lean();
+
+        // Group inventories by productItemId
+        const inventoryMap = {};
+        inventories.forEach((inv) => {
+          const id = inv.productItemId.toString();
+          if (!inventoryMap[id]) inventoryMap[id] = [];
+          inventoryMap[id].push({
+            locationId: inv.locationId,
+            locationType: inv.locationType,
+            stock: inv.stock,
+          });
+        });
+
+        // Group items by productId
+        const itemMap = {};
+        items.forEach((item) => {
+          const pId = item.productId.toString();
+          if (!itemMap[pId]) itemMap[pId] = [];
+
+          item.stockDetails = inventoryMap[item._id.toString()] || [];
+          item.totalStock = item.stockDetails.reduce(
+            (sum, inv) => sum + inv.stock,
+            0,
+          );
+          itemMap[pId].push(item);
+        });
+
+        // Attach items to products
+        data.forEach((product) => {
+          product.items = itemMap[product._id.toString()] || [];
+          product.totalStock = product.items.reduce(
+            (sum, item) => sum + item.totalStock,
+            0,
+          );
+        });
+      } else {
+        data.forEach((product) => {
+          product.items = [];
+          product.totalStock = 0;
+        });
+      }
+    }
 
     return {
       data,
@@ -192,15 +281,37 @@ class ProductService {
       throw new Error(`SKU already exists: ${itemData.sku}`);
     }
 
-    const productItem = new ProductItem({
-      ...itemData,
-      tenantId,
-      productId,
-      productName: product.name,
-    });
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    await productItem.save();
-    return productItem;
+    try {
+      const productItem = new ProductItem({
+        ...itemData,
+        tenantId,
+        productId,
+        productName: product.name,
+      });
+
+      await productItem.save({ session });
+
+      if (itemData.initialStock && itemData.initialStock.length > 0) {
+        await InventoryService.initializeStock(
+          tenantId,
+          productItem._id,
+          itemData.initialStock,
+          session,
+        );
+      }
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return productItem;
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
   }
 
   async updateProductItem(tenantId, itemId, updateData) {

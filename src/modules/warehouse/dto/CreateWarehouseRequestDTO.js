@@ -2,6 +2,7 @@ class CreateWarehouseRequestDTO {
   constructor(data) {
     this.name = data.name;
     this.address = data.address;
+    this.attendanceTakingLocation = data.attendanceTakingLocation;
   }
 
   validate() {
@@ -13,6 +14,12 @@ class CreateWarehouseRequestDTO {
 
     if (this.address !== undefined && typeof this.address !== "string") {
       errors.push("Address must be a string");
+    }
+
+    if (this.attendanceTakingLocation !== undefined) {
+      if (typeof this.attendanceTakingLocation !== "object") {
+        errors.push("attendanceTakingLocation must be an object");
+      }
     }
 
     return {

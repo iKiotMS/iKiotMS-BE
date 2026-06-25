@@ -35,6 +35,7 @@ const {
  *                   latitude: { type: number }
  *                   longitude: { type: number }
  *                   allowedRadiusMeters: { type: number }
+ *                   maxAccuracyMeters: { type: number }
  *     responses:
  *       201:
  *         description: Branch created successfully
@@ -109,6 +110,7 @@ const {
  *                   latitude: { type: number }
  *                   longitude: { type: number }
  *                   allowedRadiusMeters: { type: number }
+ *                   maxAccuracyMeters: { type: number }
  *     responses:
  *       200:
  *         description: Branch updated
