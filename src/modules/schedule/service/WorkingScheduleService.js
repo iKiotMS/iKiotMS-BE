@@ -1,4 +1,5 @@
 const { STAFF_ROLES } = require("../../../constants/role");
+const Attendance = require("../../../models/Attendance");
 const ShiftTemplate = require("../../../models/ShiftTemplate");
 const User = require("../../../models/User");
 const WorkingSchedule = require("../../../models/WorkingSchedule");
@@ -161,6 +162,70 @@ class WorkingScheduleService {
     return { startAt, endAt };
   }
 
+  buildAttendanceSummary(attendance) {
+    if (!attendance) {
+      return {
+        status: "NOT_CHECKED_IN",
+        actualCheckinAt: null,
+        actualCheckoutAt: null,
+      };
+    }
+
+    return {
+      _id: attendance._id,
+      status: attendance.status,
+      actualCheckinAt: attendance.actualCheckinAt || null,
+      actualCheckoutAt: attendance.actualCheckoutAt || null,
+    };
+  }
+
+  buildAttendanceDetail(attendance) {
+    if (!attendance) {
+      return {
+        status: "NOT_CHECKED_IN",
+        actualCheckinAt: null,
+        actualCheckoutAt: null,
+      };
+    }
+
+    return {
+      _id: attendance._id,
+      status: attendance.status,
+      actualCheckinAt: attendance.actualCheckinAt || null,
+      actualCheckoutAt: attendance.actualCheckoutAt || null,
+      checkInLocation: attendance.checkInLocation || null,
+      checkOutLocation: attendance.checkOutLocation || null,
+      workedMinutes: attendance.workedMinutes,
+      overtimeMinute: attendance.overtimeMinute,
+      lateMinutes: attendance.lateMinutes,
+    };
+  }
+
+  async attachAttendanceSummaries(tenantId, schedules) {
+    const scheduleIds = schedules.map((schedule) => schedule._id);
+
+    const attendances = await Attendance.find({
+      tenantId,
+      scheduleId: { $in: scheduleIds },
+    })
+      .select("scheduleId status actualCheckinAt actualCheckoutAt")
+      .lean();
+
+    const attendanceByScheduleId = {};
+    attendances.forEach((attendance) => {
+      attendanceByScheduleId[String(attendance.scheduleId)] = attendance;
+    });
+
+    return schedules.map((schedule) => {
+      const attendance = attendanceByScheduleId[String(schedule._id)];
+
+      return {
+        ...schedule,
+        attendance: this.buildAttendanceSummary(attendance),
+      };
+    });
+  }
+
   //==================================================================================
   //===========================    Main Services    ==================================
   //==================================================================================
@@ -312,8 +377,13 @@ class WorkingScheduleService {
       .populate("shiftTemplateId")
       .sort({ workDate: 1, startAt: 1 })
       .skip(pagination.skip)
-      .limit(pagination.recordPerPage);
+      .limit(pagination.recordPerPage)
+      .lean();
     const total = await WorkingSchedule.countDocuments(filter);
+    const dataWithAttendance = await this.attachAttendanceSummaries(
+      tenantId,
+      data,
+    );
 
     // Data mẫu trả về:
     // {
@@ -321,7 +391,7 @@ class WorkingScheduleService {
     //   pagination: { total: 20, page: 1, recordPerPage: 10, totalPages: 2 }
     // }
     return {
-      data,
+      data: dataWithAttendance,
       pagination: {
         total,
         page: pagination.page,
@@ -339,7 +409,8 @@ class WorkingScheduleService {
       status: { $ne: "DELETED" },
     })
       .populate("userId", "phoneNumber profile role")
-      .populate("shiftTemplateId");
+      .populate("shiftTemplateId")
+      .lean();
 
     if (!schedule) {
       const error = new Error("Không tìm thấy lịch làm việc");
@@ -354,7 +425,15 @@ class WorkingScheduleService {
     //   shiftTemplateId: { name: "Ca hành chính", startTime: "08:00", endTime: "17:00" },
     //   status: "SCHEDULED"
     // }
-    return schedule;
+    const attendance = await Attendance.findOne({
+      tenantId,
+      scheduleId: schedule._id,
+    }).lean();
+
+    return {
+      ...schedule,
+      attendance: this.buildAttendanceDetail(attendance),
+    };
   }
 
   // Cập nhật lịch làm việc; nếu đổi ngày hoặc ShiftTemplate thì tính lại startAt/endAt.
