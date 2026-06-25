@@ -116,7 +116,7 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *                           type: object
  *                           properties:
  *                             sku: { type: string }
- *                             totalStock: { type: number }
+ *                             stock: { type: number, description: "Total stock of this specific variant across allowed locations" }
  *                             stockDetails:
  *                               type: array
  *                               items:
