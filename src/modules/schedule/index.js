@@ -148,7 +148,8 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  * /working-schedules:
  *   get:
  *     tags: [Schedule]
- *     summary: Get working schedules
+ *     summary: Get working schedules with attendance summary
+ *     description: Returns working schedules with a lightweight attendance field for schedule-first check-in screens. If no attendance exists, attendance.status is NOT_CHECKED_IN.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -173,12 +174,13 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *           enum: [SCHEDULED, COMPLETED, CANCELLED]
  *     responses:
  *       200:
- *         description: Working schedule list
+ *         description: Working schedule list with attendance summary
  *
  * /working-schedules/{scheduleId}:
  *   get:
  *     tags: [Schedule]
- *     summary: Get working schedule by id
+ *     summary: Get working schedule by id with attendance detail
+ *     description: Returns one working schedule with its attendance detail when available. If no attendance exists, attendance.status is NOT_CHECKED_IN.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -189,7 +191,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *           type: string
  *     responses:
  *       200:
- *         description: Working schedule detail
+ *         description: Working schedule detail with attendance detail
  *   patch:
  *     tags: [Schedule]
  *     summary: Update working schedule
