@@ -1,10 +1,11 @@
-class AttendanceDTO {
+class CheckinDTO {
   constructor(tenantId, userId, data = {}) {
     data = data || {};
 
     this.tenantId = tenantId;
     this.userId = userId;
     this.scheduleId = data.scheduleId;
+    this.actualCheckinAt = new Date(data.actualCheckinAt);
     this.checkInLocation = {
       latitude: data.latitude,
       longitude: data.longitude,
@@ -52,4 +53,4 @@ class AttendanceDTO {
   }
 }
 
-module.exports = { AttendanceDTO };
+module.exports = { CheckinDTO };
