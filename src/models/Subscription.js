@@ -41,7 +41,6 @@ const subscriptionSchema = new mongoose.Schema(
     currentQuotaSnapshot: {
       maxBranches: Number,
       maxUsers: Number,
-      maxWarehouses: Number,
       maxProducts: Number,
     },
     historyLogs: [

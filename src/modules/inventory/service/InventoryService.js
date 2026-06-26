@@ -52,6 +52,20 @@ class InventoryService {
       },
     };
   }
+
+  async initializeStock(tenantId, productItemId, initialStockArray, session) {
+    if (!initialStockArray || initialStockArray.length === 0) return;
+
+    const inventoryDocs = initialStockArray.map((item) => ({
+      tenantId,
+      locationId: item.locationId,
+      locationType: item.locationType,
+      productItemId: productItemId,
+      stock: item.stock || 0,
+    }));
+
+    await Inventory.insertMany(inventoryDocs, { session });
+  }
 }
 
 module.exports = new InventoryService();

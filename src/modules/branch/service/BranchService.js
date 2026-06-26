@@ -2,13 +2,31 @@ const Branch = require("../../../models/Branch");
 const { BRANCH_STATUS } = require("../../../constants/branchConstants");
 
 class BranchService {
-  async createBranch(tenantId, branchData) {
+  async createBranch(tenantId, branchData, subscription) {
+    // Check branch quota
+    if (subscription) {
+      const maxBranches = subscription.currentQuotaSnapshot.maxBranches;
+      if (maxBranches > 0) {
+        // -1 means unlimited
+        const activeBranchCount = await Branch.countDocuments({
+          tenantId,
+          status: { $ne: BRANCH_STATUS.DELETED },
+        });
+        if (activeBranchCount >= maxBranches) {
+          throw new Error(
+            `Branch limit reached. Your plan allows ${maxBranches} branches. Current: ${activeBranchCount}`,
+          );
+        }
+      }
+    }
+
     const branch = new Branch({
       tenantId,
       name: branchData.name,
       phoneNumber: branchData.phoneNumber,
       address: branchData.address,
       email: branchData.email,
+      attendanceTakingLocation: branchData.attendanceTakingLocation,
     });
 
     await branch.save();

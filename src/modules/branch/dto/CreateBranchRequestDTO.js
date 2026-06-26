@@ -4,12 +4,17 @@ class CreateBranchRequestDTO {
     this.phoneNumber = data.phoneNumber;
     this.address = data.address;
     this.email = data.email;
+    this.attendanceTakingLocation = data.attendanceTakingLocation;
   }
 
   validate() {
     const errors = [];
 
-    if (!this.name || typeof this.name !== "string" || this.name.trim() === "") {
+    if (
+      !this.name ||
+      typeof this.name !== "string" ||
+      this.name.trim() === ""
+    ) {
       errors.push("Branch name is required and must be a non-empty string");
     }
 
@@ -24,13 +29,22 @@ class CreateBranchRequestDTO {
     }
 
     if (this.email !== undefined) {
-      if (typeof this.email !== "string" || !/^\S+@\S+\.\S+$/.test(this.email)) {
+      if (
+        typeof this.email !== "string" ||
+        !/^\S+@\S+\.\S+$/.test(this.email)
+      ) {
         errors.push("Email must be a valid email string");
       }
     }
 
     if (this.address !== undefined && typeof this.address !== "string") {
       errors.push("Address must be a string");
+    }
+
+    if (this.attendanceTakingLocation !== undefined) {
+      if (typeof this.attendanceTakingLocation !== "object") {
+        errors.push("attendanceTakingLocation must be an object");
+      }
     }
 
     return {

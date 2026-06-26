@@ -53,7 +53,8 @@
     "inventory": ["read", "update", "manage"],
     "stock_movement": ["create", "read", "update"],
     "reports": ["read"],
-    "attendances": ["read"]
+    "attendances": ["read"],
+    "schedules": ["read"]
   },
   "STAFF": {
     "products": ["read"],

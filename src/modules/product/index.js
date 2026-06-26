@@ -1,5 +1,8 @@
 const ProductController = require("./controller/ProductController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
+const {
+  requireActiveSubscription,
+} = require("../../middlewares/subscriptionMiddleware");
 
 /**
  * @openapi
@@ -44,6 +47,14 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *                     costPrice: { type: number }
  *                     VAT: { type: number }
  *                     warrantyPeriod: { type: string }
+ *                     initialStock:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           locationId: { type: string }
+ *                           locationType: { type: string, enum: [branch, warehouse] }
+ *                           stock: { type: number }
  *                     images:
  *                       type: array
  *                       items:
@@ -85,10 +96,40 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *       - in: query
  *         name: locationType
  *         schema: { type: string, enum: [branch, warehouse] }
- *         description: Required if locationId is provided
+ *         description: Filter by location type (e.g. all branches, or all warehouses)
  *     responses:
  *       200:
- *         description: List of products
+ *         description: List of products with variants and stock
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       name: { type: string }
+ *                       totalStock: { type: number, description: "Total stock across all items and locations" }
+ *                       items:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             sku: { type: string }
+ *                             stock: { type: number, description: "Total stock of this specific variant across allowed locations" }
+ *                             stockDetails:
+ *                               type: array
+ *                               items:
+ *                                 type: object
+ *                                 properties:
+ *                                   locationId: { type: string }
+ *                                   locationType: { type: string }
+ *                                   stock: { type: number }
+ *                 pagination:
+ *                   type: object
  * /products/{id}:
  *   get:
  *     tags: [Products]
@@ -180,6 +221,14 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *               costPrice: { type: number }
  *               VAT: { type: number }
  *               warrantyPeriod: { type: string }
+ *               initialStock:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     locationId: { type: string }
+ *                     locationType: { type: string, enum: [branch, warehouse] }
+ *                     stock: { type: number }
  *               images:
  *                 type: array
  *                 items:
@@ -238,16 +287,50 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Product item not found
  */
 const registerProductModule = (app) => {
-  app.post("/products", verifyJwt, ProductController.create.bind(ProductController));
-  app.get("/products", verifyJwt, ProductController.getList.bind(ProductController));
-  app.get("/products/:id", verifyJwt, ProductController.getDetail.bind(ProductController));
-  app.patch("/products/:id", verifyJwt, ProductController.update.bind(ProductController));
-  app.delete("/products/:id/delete", verifyJwt, ProductController.softDelete.bind(ProductController));
+  app.post(
+    "/products",
+    verifyJwt,
+    requireActiveSubscription,
+    ProductController.create.bind(ProductController),
+  );
+  app.get(
+    "/products",
+    verifyJwt,
+    ProductController.getList.bind(ProductController),
+  );
+  app.get(
+    "/products/:id",
+    verifyJwt,
+    ProductController.getDetail.bind(ProductController),
+  );
+  app.patch(
+    "/products/:id",
+    verifyJwt,
+    ProductController.update.bind(ProductController),
+  );
+  app.delete(
+    "/products/:id/delete",
+    verifyJwt,
+    ProductController.softDelete.bind(ProductController),
+  );
 
   // Product Item (Variant) Routes
-  app.post("/products/:productId/items", verifyJwt, ProductController.createItem.bind(ProductController));
-  app.patch("/products/items/:itemId", verifyJwt, ProductController.updateItem.bind(ProductController));
-  app.delete("/products/items/:itemId/delete", verifyJwt, ProductController.deleteItem.bind(ProductController));
+  app.post(
+    "/products/:productId/items",
+    verifyJwt,
+    requireActiveSubscription,
+    ProductController.createItem.bind(ProductController),
+  );
+  app.patch(
+    "/products/items/:itemId",
+    verifyJwt,
+    ProductController.updateItem.bind(ProductController),
+  );
+  app.delete(
+    "/products/items/:itemId/delete",
+    verifyJwt,
+    ProductController.deleteItem.bind(ProductController),
+  );
 
   console.log("✓ Product module registered");
 };

@@ -2,13 +2,7 @@ const AuthService = require("../service/AuthService");
 const LoginRequestDTO = require("../dto/LoginRequestDTO");
 const LoginResponseDTO = require("../dto/LoginResponseDTO");
 const RegisterRequestDTO = require("../dto/RegisterRequestDTO");
-
-const { User } = require("../../../models");
-const { Tenant } = require("../../../models");
-const RefreshToken = require("../../../models/RefreshToken");
-const {
-  SubscriptionService,
-} = require("../../subscription/service/SubscriptionService");
+const UserProfileResponseDTO = require("../dto/UserProfileResponseDTO");
 
 class AuthController {
   async login(req, res) {
@@ -46,8 +40,6 @@ class AuthController {
 
   async register(req, res) {
     try {
-      console.log("A");
-
       const {
         email,
         password,
@@ -59,8 +51,6 @@ class AuthController {
         tenantMainAddress,
         tenantTaxNumber,
       } = req.body;
-
-      console.log("B");
 
       const registerDTO = new RegisterRequestDTO(
         email,
@@ -74,22 +64,14 @@ class AuthController {
         tenantTaxNumber,
       );
 
-      console.log("C");
+      registerDTO.validate();
 
-      const validation = registerDTO.validate();
-
-      console.log("D");
-
-      const { user, tenant } = await AuthService.register(registerDTO);
-
-      console.log("E");
+      await AuthService.register(registerDTO);
 
       res.status(201).json({
         success: true,
       });
     } catch (error) {
-      console.error(error);
-      console.error(error.stack);
       return res.status(400).json({
         success: false,
         message: error.message || "Registration failed",
@@ -148,6 +130,40 @@ class AuthController {
       res.status(500).json({
         success: false,
         message: error.message || "Logout failed",
+      });
+    }
+  }
+
+  async getProfile(req, res) {
+    try {
+      const userId = req.user?.userId;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized",
+        });
+      }
+
+      const { user, subscription } = await AuthService.getUserProfile(userId);
+
+      const response = new UserProfileResponseDTO(user, subscription);
+
+      res.status(200).json({
+        success: true,
+        data: response,
+      });
+    } catch (error) {
+      if (error.message === "User not found") {
+        return res.status(404).json({
+          success: false,
+          message: error.message,
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch profile",
       });
     }
   }

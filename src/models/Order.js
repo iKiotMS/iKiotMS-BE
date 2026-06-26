@@ -29,8 +29,16 @@ const orderSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ["CASH", "BANK_TRANSFER", "MOMO", "VNPAY"],
+      enum: ["CASH", "BANK_TRANSFER", "MOMO", "VNPAY", "SEPAY"],
       required: [true, "Payment method is required"],
+    },
+    paymentReference: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    sepayTransactionId: {
+      type: Number,
     },
     grandTotal: {
       type: Number,
