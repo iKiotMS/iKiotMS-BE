@@ -361,7 +361,7 @@ class StaffService extends BaseService {
     staffIdToExclude,
   }) {
     if (phoneNumber) {
-      const phoneFilter = { tenantId, phoneNumber };
+      const phoneFilter = {phoneNumber};
 
       if (staffIdToExclude) {
         phoneFilter._id = { $ne: staffIdToExclude };

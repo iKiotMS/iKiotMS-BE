@@ -59,13 +59,6 @@ const {
  *           type: string
  *           format: date
  *           example: 2026-06-12
- *         baseSalary:
- *           type: number
- *           example: 8000000
- *         salaryType:
- *           type: string
- *           enum: [FULL_TIME, PART_TIME]
- *           example: FULL_TIME
  *         warehouseId:
  *           type: string
  *           example: null
@@ -92,13 +85,6 @@ const {
  *               type: string
  *               format: date
  *               example: 2026-06-12
- *             baseSalary:
- *               type: number
- *               example: 9000000
- *             salaryType:
- *               type: string
- *               enum: [FULL_TIME, PART_TIME]
- *               example: FULL_TIME
  *             warehouseId:
  *               type: string
  *               example: null
@@ -167,12 +153,6 @@ const {
  *         hireDate:
  *           type: string
  *           format: date-time
- *         baseSalary:
- *           type: number
- *           example: 8000000
- *         salaryType:
- *           type: string
- *           example: FULL_TIME
  *         branchId:
  *           oneOf:
  *             - type: string

@@ -6,8 +6,6 @@ const createStaffDTO = (tenantId, data) => {
     role: data.role,
     status: "INACTIVE",
     hireDate: data.hireDate,
-    baseSalary: data.baseSalary,
-    salaryType: data.salaryType,
     warehouseId: data.warehouseId,
     branchId: data.branchId,
     profile: {
@@ -30,8 +28,6 @@ const updateStaffDTO = (data) => {
     "email",
     "role",
     "hireDate",
-    "baseSalary",
-    "salaryType",
     "warehouseId",
     "branchId",
     "accountNote",
