@@ -29,65 +29,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Validation error
  *       401:
  *         description: Unauthorized
- *
- * /leave-requests/me:
- *   get:
- *     summary: Get personal leave request history
- *     tags: [Leave Requests]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: page
- *         in: query
- *         schema: { type: integer, default: 1 }
- *       - name: recordPerPage
- *         in: query
- *         schema: { type: integer, default: 10 }
- *       - name: status
- *         in: query
- *         schema: { type: string, enum: [PENDING, APPROVED, REJECTED, CANCELLED, EXPIRED, DELETED] }
- *       - name: leaveType
- *         in: query
- *         schema: { type: string, enum: [ANNUAL, UNPAID, SICK, OTHER] }
- *       - name: keyword
- *         in: query
- *         schema: { type: string }
- *       - name: startDate
- *         in: query
- *         schema: { type: string, format: date-time }
- *       - name: endDate
- *         in: query
- *         schema: { type: string, format: date-time }
- *     responses:
- *       200:
- *         description: Personal leave request history retrieved successfully
- *       401:
- *         description: Unauthorized
- *
- * /leave-requests/{id}/cancel:
- *   post:
- *     summary: Cancel a personal leave request before the leave date arrives
- *     tags: [Leave Requests]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         schema: { type: string }
- *     responses:
- *       200:
- *         description: Leave request cancelled successfully
- *       400:
- *         description: Leave request cannot be cancelled
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden
- *       404:
- *         description: Leave request not found
- *
- * /leave-requests/all:
  *   get:
  *     summary: Get all leave requests
  *     description: Get leave requests using query filters.
@@ -154,6 +95,63 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Unauthorized
  *       403:
  *         description: Forbidden
+ *
+ * /leave-requests/me:
+ *   get:
+ *     summary: Get personal leave request history
+ *     tags: [Leave Requests]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: page
+ *         in: query
+ *         schema: { type: integer, default: 1 }
+ *       - name: recordPerPage
+ *         in: query
+ *         schema: { type: integer, default: 10 }
+ *       - name: status
+ *         in: query
+ *         schema: { type: string, enum: [PENDING, APPROVED, REJECTED, CANCELLED, EXPIRED, DELETED] }
+ *       - name: leaveType
+ *         in: query
+ *         schema: { type: string, enum: [ANNUAL, UNPAID, SICK, OTHER] }
+ *       - name: keyword
+ *         in: query
+ *         schema: { type: string }
+ *       - name: startDate
+ *         in: query
+ *         schema: { type: string, format: date-time }
+ *       - name: endDate
+ *         in: query
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: Personal leave request history retrieved successfully
+ *       401:
+ *         description: Unauthorized
+ *
+ * /leave-requests/{id}/cancel:
+ *   post:
+ *     summary: Cancel a personal leave request before the leave date arrives
+ *     tags: [Leave Requests]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Leave request cancelled successfully
+ *       400:
+ *         description: Leave request cannot be cancelled
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Leave request not found
  *
  * /leave-requests/branches/{branchId}:
  *   get:
@@ -350,7 +348,7 @@ function registerLeaveRequestModule(app) {
     LeaveRequestController.cancel.bind(LeaveRequestController),
   );
   app.get(
-    "/leave-requests/all",
+    "/leave-requests",
     verifyJwt,
     authorize("leaveRequests", "read_all"),
     LeaveRequestController.getAll.bind(LeaveRequestController),
