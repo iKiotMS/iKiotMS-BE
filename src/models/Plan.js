@@ -20,28 +20,21 @@ const planSchema = new mongoose.Schema(
     },
     billingCycle: {
       type: String,
-      enum: ["MONTHLY", "YEARLY"],
-      required: [true, "Billing cycle is required"],
+      enum: ["MONTHLY", "YEARLY", "NONE"],
+      default: "NONE",
     },
+    // -1 = unlimited
     maxBranches: {
       type: Number,
       required: [true, "Max branches is required"],
-      min: [1, "Max branches must be at least 1"],
     },
     maxUsers: {
       type: Number,
       required: [true, "Max users is required"],
-      min: [1, "Max users must be at least 1"],
-    },
-    maxWarehouses: {
-      type: Number,
-      required: [true, "Max warehouses is required"],
-      min: [1, "Max warehouses must be at least 1"],
     },
     maxProducts: {
       type: Number,
       required: [true, "Max products is required"],
-      min: [1, "Max products must be at least 1"],
     },
     trialDays: {
       type: Number,
@@ -49,8 +42,8 @@ const planSchema = new mongoose.Schema(
       min: [0, "Trial days cannot be negative"],
     },
     features: {
-      type: mongoose.Schema.Types.Mixed,
-      default: {},
+      type: [String],
+      default: [],
     },
     isActive: {
       type: Boolean,

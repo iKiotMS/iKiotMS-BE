@@ -1,3 +1,4 @@
+const http = require("http");
 const express = require("express");
 const path = require("path");
 const cors = require("cors");
@@ -5,6 +6,7 @@ const { registerModules } = require("./modules");
 const { getConfig } = require("./config");
 const connectDB = require("./config/connectDB");
 const { setupSwagger } = require("./config/setupSwagger");
+const { initSocket } = require("./services/socketService");
 
 require("dotenv").config();
 
@@ -41,7 +43,10 @@ const startServer = async () => {
 
   connectDB();
 
-  app.listen(config.port, () => {
+  const httpServer = http.createServer(app);
+  initSocket(httpServer);
+
+  httpServer.listen(config.port, () => {
     console.log(`Server listening on port ${config.port} (${config.nodeEnv})`);
   });
 };

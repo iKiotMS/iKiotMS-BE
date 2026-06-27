@@ -124,6 +124,78 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Logout successful
  *       401:
  *         description: Unauthorized
+ * /auth/me:
+ *   get:
+ *     tags:
+ *       - Auth
+ *     summary: Get current user profile
+ *     description: Retrieve the profile of the authenticated user. If user is TENANT_OWNER, includes subscription information.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     phoneNumber:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     role:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     tenantId:
+ *                       type: string
+ *                     branchId:
+ *                       type: string
+ *                     warehouseId:
+ *                       type: string
+ *                     profile:
+ *                       type: object
+ *                       properties:
+ *                         firstName:
+ *                           type: string
+ *                         lastName:
+ *                           type: string
+ *                         avatarUrl:
+ *                           type: string
+ *                         dob:
+ *                           type: string
+ *                           format: date-time
+ *                     subscription:
+ *                       type: object
+ *                       description: Only present if user is TENANT_OWNER
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                         planName:
+ *                           type: string
+ *                         status:
+ *                           type: string
+ *                         startDate:
+ *                           type: string
+ *                           format: date-time
+ *                         endDate:
+ *                           type: string
+ *                           format: date-time
+ *                         autoRenew:
+ *                           type: boolean
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
  */
 const registerAuthModule = (app) => {
   const authRoutes = [
@@ -149,6 +221,12 @@ const registerAuthModule = (app) => {
       method: "post",
       path: "/auth/logout",
       handler: AuthController.logout.bind(AuthController),
+      protected: true,
+    },
+    {
+      method: "get",
+      path: "/auth/me",
+      handler: AuthController.getProfile.bind(AuthController),
       protected: true,
     },
   ];

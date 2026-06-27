@@ -1,5 +1,7 @@
 const jwt = require("jsonwebtoken");
 const { User, RefreshToken, Tenant } = require("../../../models");
+const Subscription = require("../../../models/Subscription");
+const Plan = require("../../../models/Plan");
 
 class AuthService {
   async login(phoneNumber, password, userAgent) {
@@ -179,6 +181,25 @@ class AuthService {
     await tenant.save();
 
     return { user, tenant };
+  }
+
+  async getUserProfile(userId) {
+    const user = await User.findById(userId).lean();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    let subscription = null;
+
+    // If user is TENANT_OWNER, fetch subscription with plan details
+    if (user.role === "TENANT_OWNER") {
+      subscription = await Subscription.findOne({
+        tenantId: user.tenantId,
+      }).populate("planId", "planName planCode price features").lean();
+    }
+
+    return { user, subscription };
   }
 }
 
