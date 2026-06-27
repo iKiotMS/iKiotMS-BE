@@ -18,6 +18,7 @@ const leaveRequestSchema = new mongoose.Schema(
     },
     leaveType: {
       type: String,
+      enum:["ANNUAL", "UNPAID","SICK","OTHER"],
       trim: true,
     },
     startDate: {
@@ -28,12 +29,18 @@ const leaveRequestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
+      enum:["PENDING", "APPROVED","REJECTED","CANCELLED","EXPIRED","DELETED"],
       trim: true,
     },
     reason: {
       type: String,
       trim: true,
     },
+    reviewNote: {
+      type: String,
+      trim: true,
+    },
+    
   },
   { timestamps: true },
 );

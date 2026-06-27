@@ -30,7 +30,7 @@ const validateRoleHierarchy = (assignerRole, assigneeRole) => {
       "CUSTOMER",
     ],
     BRANCH_MANAGER: ["STAFF"],
-    WAREHOUSE_MANAGER: ["STAFF"],
+    WAREHOUSE_MANAGER: [],
     STAFF: [],
     CUSTOMER: [],
   };

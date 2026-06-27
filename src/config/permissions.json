@@ -13,7 +13,8 @@
     "subscriptions": ["read", "update", "manage"],
     "promotions": ["create", "read", "update", "delete"],
     "notifications": ["create", "read", "update", "delete"],
-    "reports": ["read", "export"]
+    "reports": ["read", "export"],
+    "leaveRequests": ["create", "read", "update", "delete"]
   },
   "TENANT_OWNER": {
     "users": ["create", "read", "update", "delete", "assign_role"],
@@ -30,7 +31,8 @@
     "promotions": ["create", "read", "update", "delete"],
     "reports": ["read", "export"],
     "paysheets": ["create", "read", "update", "delete"],
-    "schedules": ["create", "read", "update", "delete"]
+    "schedules": ["create", "read", "update", "delete"],
+    "leaveRequests": ["read", "update", "delete", "read_all","approve","reject", "create_emergency","readBR","readWH"]
   },
   "BRANCH_MANAGER": {
     "users": ["read", "create_staff"],
@@ -42,7 +44,8 @@
     "promotions": ["read"],
     "reports": ["read"],
     "paysheets": ["create", "read", "update", "delete"],
-    "schedules": ["create", "read", "update", "delete"]
+    "schedules": ["create", "read", "update", "delete"],
+    "leaveRequests": ["create", "readBR", "update", "read_mine", "cancel","approve","reject", "create_emergency"]
   },
   "WAREHOUSE_MANAGER": {
     "products": ["read"],
@@ -50,13 +53,15 @@
     "inventory": ["read", "update", "manage"],
     "stock_movement": ["create", "read", "update"],
     "reports": ["read"],
-    "schedules": ["read"]
+    "schedules": ["read"],
+    "leaveRequests": ["create", "readWH", "update", "read_mine", "cancel"]
   },
   "STAFF": {
     "products": ["read"],
     "orders": ["create", "read"],
     "inventory": ["read"],
-    "branches": ["read"]
+    "branches": ["read"],
+    "leaveRequests": ["create", "read_mine","cancel"]
   },
   "CUSTOMER": {
     "profile": ["read"]
