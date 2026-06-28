@@ -50,6 +50,7 @@ class SepayService {
 
   // Find tenant by their stored SePay webhook key (select: false field — must +select)
   async findTenantByWebhookKey(apiKey) {
+    if (!apiKey) return null;
     const { Tenant } = require('../models');
     return Tenant.findOne({ 'banking.sepayWebhookApiKey': apiKey })
       .select('+banking.sepayWebhookApiKey')

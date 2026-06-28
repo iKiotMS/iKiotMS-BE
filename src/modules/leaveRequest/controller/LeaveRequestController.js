@@ -225,17 +225,10 @@ class LeaveRequestController {
     try {
       const filter = req.query || {};
 
-      if (!mongoose.Types.ObjectId.isValid(req.params.branchId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid branchId",
-        });
-      }
-
-      if (!this.canAccessBranch(req, req.params.branchId)) {
+      if (!req.user.branchId) {
         return res.status(403).json({
           success: false,
-          message: "You can only view leave requests in your branch",
+          message: "User is not assigned to a branch",
         });
       }
 
@@ -244,7 +237,7 @@ class LeaveRequestController {
         userId: req.user.userId,
         filter: {
           ...filter,
-          branchId: req.params.branchId,
+          branchId: req.user.branchId,
         },
         page: filter.page,
         recordPerPage: filter.recordPerPage,
@@ -265,17 +258,10 @@ class LeaveRequestController {
     try {
       const filter = req.query || {};
 
-      if (!mongoose.Types.ObjectId.isValid(req.params.warehouseId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid warehouseId",
-        });
-      }
-
-      if (!this.canAccessWarehouse(req, req.params.warehouseId)) {
+      if (!req.user.warehouseId) {
         return res.status(403).json({
           success: false,
-          message: "You can only view leave requests in your warehouse",
+          message: "User is not assigned to a warehouse",
         });
       }
 
@@ -284,7 +270,7 @@ class LeaveRequestController {
         userId: req.user.userId,
         filter: {
           ...filter,
-          warehouseId: req.params.warehouseId,
+          warehouseId: req.user.warehouseId,
         },
         page: filter.page,
         recordPerPage: filter.recordPerPage,
@@ -298,6 +284,24 @@ class LeaveRequestController {
       });
     } catch (error) {
       return this.handleError(res, error, "Failed to get leave requests by warehouse");
+    }
+  }
+
+  async getDetail(req, res) {
+    try {
+      const leaveRequest = await LeaveRequestService.getLeaveRequestById({
+        tenantId: req.user.tenantId,
+        user: req.user,
+        leaveRequestId: req.params.id,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Leave request retrieved successfully",
+        data: leaveRequest,
+      });
+    } catch (error) {
+      return this.handleError(res, error, "Failed to get leave request");
     }
   }
 

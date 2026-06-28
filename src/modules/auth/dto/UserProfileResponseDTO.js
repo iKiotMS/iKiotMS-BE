@@ -18,6 +18,7 @@ class UserProfileResponseDTO {
       this.subscription = {
         id: subscription._id,
         planName: subscription.planId?.planName,
+        planCode: subscription.planId?.planCode,
         status: subscription.status,
         startDate: subscription.startDate,
         endDate: subscription.endDate,

@@ -130,6 +130,39 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       401:
  *         description: Unauthorized
  *
+ * /leave-requests/{id}:
+ *   get:
+ *     summary: Get leave request detail
+ *     description: Returns one leave request in the authenticated user's tenant. Users can read their own request; tenant owners and super admins can read tenant requests; branch and warehouse managers can only read requests for users in their assigned workplace.
+ *     tags: [Leave Requests]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Leave request retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Leave request retrieved successfully }
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Invalid leave request id
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Leave request not found
+ *
  * /leave-requests/{id}/cancel:
  *   post:
  *     summary: Cancel a personal leave request before the leave date arrives
@@ -153,17 +186,14 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       404:
  *         description: Leave request not found
  *
- * /leave-requests/branches/{branchId}:
+ * /leave-requests/branches:
  *   get:
- *     summary: Get leave requests by branch
+ *     summary: Get leave requests for the authenticated user's branch
+ *     description: Uses the branchId from the authenticated user. No branchId path parameter is required.
  *     tags: [Leave Requests]
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - name: branchId
- *         in: path
- *         required: true
- *         schema: { type: string }
  *       - name: page
  *         in: query
  *         schema: { type: integer, default: 1 }
@@ -193,17 +223,14 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       403:
  *         description: Forbidden
  *
- * /leave-requests/warehouses/{warehouseId}:
+ * /leave-requests/warehouses:
  *   get:
- *     summary: Get leave requests by warehouse
+ *     summary: Get leave requests for the authenticated user's warehouse
+ *     description: Uses the warehouseId from the authenticated user. No warehouseId path parameter is required.
  *     tags: [Leave Requests]
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - name: warehouseId
- *         in: path
- *         required: true
- *         schema: { type: string }
  *       - name: page
  *         in: query
  *         schema: { type: integer, default: 1 }
@@ -354,17 +381,23 @@ function registerLeaveRequestModule(app) {
     LeaveRequestController.getAll.bind(LeaveRequestController),
   );
   app.get(
-    "/leave-requests/branches/:branchId",
+    "/leave-requests/branches",
     verifyJwt,
     authorize("leaveRequests", "readBR"),
     LeaveRequestController.getByBranch.bind(LeaveRequestController),
   );
 
   app.get(
-    "/leave-requests/warehouses/:warehouseId",
+    "/leave-requests/warehouses",
     verifyJwt,
     authorize("leaveRequests", "readWH"),
     LeaveRequestController.getByWarehouse.bind(LeaveRequestController),
+  );
+
+  app.get(
+    "/leave-requests/:id",
+    verifyJwt,
+    LeaveRequestController.getDetail.bind(LeaveRequestController),
   );
 
   app.post(

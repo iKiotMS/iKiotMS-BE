@@ -98,7 +98,7 @@ class SubscriptionService {
   async createSubscriptionForExistingTenant(
     tenantId,
     userId,
-    planCode = "FREE_TRIAL",
+    planCode = "TRIAL",
   ) {
     try {
       // 1. Find the tenant
@@ -325,6 +325,13 @@ class SubscriptionService {
     await invoice.save();
 
     return subscription;
+  }
+
+  async listPlans() {
+    return await Plan.find({ isActive: true })
+      .select("-__v")
+      .sort({ price: 1 })
+      .lean();
   }
 
   async upgradePlan(tenantId, userId, newPlanCode) {

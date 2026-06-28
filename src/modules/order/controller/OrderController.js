@@ -77,7 +77,10 @@ class OrderController {
         return res.status(200).json({ success: true });
       }
 
-      const tenant = await sepayService.findTenantByWebhookKey(payload.apiKey);
+      const authHeader = req.headers["authorization"] || req.headers["Authorization"] || "";
+      const apiKey = authHeader.startsWith("Apikey ") ? authHeader.slice(7).trim() : null;
+
+      const tenant = await sepayService.findTenantByWebhookKey(apiKey);
       if (!tenant) {
         return res.status(200).json({ success: false, message: "Unknown API key" });
       }
