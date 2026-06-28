@@ -196,10 +196,66 @@ class AuthService {
     if (user.role === "TENANT_OWNER") {
       subscription = await Subscription.findOne({
         tenantId: user.tenantId,
-      }).populate("planId", "planName planCode price features").lean();
+      })
+        .populate("planId", "planName planCode price features")
+        .lean();
     }
 
     return { user, subscription };
+  }
+
+  async updateProfile(userId, tenantId, data) {
+    const user = await User.findOne({ _id: userId, tenantId });
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const flatUpdate = {};
+
+    // 1. Handle root level fields (like email)
+    if (user.role === "TENANT_OWNER" && data.email !== undefined) {
+      if (data.email !== user.email) {
+        const existingEmail = await User.findOne({
+          tenantId,
+          email: data.email.toLowerCase().trim(),
+          _id: { $ne: userId },
+        });
+        if (existingEmail) {
+          throw new Error("Email already exists");
+        }
+      }
+      flatUpdate.email = data.email;
+    }
+
+    // 2. Handle nested profile fields based on role permissions
+    const tenantOnlyProfileFields = [
+      "firstName",
+      "lastName",
+      "identificationId",
+      "taxNumber",
+      "address",
+      "gender",
+      "dob",
+    ];
+    const publicProfileFields = ["avatarUrl"];
+
+    const allowedProfileFields = user.role === "TENANT_OWNER"
+      ? [...tenantOnlyProfileFields, ...publicProfileFields]
+      : publicProfileFields;
+
+    allowedProfileFields.forEach((field) => {
+      if (data.profile?.[field] !== undefined) {
+        flatUpdate[`profile.${field}`] = data.profile[field];
+      }
+    });
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: flatUpdate },
+      { new: true, runValidators: true },
+    ).select("-password");
+
+    return updatedUser;
   }
 }
 

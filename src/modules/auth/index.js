@@ -229,6 +229,12 @@ const registerAuthModule = (app) => {
       handler: AuthController.getProfile.bind(AuthController),
       protected: true,
     },
+    {
+      method: "patch",
+      path: "/auth/me",
+      handler: AuthController.updateProfile.bind(AuthController),
+      protected: true,
+    },
   ];
 
   authRoutes.forEach((route) => {
@@ -240,6 +246,8 @@ const registerAuthModule = (app) => {
       app.post(route.path, ...handlers);
     } else if (route.method === "get") {
       app.get(route.path, ...handlers);
+    } else if (route.method === "patch") {
+      app.patch(route.path, ...handlers);
     }
   });
 
