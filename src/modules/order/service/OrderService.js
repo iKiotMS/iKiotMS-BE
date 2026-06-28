@@ -9,6 +9,7 @@ const {
   Tenant,
 } = require("../../../models");
 const sepayService = require("../../../services/sepayService");
+const { emitToRoom } = require("../../../services/socketService");
 
 const INSTANT_COMPLETE_METHODS = ["CASH", "BANK_TRANSFER", "MOMO", "VNPAY"];
 
@@ -294,6 +295,13 @@ class OrderService {
       );
 
       await session.commitTransaction();
+
+      emitToRoom(`order:${order._id}`, "order:paid", {
+        orderId: order._id,
+        status: order.status,
+        paidAmount: transferAmount,
+      });
+
       return order;
     } catch (err) {
       await session.abortTransaction();
