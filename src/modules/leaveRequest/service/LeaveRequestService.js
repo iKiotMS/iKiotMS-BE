@@ -146,7 +146,10 @@ class LeaveRequestService extends BaseService {
     if (
       user.role === "BRANCH_MANAGER" &&
       !targetUser?.warehouseId &&
-      this.sameId(targetUser?.branchId?._id || targetUser?.branchId, user.branchId)
+      this.sameId(
+        targetUser?.branchId?._id || targetUser?.branchId,
+        user.branchId,
+      )
     ) {
       return;
     }
@@ -218,7 +221,7 @@ class LeaveRequestService extends BaseService {
       let error = new Error(
         `Validation failed: ${validation.errors.join(", ")}`,
       );
-      error.statusCode = validation.statusCode;
+      error.statusCode = validation.statusCode || 400;
       throw error;
     }
 
@@ -247,7 +250,7 @@ class LeaveRequestService extends BaseService {
       let error = new Error(
         `Validation failed: ${validation.errors.join(", ")}`,
       );
-      error.statusCode = validation.statusCode;
+      error.statusCode = validation.statusCode || 400;
       throw error;
     }
 
@@ -262,9 +265,10 @@ class LeaveRequestService extends BaseService {
       throw error;
     }
 
-    const result = await LeaveRequest.updateOne(
+    const result = await LeaveRequest.findOneAndUpdate(
       { _id: leaveRequestId, tenantId },
       { $set: updateData },
+      { new: true, runValidators: true },
     )
       .select("-__v")
       .lean();
