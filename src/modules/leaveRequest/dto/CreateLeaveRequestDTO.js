@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const { allowedLeaveTypes } = require("../../../constants/leaveRequest");
 
 class CreateLeaveRequestDTO {
- constructor(tenantId, userId, data = {} ) {
+  constructor(tenantId, userId, data = {}) {
     this.tenantId = tenantId;
     this.userId = userId;
     this.leaveType = data.leaveType;
@@ -10,9 +10,9 @@ class CreateLeaveRequestDTO {
     this.endDate = data.endDate;
     this.status = data.status || "PENDING";
     this.reason = data.reason ? data.reason.trim() : "";
- }  
+  }
 
- validate(){
+  validate() {
     const errors = [];
 
     if (!this.tenantId || !mongoose.Types.ObjectId.isValid(this.tenantId)) {
@@ -26,48 +26,54 @@ class CreateLeaveRequestDTO {
     if (!this.leaveType || typeof this.leaveType !== "string") {
       errors.push("Leave type is required and must be a string");
     } else if (!Object.values(allowedLeaveTypes).includes(this.leaveType)) {
-      errors.push(`Leave type must be one of: ${Object.values(allowedLeaveTypes).join(", ")}`);
+      errors.push(
+        `Leave type must be one of: ${Object.values(allowedLeaveTypes).join(", ")}`,
+      );
     }
 
-        if (!this.startDate) {
-        errors.push("Start date is required");
-        } else if (Number.isNaN(new Date(this.startDate).getTime())) {
-        errors.push("Start date must be a valid date");
+    const startDate = this.startDate ? new Date(this.startDate) : null;
+    const endDate = this.endDate ? new Date(this.endDate) : null;
+    const now = new Date();
+
+    if (!this.startDate) {
+      errors.push("Start date is required");
+    } else if (Number.isNaN(startDate.getTime())) {
+      errors.push("Start date must be a valid date");
     }
 
     if (!this.endDate) {
       errors.push("End date is required");
-    } else if (Number.isNaN(new Date(this.endDate).getTime())) {
+    } else if (Number.isNaN(endDate.getTime())) {
       errors.push("End date must be a valid date");
     }
 
     if (
-      this.startDate &&
-      this.endDate &&
-      !Number.isNaN(new Date(this.startDate).getTime()) &&
-      !Number.isNaN(new Date(this.endDate).getTime()) &&
-      new Date(this.endDate) < new Date(this.startDate)
+      startDate &&
+      endDate &&
+      !Number.isNaN(startDate.getTime()) &&
+      !Number.isNaN(endDate.getTime()) &&
+      endDate < startDate
     ) {
       errors.push("End date cannot be before start date");
     }
 
     if (
-      this.startDate &&
-      !Number.isNaN(new Date(this.startDate).getTime()) &&
-      new Date(this.startDate) < new Date()
+      startDate &&
+      !Number.isNaN(startDate.getTime()) &&
+      startDate < now
     ) {
       errors.push("Start date cannot be before the current time");
     }
 
-    if (
-      this.endDate &&
-      !Number.isNaN(new Date(this.endDate).getTime()) &&
-      new Date(this.endDate) < new Date()
-    ) {
+    if (endDate && !Number.isNaN(endDate.getTime()) && endDate < now) {
       errors.push("End date cannot be before the current time");
     }
 
-    if (!this.reason || typeof this.reason !== "string" || this.reason.trim() === "") {
+    if (
+      !this.reason ||
+      typeof this.reason !== "string" ||
+      this.reason.trim() === ""
+    ) {
       errors.push("Reason is required and must be a non-empty string");
     }
 
@@ -76,7 +82,7 @@ class CreateLeaveRequestDTO {
       statusCode: errors.length === 0 ? 200 : 400,
       errors,
     };
- }
+  }
 }
 
 module.exports = CreateLeaveRequestDTO;
