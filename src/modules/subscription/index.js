@@ -3,6 +3,53 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
 
 /**
  * @openapi
+ * /plans:
+ *   get:
+ *     tags:
+ *       - Subscription
+ *     summary: List all available subscription plans
+ *     description: Returns all active plans sorted by price. No authentication required.
+ *     responses:
+ *       200:
+ *         description: Plans retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       planName:
+ *                         type: string
+ *                       planCode:
+ *                         type: string
+ *                       price:
+ *                         type: number
+ *                       billingCycle:
+ *                         type: string
+ *                         enum: [MONTHLY, YEARLY, NONE]
+ *                       maxBranches:
+ *                         type: number
+ *                       maxUsers:
+ *                         type: number
+ *                       maxProducts:
+ *                         type: number
+ *                       trialDays:
+ *                         type: number
+ *                       features:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *       500:
+ *         description: Server error
  * /subscription/free-trial:
  *   post:
  *     tags:
@@ -167,6 +214,12 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
 const registerSubscriptionModule = (app) => {
   const subscriptionRoutes = [
     {
+      method: "get",
+      path: "/plans",
+      handler: SubscriptionController.listPlans.bind(SubscriptionController),
+      protected: false,
+    },
+    {
       method: "post",
       path: "/subscription/free-trial",
       handler: SubscriptionController.assignFreeTrial.bind(
@@ -184,16 +237,16 @@ const registerSubscriptionModule = (app) => {
     },
     {
       method: "post",
-      path: "/subscription/upgrade/:tenantId",
-      handler: SubscriptionController.upgradePlan.bind(SubscriptionController),
-      protected: true,
-    },
-    {
-      method: "post",
       path: "/subscription/upgrade/initiate",
       handler: SubscriptionController.initiateUpgrade.bind(
         SubscriptionController,
       ),
+      protected: true,
+    },
+    {
+      method: "post",
+      path: "/subscription/upgrade/:tenantId",
+      handler: SubscriptionController.upgradePlan.bind(SubscriptionController),
       protected: true,
     },
     {
@@ -205,12 +258,10 @@ const registerSubscriptionModule = (app) => {
       protected: false,
     },
     {
-      method: "post",
-      path: "/webhook/sepay/order",
-      handler: SubscriptionController.handleSepayOrderWebhook.bind(
-        SubscriptionController,
-      ),
-      protected: false,
+      method: "get",
+      path: "/subscription/invoices",
+      handler: SubscriptionController.listInvoices.bind(SubscriptionController),
+      protected: true,
     },
     {
       method: "get",
