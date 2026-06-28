@@ -24,13 +24,18 @@ const createApp = () => {
   app.use(express.urlencoded({ extended: false }));
 
   // Serve uploaded files
-  app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));
+  app.use(
+    "/uploads",
+    express.static(path.join(__dirname, "../public/uploads")),
+  );
 
   setupSwagger(app);
 
   app.get("/health", (_request, response) => {
     response.json({ status: "ok" });
   });
+
+  app.use("/redis-test", require("./utils/redisTest"));
 
   registerModules(app);
 
