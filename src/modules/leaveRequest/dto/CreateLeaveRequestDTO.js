@@ -51,6 +51,22 @@ class CreateLeaveRequestDTO {
       errors.push("End date cannot be before start date");
     }
 
+    if (
+      this.startDate &&
+      !Number.isNaN(new Date(this.startDate).getTime()) &&
+      new Date(this.startDate) < new Date()
+    ) {
+      errors.push("Start date cannot be before the current time");
+    }
+
+    if (
+      this.endDate &&
+      !Number.isNaN(new Date(this.endDate).getTime()) &&
+      new Date(this.endDate) < new Date()
+    ) {
+      errors.push("End date cannot be before the current time");
+    }
+
     if (!this.reason || typeof this.reason !== "string" || this.reason.trim() === "") {
       errors.push("Reason is required and must be a non-empty string");
     }
