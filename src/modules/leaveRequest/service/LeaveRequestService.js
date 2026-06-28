@@ -272,9 +272,7 @@ class LeaveRequestService extends BaseService {
     )
       .select("-__v")
       .lean();
-    return {
-      result,
-    };
+    return result;
   }
 
   async reviewLeaveRequest({ tenantId, leaveRequestId, data }) {
@@ -331,32 +329,20 @@ class LeaveRequestService extends BaseService {
 
   async approveLeaveRequest({ tenantId, leaveRequestId, data }) {
     data.status = "APPROVED";
-    const result = await this.reviewLeaveRequest({
+    return this.reviewLeaveRequest({
       tenantId,
       leaveRequestId,
       data,
     });
-    return {
-      statusCode: 200,
-      success: true,
-      message: "Leave request approved successfully",
-      result,
-    };
   }
 
   async rejectLeaveRequest({ tenantId, leaveRequestId, data }) {
     data.status = "REJECTED";
-    const result = await this.reviewLeaveRequest({
+    return this.reviewLeaveRequest({
       tenantId,
       leaveRequestId,
       data,
     });
-    return {
-      statusCode: 200,
-      success: true,
-      message: "Leave request rejected successfully",
-      result,
-    };
   }
 
   async cancelLeaveRequest({ tenantId, leaveRequestId, data = {}, userId }) {
@@ -405,12 +391,7 @@ class LeaveRequestService extends BaseService {
       leaveRequestId,
       leaveRequestData: data,
     });
-    return {
-      statusCode: 200,
-      success: true,
-      message: "Leave request cancelled successfully",
-      result,
-    };
+    return result;
   }
 
   async deleteLeaveRequest({ tenantId, leaveRequestId }) {

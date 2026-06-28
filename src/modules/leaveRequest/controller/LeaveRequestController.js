@@ -316,6 +316,7 @@ class LeaveRequestController {
 
       return res.status(200).json({
         success: true,
+        statusCode: 200,
         message: "Leave request cancelled successfully",
         data: leaveRequest,
       });
@@ -339,6 +340,7 @@ class LeaveRequestController {
 
       return res.status(200).json({
         success: true,
+        statusCode: 200,
         message: "Leave request approved successfully",
         data: leaveRequest,
       });
@@ -362,6 +364,7 @@ class LeaveRequestController {
 
       return res.status(200).json({
         success: true,
+        statusCode: 200,
         message: "Leave request rejected successfully",
         data: leaveRequest,
       });
