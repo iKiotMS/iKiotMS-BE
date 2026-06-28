@@ -167,6 +167,33 @@ class AuthController {
       });
     }
   }
+
+  async updateProfile(req, res) {
+    try {
+      const userId = req.user?.userId;
+      const tenantId = req.user?.tenantId;
+      const userRole = req.user?.role;
+
+      if (!userId || !tenantId) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized",
+        });
+      }
+
+      const updatedUser = await AuthService.updateProfile(userId, tenantId, req.body, userRole);
+
+      res.status(200).json({
+        success: true,
+        data: updatedUser,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to update profile",
+      });
+    }
+  }
 }
 
 module.exports = new AuthController();

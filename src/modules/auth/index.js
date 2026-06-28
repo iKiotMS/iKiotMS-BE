@@ -196,6 +196,70 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Unauthorized
  *       404:
  *         description: User not found
+ *   patch:
+ *     tags:
+ *       - Auth
+ *     summary: Update current user profile
+ *     description: Update the profile of the authenticated user. Restrictions apply based on user role.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: user@example.com
+ *               profile:
+ *                 type: object
+ *                 properties:
+ *                   firstName:
+ *                     type: string
+ *                     example: John
+ *                   lastName:
+ *                     type: string
+ *                     example: Doe
+ *                   avatarUrl:
+ *                     type: string
+ *                     example: http://example.com/avatar.png
+ *                   dob:
+ *                     type: string
+ *                     format: date-time
+ *                     example: 1990-01-01T00:00:00.000Z
+ *                   address:
+ *                     type: string
+ *                     example: Hanoi
+ *                   gender:
+ *                     type: string
+ *                     enum: [MALE, FEMALE, OTHER]
+ *                     example: MALE
+ *                   taxNumber:
+ *                     type: string
+ *                     example: "0123456789"
+ *                   identificationId:
+ *                     type: string
+ *                     example: "012345678912"
+ *     responses:
+ *       200:
+ *         description: Profile updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   description: Updated user object
+ *       400:
+ *         description: Validation or update failed
+ *       401:
+ *         description: Unauthorized
  */
 const registerAuthModule = (app) => {
   const authRoutes = [
@@ -229,6 +293,12 @@ const registerAuthModule = (app) => {
       handler: AuthController.getProfile.bind(AuthController),
       protected: true,
     },
+    {
+      method: "patch",
+      path: "/auth/me",
+      handler: AuthController.updateProfile.bind(AuthController),
+      protected: true,
+    },
   ];
 
   authRoutes.forEach((route) => {
@@ -240,6 +310,8 @@ const registerAuthModule = (app) => {
       app.post(route.path, ...handlers);
     } else if (route.method === "get") {
       app.get(route.path, ...handlers);
+    } else if (route.method === "patch") {
+      app.patch(route.path, ...handlers);
     }
   });
 
