@@ -7,6 +7,7 @@ const { getConfig } = require("./config");
 const connectDB = require("./config/connectDB");
 const { setupSwagger } = require("./config/setupSwagger");
 const { initSocket } = require("./services/socketService");
+const { startSubscriptionJob } = require("./jobs/subscriptionJob");
 
 require("dotenv").config();
 
@@ -15,7 +16,7 @@ const createApp = () => {
 
   app.use(
     cors({
-      origin: ["http://localhost:3000", "https://ikiot.vercel.app"],
+      origin: ["http://localhost:3000", process.env.FRONTEND_URL],
       credentials: true,
     }),
   );
@@ -54,6 +55,10 @@ const startServer = async () => {
   httpServer.listen(config.port, () => {
     console.log(`Server listening on port ${config.port} (${config.nodeEnv})`);
   });
+
+  if (config.nodeEnv !== "test") {
+    startSubscriptionJob();
+  }
 };
 
 module.exports = { createApp, startServer };
