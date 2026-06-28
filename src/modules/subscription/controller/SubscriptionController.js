@@ -155,6 +155,23 @@ class SubscriptionController {
     }
   }
 
+  async initiateRenewal(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const result = await SubscriptionService.initiateRenewal(tenantId);
+      res.status(200).json({
+        success: true,
+        message: "Renewal initiated. Scan QR or transfer with the reference code.",
+        data: result,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to initiate renewal",
+      });
+    }
+  }
+
   async listInvoices(req, res) {
     try {
       const tenantId = req.user.tenantId;

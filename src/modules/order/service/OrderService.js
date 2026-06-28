@@ -54,7 +54,8 @@ class OrderService {
 
     const isSepay = paymentMethod === "SEPAY";
     const status = INSTANT_COMPLETE_METHODS.includes(paymentMethod) ? "COMPLETED" : "PENDING";
-    const paymentReference = isSepay ? sepayService.generateOrderRef() : undefined;
+    // SEPAY ref generated before insert (needed for QR URL); CASH ref derived from _id after insert
+    const sepayRef = isSepay ? sepayService.generateOrderRef() : undefined;
 
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -67,7 +68,7 @@ class OrderService {
             customerId,
             userId,
             paymentMethod,
-            paymentReference,
+            paymentReference: sepayRef,
             grandTotal,
             customerPay,
             change: customerPay != null ? Math.max(0, customerPay - grandTotal) : undefined,
@@ -84,6 +85,12 @@ class OrderService {
         ],
         { session },
       );
+
+      // CASH: assign ref from ObjectId — guaranteed unique, no collision possible
+      if (!isSepay) {
+        order.paymentReference = `CASH${order._id.toString().slice(-8).toUpperCase()}`;
+        await order.save({ session });
+      }
 
       // Deduct inventory for all payment methods (reserve stock immediately)
       for (const item of items) {
@@ -115,7 +122,7 @@ class OrderService {
 
       let qrUrl;
       if (isSepay && tenant?.banking) {
-        qrUrl = sepayService.buildTenantQrUrl(tenant.banking, grandTotal, paymentReference);
+        qrUrl = sepayService.buildTenantQrUrl(tenant.banking, grandTotal, sepayRef);
       }
 
       return { order, qrUrl };

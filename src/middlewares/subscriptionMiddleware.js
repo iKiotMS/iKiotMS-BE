@@ -1,4 +1,5 @@
 const { Subscription, Plan } = require("../models");
+const { GRACE_PERIOD_DAYS, addDays } = require("../constants/subscription");
 
 const subscriptionCache = new Map(); // tenantId → { data, expiresAt }
 const TTL = 60 * 1000; // 60 giây
@@ -39,7 +40,7 @@ const requireActiveSubscription = async (req, res, next) => {
 
     const now = new Date();
 
-    // Lazy expiry — trial
+    // Lazy expiry — trial hết hạn → EXPIRED, chặn ngay
     if (subscription.status === "TRIAL" && now > new Date(subscription.trialEndDate)) {
       await Subscription.findByIdAndUpdate(subscription._id, { status: "EXPIRED" });
       invalidateSubscriptionCache(tenantId);
@@ -49,8 +50,15 @@ const requireActiveSubscription = async (req, res, next) => {
       });
     }
 
-    // Lazy expiry — paid plan
+    // Lazy expiry — paid plan hết hạn → PAST_DUE, vẫn cho qua (grace period)
     if (subscription.status === "ACTIVE" && now > new Date(subscription.endDate)) {
+      await Subscription.findByIdAndUpdate(subscription._id, { status: "PAST_DUE" });
+      invalidateSubscriptionCache(tenantId);
+    }
+
+    // Lazy expiry — PAST_DUE đã qua grace period → EXPIRED, chặn
+    const graceCutoff = addDays(now, -GRACE_PERIOD_DAYS);
+    if (subscription.status === "PAST_DUE" && new Date(subscription.endDate) < graceCutoff) {
       await Subscription.findByIdAndUpdate(subscription._id, { status: "EXPIRED" });
       invalidateSubscriptionCache(tenantId);
       return res.status(403).json({
@@ -62,7 +70,7 @@ const requireActiveSubscription = async (req, res, next) => {
     if (["EXPIRED", "CANCELLED"].includes(subscription.status)) {
       return res.status(403).json({
         success: false,
-        message: `Subscription is ${subscription.status.toLowerCase()}`,
+        message: "Subscription has expired. Please renew your plan to continue.",
       });
     }
 

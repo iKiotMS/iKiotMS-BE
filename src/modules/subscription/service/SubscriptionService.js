@@ -6,6 +6,12 @@ const {
   SubscriptionInvoice,
 } = require("../../../models");
 const sepayService = require("../../../services/sepayService");
+const {
+  GRACE_PERIOD_DAYS,
+  QR_EXPIRY_MS,
+  addDays,
+  getBillingDays,
+} = require("../../../constants/subscription");
 
 class SubscriptionService {
   // Keeping this method for backward compatibility or potential future use
@@ -36,9 +42,7 @@ class SubscriptionService {
 
       // 3. Calculate trial dates
       const startDate = new Date();
-      const trialEndDate = new Date(
-        startDate.getTime() + plan.trialDays * 24 * 60 * 60 * 1000,
-      );
+      const trialEndDate = addDays(startDate, plan.trialDays);
       const endDate = new Date(trialEndDate); // For trial, end date equals trial end date
 
       // 4. Create the user (tenant owner)
@@ -214,27 +218,81 @@ class SubscriptionService {
       };
     }
 
-    if (subscription.status === "ACTIVE") {
-      if (now > new Date(subscription.endDate)) {
+    if (subscription.status === "ACTIVE" || subscription.status === "PAST_DUE") {
+      const endDate = new Date(subscription.endDate);
+      const graceCutoff = addDays(now, -GRACE_PERIOD_DAYS);
+
+      // Quá grace period → EXPIRED, chặn
+      if (endDate < graceCutoff) {
         await Subscription.findByIdAndUpdate(subscription._id, {
           status: "EXPIRED",
         });
         return {
           status: "EXPIRED",
-          daysOverdue: Math.ceil(
-            (now - new Date(subscription.endDate)) / 86400000,
-          ),
+          daysOverdue: Math.ceil((now - endDate) / 86400000),
         };
       }
+
+      // Quá hạn nhưng còn trong grace period → PAST_DUE, vẫn dùng được
+      if (now > endDate) {
+        if (subscription.status === "ACTIVE") {
+          await Subscription.findByIdAndUpdate(subscription._id, {
+            status: "PAST_DUE",
+          });
+        }
+        return {
+          status: "PAST_DUE",
+          daysOverdue: Math.ceil((now - endDate) / 86400000),
+          gracePeriodEndsAt: addDays(endDate, GRACE_PERIOD_DAYS),
+          endDate: subscription.endDate,
+          planCode: subscription.planId?.planCode,
+        };
+      }
+
       return {
         status: "ACTIVE",
-        daysLeft: Math.ceil((new Date(subscription.endDate) - now) / 86400000),
+        daysLeft: Math.ceil((endDate - now) / 86400000),
         endDate: subscription.endDate,
         planCode: subscription.planId?.planCode,
       };
     }
 
     return { status: subscription.status };
+  }
+
+  // Tạo invoice PENDING + QR cho một plan (dùng chung cho upgrade & renew)
+  async _createPlanInvoice(subscription, plan) {
+    // Huỷ các invoice pending cũ của cùng tenant+plan tránh duplicate
+    await SubscriptionInvoice.updateMany(
+      { tenantId: subscription.tenantId, planId: plan._id, status: "PENDING" },
+      { status: "FAILED" },
+    );
+
+    const billingStart = new Date();
+    const billingEnd = addDays(billingStart, getBillingDays(plan.billingCycle));
+    const paymentReference = sepayService.generatePaymentReference();
+
+    const invoice = await SubscriptionInvoice.create({
+      subscriptionId: subscription._id,
+      tenantId: subscription.tenantId,
+      planId: plan._id,
+      amount: plan.price,
+      currency: "VND",
+      status: "PENDING",
+      paymentReference,
+      paymentMethod: "SEPAY",
+      billingPeriodStart: billingStart,
+      billingPeriodEnd: billingEnd,
+    });
+
+    return {
+      invoiceId: invoice._id,
+      paymentReference,
+      amount: plan.price,
+      plan: { planCode: plan.planCode, planName: plan.planName },
+      qrDataUrl: sepayService.buildQrUrl(plan.price, paymentReference),
+      expiredAt: new Date(Date.now() + QR_EXPIRY_MS),
+    };
   }
 
   async initiateUpgrade(tenantId, userId, planCode) {
@@ -247,42 +305,21 @@ class SubscriptionService {
     if (newPlan.price === 0)
       throw new Error("Use free-trial endpoint for free plans");
 
-    // Cancel any stale pending invoice for the same tenant+plan
-    await SubscriptionInvoice.updateMany(
-      { tenantId, planId: newPlan._id, status: "PENDING" },
-      { status: "FAILED" },
-    );
+    return this._createPlanInvoice(currentSubscription, newPlan);
+  }
 
-    const billingStart = new Date();
-    const billingEnd = new Date(
-      billingStart.getTime() + 30 * 24 * 60 * 60 * 1000,
-    );
+  async initiateRenewal(tenantId) {
+    const currentSubscription = await Subscription.findOne({ tenantId }).populate("planId");
+    if (!currentSubscription) throw new Error("No subscription found");
 
-    const paymentReference = sepayService.generatePaymentReference();
+    const currentPlan = currentSubscription.planId;
+    if (!currentPlan) throw new Error("Current plan not found");
 
-    const invoice = await SubscriptionInvoice.create({
-      subscriptionId: currentSubscription._id,
-      tenantId,
-      planId: newPlan._id,
-      amount: newPlan.price,
-      currency: "VND",
-      status: "PENDING",
-      paymentReference,
-      paymentMethod: "SEPAY",
-      billingPeriodStart: billingStart,
-      billingPeriodEnd: billingEnd,
-    });
+    if (currentPlan.planCode === "TRIAL" || currentPlan.price === 0) {
+      throw new Error("Trial plan cannot be renewed. Please upgrade to a paid plan.");
+    }
 
-    const qrDataUrl = sepayService.buildQrUrl(newPlan.price, paymentReference);
-
-    return {
-      invoiceId: invoice._id,
-      paymentReference,
-      amount: newPlan.price,
-      plan: { planCode: newPlan.planCode, planName: newPlan.planName },
-      qrDataUrl,
-      expiredAt: new Date(Date.now() + 15 * 60 * 1000), // QR valid 15 minutes
-    };
+    return this._createPlanInvoice(currentSubscription, currentPlan);
   }
 
   async activateAfterPayment(invoice, sepayPayload) {
@@ -293,10 +330,10 @@ class SubscriptionService {
     if (!subscription) throw new Error("Subscription not found");
 
     const oldPlanId = subscription.planId;
+    const isRenewal = oldPlanId.toString() === invoice.planId.toString();
+
     const billingStart = new Date();
-    const billingEnd = new Date(
-      billingStart.getTime() + 30 * 24 * 60 * 60 * 1000,
-    );
+    const billingEnd = addDays(billingStart, getBillingDays(plan.billingCycle));
 
     subscription.planId = plan._id;
     subscription.status = "ACTIVE";
@@ -309,12 +346,14 @@ class SubscriptionService {
       maxProducts: plan.maxProducts,
     };
     subscription.historyLogs.push({
-      event: "UPGRADED",
+      event: isRenewal ? "RENEWED" : "UPGRADED",
       fromPlanId: oldPlanId,
       toPlanId: plan._id,
       changedAt: new Date(),
       changedBy: invoice.tenantId,
-      note: `Upgraded to ${plan.planCode} via SePay (ref: ${invoice.paymentReference})`,
+      note: isRenewal
+        ? `Renewed ${plan.planCode} via SePay (ref: ${invoice.paymentReference})`
+        : `Upgraded to ${plan.planCode} via SePay (ref: ${invoice.paymentReference})`,
     });
     await subscription.save();
 
@@ -359,8 +398,9 @@ class SubscriptionService {
       currentSubscription.planId = newPlan._id;
       currentSubscription.status = "ACTIVE";
       currentSubscription.startDate = new Date();
-      currentSubscription.endDate = new Date(
-        Date.now() + 30 * 24 * 60 * 60 * 1000,
+      currentSubscription.endDate = addDays(
+        new Date(),
+        getBillingDays(newPlan.billingCycle),
       );
       currentSubscription.trialEndDate = null;
 
