@@ -49,6 +49,11 @@ class LeaveRequestService extends BaseService {
 
     const keyword = query.keyword?.trim() || "";
 
+    if (query.branchId || query.warehouseId || query.role) {
+      const scopedUsers = await User.find(userFilter).select("_id").lean();
+      filter.userId = { $in: scopedUsers.map((u) => u._id) };
+    }
+
     if (keyword) {
       const keywordRegex = {
         $regex: this.escapeRegex(keyword),
@@ -71,11 +76,6 @@ class LeaveRequestService extends BaseService {
       ];
     }
 
-    if ((query.branchId || query.warehouseId || query.role) && !keyword) {
-      const users = await User.find(userFilter).select("_id").lean();
-      filter.userId = { $in: users.map((u) => u._id) };
-    }
-
     const [leaveRequests, total] = await Promise.all([
       LeaveRequest.find(filter)
         .populate({
@@ -96,12 +96,12 @@ class LeaveRequestService extends BaseService {
         total,
         page: pagination.page,
         recordPerPage: pagination.recordPerPage,
-        totalPage: Math.ceil(total / pagination.recordPerPage)
+        totalPage: Math.ceil(total / pagination.recordPerPage),
       },
     };
   }
 
-  async getLeaveRequests({ tenantId, userId, filter, page, recordPerPage }) {
+  async getLeaveRequests({ tenantId, filter, page, recordPerPage }) {
     const selectedFields = "userId leaveType startDate endDate status reason";
     const populatedFields = {
       path: "userId",
@@ -128,10 +128,61 @@ class LeaveRequestService extends BaseService {
     return leaveRequests;
   }
 
-  getLeaveRequestById({ tenantId, leaveRequestId }) {
-    return LeaveRequest.findOne({ _id: leaveRequestId, tenantId })
+  sameId(left, right) {
+    return left?.toString() === right?.toString();
+  }
+
+  assertCanReadLeaveRequest(user, leaveRequest) {
+    const targetUser = leaveRequest.userId;
+
+    if (this.sameId(targetUser?._id, user.userId)) {
+      return;
+    }
+
+    if (["SUPER_ADMIN", "TENANT_OWNER"].includes(user.role)) {
+      return;
+    }
+
+    if (
+      user.role === "BRANCH_MANAGER" &&
+      !targetUser?.warehouseId &&
+      this.sameId(targetUser?.branchId?._id || targetUser?.branchId, user.branchId)
+    ) {
+      return;
+    }
+
+    if (
+      user.role === "WAREHOUSE_MANAGER" &&
+      !targetUser?.branchId &&
+      this.sameId(
+        targetUser?.warehouseId?._id || targetUser?.warehouseId,
+        user.warehouseId,
+      )
+    ) {
+      return;
+    }
+
+    const error = new Error(
+      "You do not have permission to read this leave request",
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
+  async getLeaveRequestById({ tenantId, user, leaveRequestId }) {
+    if (!mongoose.Types.ObjectId.isValid(leaveRequestId)) {
+      const error = new Error("Invalid leave request id");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const leaveRequest = await LeaveRequest.findOne({
+      _id: leaveRequestId,
+      tenantId,
+    })
       .populate({
         path: "userId",
+        select: "role branchId warehouseId profile email",
         populate: [
           {
             path: "branchId",
@@ -144,6 +195,16 @@ class LeaveRequestService extends BaseService {
         ],
       })
       .lean();
+
+    if (!leaveRequest) {
+      let error = new Error("Leave request not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    this.assertCanReadLeaveRequest(user, leaveRequest);
+
+    return leaveRequest;
   }
 
   async createLeaveRequest({ tenantId, userId, leaveRequestData }) {
@@ -204,7 +265,9 @@ class LeaveRequestService extends BaseService {
     const result = await LeaveRequest.updateOne(
       { _id: leaveRequestId, tenantId },
       { $set: updateData },
-    );
+    )
+      .select("-__v")
+      .lean();
     return {
       result,
     };

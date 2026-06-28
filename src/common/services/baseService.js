@@ -22,6 +22,53 @@ class BaseService {
     };
   }
 
+  async hasPermissionToReadDataFromThisUser(user, readUserId) {
+    const targetUser = await this.model.findById(readUserId).lean();
+    if (!targetUser) {
+      let error = Error("User not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (user.role === "BRANCH_MANAGER") {
+      if (!user.branchId) {
+        let error = new Error("Branch manager is not assigned to a branch");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (
+        targetUser.warehouseId ||
+        targetUser.branchId?.toString() !== user.branchId.toString()
+      ) {
+        let error = new Error(
+          "You do not have permission to read data from this user",
+        );
+        error.statusCode = 403;
+        throw error;
+      }
+    } else if (user.role === "WAREHOUSE_MANAGER") {
+      if (!user.warehouseId) {
+        let error = new Error(
+          "Warehouse manager is not assigned to a warehouse",
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (
+        targetUser.branchId ||
+        targetUser.warehouseId?.toString() !== user.warehouseId.toString()
+      ) {
+        let error = new Error(
+          "You do not have permission to read data from this user",
+        );
+        error.statusCode = 403;
+        throw error;
+      }
+    }
+  }
+
   async create(data) {
     return await this.model.create(data);
   }
