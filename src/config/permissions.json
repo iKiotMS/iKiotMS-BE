@@ -65,6 +65,7 @@
     "orders": ["create", "read"],
     "inventory": ["read"],
     "branches": ["read"],
+    "schedules": ["read_own"],
     "attendances": ["read_own", "create", "update"],
     "leaveRequests": ["create", "read_mine","cancel"]
   },

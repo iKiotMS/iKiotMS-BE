@@ -290,7 +290,7 @@ function registerScheduleModule(app) {
   app.get(
     "/working-schedules",
     verifyJwt,
-    authorize("schedules", ["read"]),
+    authorize("schedules", ["read", "read_own"]),
     WorkingScheduleController.getWorkingScheduleList.bind(
       WorkingScheduleController,
     ),
@@ -299,7 +299,7 @@ function registerScheduleModule(app) {
   app.get(
     "/working-schedules/:scheduleId",
     verifyJwt,
-    authorize("schedules", ["read"]),
+    authorize("schedules", ["read", "read_own"]),
     WorkingScheduleController.getWorkingScheduleById.bind(
       WorkingScheduleController,
     ),

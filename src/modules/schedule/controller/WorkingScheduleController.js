@@ -1,4 +1,5 @@
 const WorkingScheduleService = require("../service/WorkingScheduleService");
+const { hasPermission } = require("../../../utils/permissionChecker");
 
 class WorkingScheduleController {
   getRequestData(req) {
@@ -31,10 +32,15 @@ class WorkingScheduleController {
   async getWorkingScheduleList(req, res) {
     try {
       const tenantId = req.user.tenantId;
+      const query = { ...req.query };
+
+      if (!hasPermission(req.user.role, "schedules", "read")) {
+        query.userId = req.user.userId;
+      }
 
       const result = await WorkingScheduleService.getWorkingScheduleList(
         tenantId,
-        req.query,
+        query,
       );
 
       return res.status(200).json(result);
@@ -55,6 +61,16 @@ class WorkingScheduleController {
         tenantId,
         scheduleId,
       );
+
+      if (!hasPermission(req.user.role, "schedules", "read")) {
+        const scheduleUserId = result.userId?._id || result.userId;
+        if (String(scheduleUserId) !== String(req.user.userId)) {
+          return res.status(403).json({
+            success: false,
+            message: "Forbidden: You do not have permission to access this schedule",
+          });
+        }
+      }
 
       return res.status(200).json(result);
     } catch (error) {
