@@ -14,6 +14,7 @@ class CustomerController {
       }
 
       const customer = await CustomerService.createCustomer(tenantId, {
+        customerCode: dto.customerCode,
         name: dto.name,
         phone: dto.phone,
         gender: dto.gender,
@@ -73,6 +74,31 @@ class CustomerController {
     } catch (error) {
       const status = error.message === "Customer not found" ? 404 : 400;
       res.status(status).json({ success: false, message: error.message });
+    }
+  }
+
+  async delete(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      await CustomerService.deleteCustomer(tenantId, req.params.id);
+      res.status(200).json({ success: true, message: "Customer deleted" });
+    } catch (error) {
+      const status = error.message === "Customer not found" ? 404 : 400;
+      res.status(status).json({ success: false, message: error.message });
+    }
+  }
+
+  async deleteMany(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ success: false, message: "Customer IDs are required" });
+      }
+      await CustomerService.deleteManyCustomers(tenantId, ids);
+      res.status(200).json({ success: true, message: "Customers deleted" });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
     }
   }
 }

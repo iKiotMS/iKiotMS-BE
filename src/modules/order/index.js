@@ -204,6 +204,8 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *             type: object
  *             required: [name]
  *             properties:
+ *               customerCode:
+ *                 type: string
  *               name:
  *                 type: string
  *               phone:
@@ -238,9 +240,36 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         name: search
  *         schema: { type: string }
  *         description: Search by name or phone
+ *       - in: query
+ *         name: branchId
+ *         schema: { type: string }
+ *         description: Filter customers by branch ID
  *     responses:
  *       200:
  *         description: Paginated list of customers
+ *   delete:
+ *     tags:
+ *       - Customers
+ *     summary: Delete multiple customers
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Customers deleted
+ *       400:
+ *         description: Invalid request
  * /customers/{id}:
  *   get:
  *     tags:
@@ -276,6 +305,8 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *           schema:
  *             type: object
  *             properties:
+ *               customerCode:
+ *                 type: string
  *               name:
  *                 type: string
  *               phone:
@@ -291,6 +322,22 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *     responses:
  *       200:
  *         description: Customer updated
+ *       404:
+ *         description: Customer not found
+ *   delete:
+ *     tags:
+ *       - Customers
+ *     summary: Delete a customer
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Customer deleted
  *       404:
  *         description: Customer not found
  */
@@ -309,6 +356,8 @@ const registerOrderModule = (app) => {
   app.get("/customers", verifyJwt, CustomerController.getList.bind(CustomerController));
   app.get("/customers/:id", verifyJwt, CustomerController.getDetail.bind(CustomerController));
   app.patch("/customers/:id", verifyJwt, CustomerController.update.bind(CustomerController));
+  app.delete("/customers/:id", verifyJwt, CustomerController.delete.bind(CustomerController));
+  app.delete("/customers", verifyJwt, CustomerController.deleteMany.bind(CustomerController));
 
   console.log("✓ Order module registered");
 };
