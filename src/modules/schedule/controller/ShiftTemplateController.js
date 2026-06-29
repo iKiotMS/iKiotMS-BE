@@ -1,4 +1,5 @@
 const ShiftTemplateService = require("../service/ShiftTemplateService");
+const { deleteByPattern, deleteKeys, cacheKeys } = require("../../../utils/cacheHelpers");
 
 class ShiftTemplateController {
   getRequestData(req) {
@@ -14,6 +15,8 @@ class ShiftTemplateController {
         tenantId,
         data,
       );
+
+      deleteByPattern(`shift-templates:list:${tenantId}:*`).catch(() => {});
 
       return res.status(201).json(result);
     } catch (error) {
@@ -73,6 +76,11 @@ class ShiftTemplateController {
         data,
       );
 
+      deleteByPattern(`shift-templates:list:${tenantId}:*`).catch(() => {});
+      deleteKeys(
+        cacheKeys.shiftTemplateDetail(tenantId, shiftTemplateId),
+      ).catch(() => {});
+
       return res.status(200).json(result);
     } catch (error) {
       return res.status(error.statusCode || 400).json({
@@ -91,6 +99,11 @@ class ShiftTemplateController {
         tenantId,
         shiftTemplateId,
       );
+
+      deleteByPattern(`shift-templates:list:${tenantId}:*`).catch(() => {});
+      deleteKeys(
+        cacheKeys.shiftTemplateDetail(tenantId, shiftTemplateId),
+      ).catch(() => {});
 
       return res.status(200).json(result);
     } catch (error) {

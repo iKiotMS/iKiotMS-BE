@@ -1,5 +1,7 @@
 const SubscriptionController = require("./controller/SubscriptionController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
+const { cacheResponse } = require("../../middlewares/cacheMiddleware");
+const { cacheKeys } = require("../../utils/cacheHelpers");
 
 /**
  * @openapi
@@ -326,9 +328,13 @@ const registerSubscriptionModule = (app) => {
   ];
 
   subscriptionRoutes.forEach((route) => {
-    const handlers = route.protected
-      ? [verifyJwt, route.handler]
-      : [route.handler];
+    const handlers = [];
+    if (route.protected) handlers.push(verifyJwt);
+    // Cache GET /plans for 24 h — plans only change when admin re-seeds the DB
+    if (route.path === "/plans") {
+      handlers.push(cacheResponse(() => cacheKeys.plansAll(), 86400));
+    }
+    handlers.push(route.handler);
 
     if (route.method === "post") {
       app.post(route.path, ...handlers);

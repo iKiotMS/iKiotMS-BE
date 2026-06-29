@@ -1,5 +1,7 @@
 const CategoryController = require("./controller/CategoryController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
+const { cacheResponse } = require("../../middlewares/cacheMiddleware");
+const { cacheKeys } = require("../../utils/cacheHelpers");
 
 /**
  * @openapi
@@ -113,9 +115,30 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  */
 const registerCategoryModule = (app) => {
   app.post("/categories", verifyJwt, CategoryController.create.bind(CategoryController));
-  app.get("/categories", verifyJwt, CategoryController.getList.bind(CategoryController));
-  app.get("/categories/tree", verifyJwt, CategoryController.getTree.bind(CategoryController));
-  app.get("/categories/:id", verifyJwt, CategoryController.getDetail.bind(CategoryController));
+
+  app.get(
+    "/categories",
+    verifyJwt,
+    cacheResponse((req) => cacheKeys.categoryList(req.query), 600),
+    CategoryController.getList.bind(CategoryController),
+  );
+
+  // /categories/tree must be registered BEFORE /categories/:id so Express
+  // does not match "tree" as the :id parameter.
+  app.get(
+    "/categories/tree",
+    verifyJwt,
+    cacheResponse(() => cacheKeys.categoryTree(), 600),
+    CategoryController.getTree.bind(CategoryController),
+  );
+
+  app.get(
+    "/categories/:id",
+    verifyJwt,
+    cacheResponse((req) => cacheKeys.categoryDetail(req.params.id), 600),
+    CategoryController.getDetail.bind(CategoryController),
+  );
+
   app.patch("/categories/:id", verifyJwt, CategoryController.update.bind(CategoryController));
   app.delete("/categories/:id", verifyJwt, CategoryController.delete.bind(CategoryController));
 

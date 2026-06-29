@@ -2,6 +2,8 @@ const ShiftTemplateController = require("./controller/ShiftTemplateController");
 const WorkingScheduleController = require("./controller/WorkingScheduleController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
 const { authorize } = require("../../middlewares/authorizationMiddleware");
+const { cacheResponse } = require("../../middlewares/cacheMiddleware");
+const { cacheKeys } = require("../../utils/cacheHelpers");
 
 /**
  * @openapi
@@ -254,6 +256,10 @@ function registerScheduleModule(app) {
     "/shift-templates",
     verifyJwt,
     authorize("schedules", ["read"]),
+    cacheResponse(
+      (req) => cacheKeys.shiftTemplateList(req.user.tenantId, req.query),
+      600,
+    ),
     ShiftTemplateController.getShiftTemplateList.bind(ShiftTemplateController),
   );
 
@@ -261,6 +267,14 @@ function registerScheduleModule(app) {
     "/shift-templates/:shiftTemplateId",
     verifyJwt,
     authorize("schedules", ["read"]),
+    cacheResponse(
+      (req) =>
+        cacheKeys.shiftTemplateDetail(
+          req.user.tenantId,
+          req.params.shiftTemplateId,
+        ),
+      600,
+    ),
     ShiftTemplateController.getShiftTemplateById.bind(ShiftTemplateController),
   );
 

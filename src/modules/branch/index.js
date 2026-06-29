@@ -1,8 +1,8 @@
 const BranchController = require("./controller/BranchController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
-const {
-  requireActiveSubscription,
-} = require("../../middlewares/subscriptionMiddleware");
+const { requireActiveSubscription } = require("../../middlewares/subscriptionMiddleware");
+const { cacheResponse } = require("../../middlewares/cacheMiddleware");
+const { cacheKeys } = require("../../utils/cacheHelpers");
 
 /**
  * @openapi
@@ -132,47 +132,44 @@ const {
  *         description: Branch deleted
  */
 const registerBranchModule = (app) => {
-  const branchRoutes = [
-    {
-      method: "post",
-      path: "/branches",
-      handler: BranchController.create.bind(BranchController),
-      protected: true,
-    },
-    {
-      method: "get",
-      path: "/branches",
-      handler: BranchController.getList.bind(BranchController),
-      protected: true,
-    },
-    {
-      method: "get",
-      path: "/branches/:id",
-      handler: BranchController.getById.bind(BranchController),
-      protected: true,
-    },
-    {
-      method: "patch",
-      path: "/branches/:id",
-      handler: BranchController.update.bind(BranchController),
-      protected: true,
-    },
-    {
-      method: "delete",
-      path: "/branches/:id/delete",
-      handler: BranchController.softDelete.bind(BranchController),
-      protected: true,
-    },
-  ];
+  app.post(
+    "/branches",
+    verifyJwt,
+    requireActiveSubscription,
+    BranchController.create.bind(BranchController),
+  );
 
-  branchRoutes.forEach((route) => {
-    const handlers = route.protected
-      ? route.path === "/branches" && route.method === "post"
-        ? [verifyJwt, requireActiveSubscription, route.handler]
-        : [verifyJwt, route.handler]
-      : [route.handler];
-    app[route.method](route.path, ...handlers);
-  });
+  app.get(
+    "/branches",
+    verifyJwt,
+    cacheResponse(
+      (req) => cacheKeys.branchList(req.user.tenantId, req.query),
+      300,
+    ),
+    BranchController.getList.bind(BranchController),
+  );
+
+  app.get(
+    "/branches/:id",
+    verifyJwt,
+    cacheResponse(
+      (req) => cacheKeys.branchDetail(req.user.tenantId, req.params.id),
+      300,
+    ),
+    BranchController.getById.bind(BranchController),
+  );
+
+  app.patch(
+    "/branches/:id",
+    verifyJwt,
+    BranchController.update.bind(BranchController),
+  );
+
+  app.delete(
+    "/branches/:id/delete",
+    verifyJwt,
+    BranchController.softDelete.bind(BranchController),
+  );
 
   console.log("✓ Branch module registered");
 };

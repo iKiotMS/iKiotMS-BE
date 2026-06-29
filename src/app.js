@@ -4,6 +4,8 @@ const http = require("http");
 const express = require("express");
 const path = require("path");
 const cors = require("cors");
+const helmet = require("helmet");
+const morgan = require("morgan");
 const { registerModules } = require("./modules");
 const { getConfig } = require("./config");
 const connectDB = require("./config/connectDB");
@@ -14,12 +16,19 @@ const { startSubscriptionJob } = require("./jobs/subscriptionJob");
 const createApp = () => {
   const app = express();
 
+  app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+
   app.use(
     cors({
       origin: ["http://localhost:3000", process.env.FRONTEND_URL],
       credentials: true
     }),
   );
+
+  // Log every request: method, URL, status, response time. Quiet during tests.
+  if (process.env.NODE_ENV !== "test") {
+    app.use(morgan("dev"));
+  }
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
