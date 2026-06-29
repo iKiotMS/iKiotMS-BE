@@ -8,7 +8,7 @@ class CustomerService {
 
   async getCustomers(tenantId, { page, limit, search, branchId }) {
     const skip = (page - 1) * limit;
-    const filter = { tenantId };
+    const filter = { tenantId, isDeleted: { $ne: true } };
 
     if (search) {
       filter.$or = [
@@ -73,14 +73,14 @@ class CustomerService {
   }
 
   async getCustomerById(tenantId, customerId) {
-    const customer = await Customer.findOne({ _id: customerId, tenantId }).lean();
+    const customer = await Customer.findOne({ _id: customerId, tenantId, isDeleted: { $ne: true } }).lean();
     if (!customer) throw new Error("Customer not found");
     return customer;
   }
 
   async updateCustomer(tenantId, customerId, updateFields) {
     const customer = await Customer.findOneAndUpdate(
-      { _id: customerId, tenantId },
+      { _id: customerId, tenantId, isDeleted: { $ne: true } },
       { $set: updateFields },
       { new: true, runValidators: true },
     );
@@ -89,13 +89,20 @@ class CustomerService {
   }
 
   async deleteCustomer(tenantId, customerId) {
-    const customer = await Customer.findOneAndDelete({ _id: customerId, tenantId });
+    const customer = await Customer.findOneAndUpdate(
+      { _id: customerId, tenantId, isDeleted: { $ne: true } },
+      { $set: { isDeleted: true } },
+      { new: true }
+    );
     if (!customer) throw new Error("Customer not found");
     return customer;
   }
 
   async deleteManyCustomers(tenantId, customerIds) {
-    const result = await Customer.deleteMany({ _id: { $in: customerIds }, tenantId });
+    const result = await Customer.updateMany(
+      { _id: { $in: customerIds }, tenantId, isDeleted: { $ne: true } },
+      { $set: { isDeleted: true } }
+    );
     return result;
   }
 }

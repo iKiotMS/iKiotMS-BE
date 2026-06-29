@@ -31,6 +31,10 @@ const customerSchema = new mongoose.Schema(
     dob: {
       type: Date,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );
