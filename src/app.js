@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const http = require("http");
 const express = require("express");
 const path = require("path");
@@ -9,14 +11,12 @@ const { setupSwagger } = require("./config/setupSwagger");
 const { initSocket } = require("./services/socketService");
 const { startSubscriptionJob } = require("./jobs/subscriptionJob");
 
-require("dotenv").config();
-
 const createApp = () => {
   const app = express();
 
   app.use(
     cors({
-      origin: ["http://localhost:3000", "https://ikiot.vercel.app", process.env.FRONTEND_URL],
+      origin: ["http://localhost:3000", process.env.FRONTEND_URL],
       credentials: true
     }),
   );
