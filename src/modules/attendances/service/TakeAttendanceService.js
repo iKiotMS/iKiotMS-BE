@@ -5,7 +5,8 @@ const {
 const { Attendance } = require("../../../models");
 const WorkingSchedule = require("../../../models/WorkingSchedule");
 const StaffService = require("../../staff/service/StaffService");
-const { AttendanceDTO } = require("../dto/AttendanceDTO");
+const { CheckoutDTO } = require("../dto/CheckoutDTO");
+const { CheckinDTO } = require("../dto/CheckinDTO");
 
 class TakeAttendanceService {
   calculateDistanceInMeters = (lat1, lon1, lat2, lon2) => {
@@ -105,8 +106,22 @@ class TakeAttendanceService {
     };
   }
 
+  checkDate(actualCheckinAt, schedule) {
+
+    if (actualCheckinAt < schedule.startTime || actualCheckinAt > schedule.endTime) {
+      const error = new Error("Nhân viên chỉ được check-in trong khoảng thời gian của ca làm");
+      error.statusCode = 422;
+      error.errors = {
+        actualCheckinAt,
+        scheduleStartTime: schedule.startTime,
+        scheduleEndTime: schedule.endTime,
+      };
+      throw error;
+    }
+  }
+
   async checkIn(tenantId, userId, data) {
-    let newAttendanceRecord = new AttendanceDTO(tenantId, userId, data);
+    let newAttendanceRecord = new CheckinDTO(tenantId, userId, data);
     const validation = newAttendanceRecord.validate();
     if (!validation.isValid) {
       const error = new Error("Dữ liệu không hợp lệ");
@@ -156,7 +171,7 @@ class TakeAttendanceService {
       tenantId,
       userId,
       scheduleId: schedule._id,
-      actualCheckinAt: new Date(),
+      actualCheckinAt: newAttendanceRecord.actualCheckinAt,
       checkInLocation: {
         latitude: newAttendanceRecord.checkInLocation.latitude,
         longitude: newAttendanceRecord.checkInLocation.longitude,
@@ -176,6 +191,87 @@ class TakeAttendanceService {
       },
     };
   }
+
+  async checkOut(tenantId, userId, data) {
+    const checkoutRecord = new CheckoutDTO(tenantId, userId, data);
+    const validation = checkoutRecord.validate();
+    if (!validation.isValid) {
+      const error = new Error("Dữ liệu không hợp lệ");
+      error.statusCode = validation.statusCode;
+      error.errors = validation.errors;
+      throw error;
+    }
+
+    const attendance = await Attendance.findOne({
+      _id: checkoutRecord.attendanceId,
+      tenantId,
+      userId,
+    });
+
+    if (!attendance) {
+      const error = new Error("Attendance not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (attendance.status !== "CHECKED_IN") {
+      const error = new Error("Attendance is not in CHECKED_IN status");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const staffWorkplace = await StaffService.getStaffWorkplace({
+      tenantId,
+      staffId: userId,
+    });
+
+    const workplace = staffWorkplace?.workplace;
+    const geoResult = this.verifyStatus(workplace, {
+      latitude: checkoutRecord.checkOutLocation.latitude,
+      longitude: checkoutRecord.checkOutLocation.longitude,
+      accuracy: checkoutRecord.checkOutLocation.accuracy,
+    });
+
+    if (
+      attendance.actualCheckinAt &&
+      checkoutRecord.actualCheckoutAt < attendance.actualCheckinAt
+    ) {
+      const error = new Error("Thời gian check-out không thể trước check-in");
+      error.statusCode = 422;
+      throw error;
+    }
+
+    attendance.actualCheckoutAt = checkoutRecord.actualCheckoutAt;
+    attendance.workedMinutes = attendance.actualCheckinAt
+      ? Math.max(
+          0,
+          Math.floor(
+            (checkoutRecord.actualCheckoutAt - attendance.actualCheckinAt) /
+              60000,
+          ),
+        )
+      : 0;
+    attendance.checkOutLocation = {
+      latitude: checkoutRecord.checkOutLocation.latitude,
+      longitude: checkoutRecord.checkOutLocation.longitude,
+      accuracy: checkoutRecord.checkOutLocation.accuracy,
+      distance: geoResult.distance,
+      verificationStatus: geoResult.verificationStatus,
+    };
+    attendance.status = "CHECKED_OUT";
+
+    await attendance.save();
+
+    return {
+      success: true,
+      message: "Check-out thành công",
+      data: {
+        attendance,
+        geo: geoResult,
+      },
+    };
+  }
+
 }
 
 module.exports = { TakeAttendanceService };

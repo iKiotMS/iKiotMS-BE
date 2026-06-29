@@ -1,3 +1,5 @@
+const { Tenant } = require("../../models");
+
 class BaseService {
   constructor(model) {
     this.model = model;
@@ -20,6 +22,28 @@ class BaseService {
       recordPerPage: perPage,
       skip: (pageNumber - 1) * perPage,
     };
+  }
+
+  async validateTenantId(tenantId) {
+    if (!tenantId) {
+      throw new Error("Thiếu thông tin tenantId");
+    }
+    if (typeof tenantId !== "string") {
+      throw new Error("tenantId phải là một chuỗi");
+    }
+    const tenant = await Tenant.findById(tenantId);
+    if (!tenant) {
+      throw new Error("Tenant không tồn tại");
+    }
+  }
+
+  async validateUserId(userId) {
+    if (!userId) {
+      throw new Error("Thiếu thông tin userId");
+    }
+    if (typeof userId !== "string") {
+      throw new Error("userId phải là một chuỗi");
+    }
   }
 
   async hasPermissionToReadDataFromThisUser(user, readUserId) {
