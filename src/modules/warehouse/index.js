@@ -1,5 +1,7 @@
 const WarehouseController = require("./controller/WarehouseController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
+const { cacheResponse } = require("../../middlewares/cacheMiddleware");
+const { cacheKeys } = require("../../utils/cacheHelpers");
 
 /**
  * @openapi
@@ -120,18 +122,43 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Warehouse deleted
  */
 const registerWarehouseModule = (app) => {
-  const warehouseRoutes = [
-    { method: "post", path: "/warehouses", handler: WarehouseController.create.bind(WarehouseController), protected: true },
-    { method: "get", path: "/warehouses", handler: WarehouseController.getList.bind(WarehouseController), protected: true },
-    { method: "get", path: "/warehouses/:id", handler: WarehouseController.getById.bind(WarehouseController), protected: true },
-    { method: "patch", path: "/warehouses/:id", handler: WarehouseController.update.bind(WarehouseController), protected: true },
-    { method: "delete", path: "/warehouses/:id/delete", handler: WarehouseController.softDelete.bind(WarehouseController), protected: true },
-  ];
+  app.post(
+    "/warehouses",
+    verifyJwt,
+    WarehouseController.create.bind(WarehouseController),
+  );
 
-  warehouseRoutes.forEach((route) => {
-    const handlers = route.protected ? [verifyJwt, route.handler] : [route.handler];
-    app[route.method](route.path, ...handlers);
-  });
+  app.get(
+    "/warehouses",
+    verifyJwt,
+    cacheResponse(
+      (req) => cacheKeys.warehouseList(req.user.tenantId, req.query),
+      300,
+    ),
+    WarehouseController.getList.bind(WarehouseController),
+  );
+
+  app.get(
+    "/warehouses/:id",
+    verifyJwt,
+    cacheResponse(
+      (req) => cacheKeys.warehouseDetail(req.user.tenantId, req.params.id),
+      300,
+    ),
+    WarehouseController.getById.bind(WarehouseController),
+  );
+
+  app.patch(
+    "/warehouses/:id",
+    verifyJwt,
+    WarehouseController.update.bind(WarehouseController),
+  );
+
+  app.delete(
+    "/warehouses/:id/delete",
+    verifyJwt,
+    WarehouseController.softDelete.bind(WarehouseController),
+  );
 
   console.log("✓ Warehouse module registered");
 };

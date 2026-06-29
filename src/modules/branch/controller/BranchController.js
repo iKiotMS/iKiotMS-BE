@@ -2,6 +2,7 @@ const BranchService = require("../service/BranchService");
 const CreateBranchRequestDTO = require("../dto/CreateBranchRequestDTO");
 const UpdateBranchRequestDTO = require("../dto/UpdateBranchRequestDTO");
 const BranchQueryDTO = require("../dto/BranchQueryDTO");
+const { deleteByPattern, deleteKeys, cacheKeys } = require("../../../utils/cacheHelpers");
 
 class BranchController {
   async create(req, res) {
@@ -24,6 +25,8 @@ class BranchController {
         dto,
         subscription,
       );
+
+      deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
 
       res.status(201).json({
         success: true,
@@ -107,6 +110,9 @@ class BranchController {
 
       const branch = await BranchService.updateBranch(tenantId, id, dto);
 
+      deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
+      deleteKeys(cacheKeys.branchDetail(tenantId, id)).catch(() => {});
+
       res.status(200).json({
         success: true,
         message: "Branch updated successfully",
@@ -127,6 +133,9 @@ class BranchController {
       const { id } = req.params;
 
       const branch = await BranchService.softDeleteBranch(tenantId, id);
+
+      deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
+      deleteKeys(cacheKeys.branchDetail(tenantId, id)).catch(() => {});
 
       res.status(200).json({
         success: true,

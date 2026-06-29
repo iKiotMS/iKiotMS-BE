@@ -2,6 +2,7 @@ const WarehouseService = require("../service/WarehouseService");
 const CreateWarehouseRequestDTO = require("../dto/CreateWarehouseRequestDTO");
 const UpdateWarehouseRequestDTO = require("../dto/UpdateWarehouseRequestDTO");
 const WarehouseQueryDTO = require("../dto/WarehouseQueryDTO");
+const { deleteByPattern, deleteKeys, cacheKeys } = require("../../../utils/cacheHelpers");
 
 class WarehouseController {
   async create(req, res) {
@@ -19,6 +20,8 @@ class WarehouseController {
       }
 
       const warehouse = await WarehouseService.createWarehouse(tenantId, dto);
+
+      deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
 
       res.status(201).json({
         success: true,
@@ -102,6 +105,9 @@ class WarehouseController {
 
       const warehouse = await WarehouseService.updateWarehouse(tenantId, id, dto);
 
+      deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
+      deleteKeys(cacheKeys.warehouseDetail(tenantId, id)).catch(() => {});
+
       res.status(200).json({
         success: true,
         message: "Warehouse updated successfully",
@@ -122,6 +128,9 @@ class WarehouseController {
       const { id } = req.params;
 
       const warehouse = await WarehouseService.softDeleteWarehouse(tenantId, id);
+
+      deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
+      deleteKeys(cacheKeys.warehouseDetail(tenantId, id)).catch(() => {});
 
       res.status(200).json({
         success: true,
