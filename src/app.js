@@ -16,7 +16,8 @@ const createApp = () => {
 
   app.use(
     cors({
-      origin: ["http://localhost:3000", process.env.FRONTEND_URL],
+      origin: ["http://localhost:3000", "https://ikiot.vercel.app", process.env.FRONTEND_URL],
+      credentials: true
     }),
   );
 
