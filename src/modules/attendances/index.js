@@ -129,6 +129,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   get:
  *     tags: [Attendances]
  *     summary: Get attendance list
+ *     description: Returns attendance records filtered by query parameters. Branch and warehouse managers are automatically scoped to their assigned workplace.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -143,6 +144,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         schema: { type: string }
  *       - name: scheduleId
  *         in: query
+ *         description: Filter by working schedule ID
  *         schema: { type: string }
  *       - name: status
  *         in: query
@@ -198,11 +200,13 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   get:
  *     tags: [Attendances]
  *     summary: Get current user's attendance list
+ *     description: Returns attendance records for the authenticated user. The userId and workplace scope are derived from the JWT, not query parameters.
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - name: scheduleId
  *         in: query
+ *         description: Filter current user's records by working schedule ID
  *         schema: { type: string }
  *       - name: status
  *         in: query
@@ -275,7 +279,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Forbidden
+ *         description: Forbidden or attendance belongs to another user's scope
  *       404:
  *         description: Attendance not found
  *

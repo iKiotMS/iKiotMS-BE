@@ -2,6 +2,45 @@ const BaseService = require("../../../common/services/baseService");
 const { Attendance, User } = require("../../../models");
 
 class ManageAttendanceService extends BaseService {
+  sameId(left, right) {
+    return left?.toString() === right?.toString();
+  }
+
+  assertCanReadAttendance(user, attendance) {
+    const targetUser = attendance.userId;
+
+    if (this.sameId(targetUser?._id || targetUser, user.userId)) {
+      return;
+    }
+
+    if (user.role === "TENANT_OWNER") {
+      return;
+    }
+
+    if (
+      user.role === "BRANCH_MANAGER" &&
+      !targetUser?.warehouseId &&
+      this.sameId(targetUser?.branchId?._id || targetUser?.branchId, user.branchId)
+    ) {
+      return;
+    }
+
+    if (
+      user.role === "WAREHOUSE_MANAGER" &&
+      !targetUser?.branchId &&
+      this.sameId(
+        targetUser?.warehouseId?._id || targetUser?.warehouseId,
+        user.warehouseId,
+      )
+    ) {
+      return;
+    }
+
+    const error = new Error("You do not have permission to read this attendance");
+    error.statusCode = 403;
+    throw error;
+  }
+
   parseBoolean(value) {
     return value === true || value === "true";
   }
@@ -40,6 +79,8 @@ class ManageAttendanceService extends BaseService {
       lateOnly,
       overtimeOnly,
       missingCheckout,
+      branchId,
+      warehouseId,
     } = filter;
     const baseFilter = { tenantId: filter.tenantId };
 
@@ -170,7 +211,7 @@ class ManageAttendanceService extends BaseService {
     );
   }
 
-  async getAttendanceById(tenantId, attendanceId, accessFilter = {}) {
+  async getAttendanceById(tenantId, attendanceId, user) {
     await this.validateTenantId(tenantId);
     const detailFields = [
       "_id",
@@ -228,11 +269,10 @@ class ManageAttendanceService extends BaseService {
       },
     ];
 
-    const attendanceFilter = await this.buildFilter({
+    const attendanceFilter = {
       tenantId,
-      ...accessFilter,
-    });
-    attendanceFilter._id = attendanceId;
+      _id: attendanceId,
+    };
 
     const attendance = await Attendance.findOne(attendanceFilter)
       .populate(detailPopulateFields)
@@ -244,6 +284,8 @@ class ManageAttendanceService extends BaseService {
       error.statusCode = 404;
       throw error;
     }
+
+    this.assertCanReadAttendance(user, attendance);
 
     return attendance;
   }

@@ -10,6 +10,18 @@ const takeAttendanceService = new TakeAttendanceService();
 const manageAttendanceService = new ManageAttendanceService();
 
 class AttendanceController {
+  getUserWorkplaceFilter(user) {
+    if (user.branchId) {
+      return { branchId: user.branchId };
+    }
+
+    if (user.warehouseId) {
+      return { warehouseId: user.warehouseId };
+    }
+
+    return {};
+  }
+
   getReadAccessFilter(user) {
     if (user.role === "BRANCH_MANAGER") {
       if (!user.branchId) {
@@ -18,7 +30,7 @@ class AttendanceController {
         throw error;
       }
 
-      return { branchId: user.branchId };
+      return this.getUserWorkplaceFilter(user);
     }
 
     if (user.role === "WAREHOUSE_MANAGER") {
@@ -30,7 +42,7 @@ class AttendanceController {
         throw error;
       }
 
-      return { warehouseId: user.warehouseId };
+      return this.getUserWorkplaceFilter(user);
     }
 
     if (!hasPermission(user.role, "attendances", "read")) {
@@ -69,15 +81,34 @@ class AttendanceController {
     try {
       const tenantId = req.user.tenantId;
       const userId = req.user.userId;
+      const workplaceFilter = this.getUserWorkplaceFilter(req.user);
       const {
-        userId: _userId,
-        branchId: _branchId,
-        warehouseId: _warehouseId,
-        ...filters
+        scheduleId,
+        status,
+        checkinFrom,
+        checkinTo,
+        checkoutFrom,
+        checkoutTo,
+        lateOnly,
+        overtimeOnly,
+        missingCheckout,
+        page,
+        recordPerPage,
       } = req.query;
       const result = await manageAttendanceService.getAttendances(tenantId, {
-        ...filters,
+        scheduleId,
+        status,
+        checkinFrom,
+        checkinTo,
+        checkoutFrom,
+        checkoutTo,
+        lateOnly,
+        overtimeOnly,
+        missingCheckout,
+        page,
+        recordPerPage,
         userId,
+        ...workplaceFilter,
       });
 
       return res.status(200).json({
@@ -97,11 +128,10 @@ class AttendanceController {
     try {
       const tenantId = req.user.tenantId;
       const { attendanceId } = req.params;
-      const accessFilter = this.getReadAccessFilter(req.user);
       const attendance = await manageAttendanceService.getAttendanceById(
         tenantId,
         attendanceId,
-        accessFilter,
+        req.user,
       );
 
       return res.status(200).json({
