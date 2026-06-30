@@ -31,8 +31,13 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *             required: [userId, shiftTemplateId, workDate]
  *             properties:
  *               userId:
- *                 type: string
- *                 example: 665aaa1234567890abcdef12
+ *                 oneOf:
+ *                   - type: string
+ *                     example: 665aaa1234567890abcdef12
+ *                   - type: array
+ *                     items:
+ *                       type: string
+ *                     example: [665aaa1234567890abcdef12, 665ccc1234567890abcdef12]
  *               shiftTemplateId:
  *                 type: string
  *                 example: 665bbb1234567890abcdef12
@@ -149,12 +154,13 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   get:
  *     tags: [Schedule]
  *     summary: Get working schedules with attendance summary
- *     description: Returns working schedules with a lightweight attendance field for schedule-first check-in screens. If no attendance exists, attendance.status is NOT_CHECKED_IN.
+ *     description: Returns working schedules with each assigned user's lightweight attendance field. If no attendance exists for a user, attendance.status is NOT_CHECKED_IN.
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: userId
+ *         description: Filter schedules that include this assigned user.
  *         schema:
  *           type: string
  *       - in: query
@@ -180,7 +186,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   get:
  *     tags: [Schedule]
  *     summary: Get working schedule by id with attendance detail
- *     description: Returns one working schedule with its attendance detail when available. If no attendance exists, attendance.status is NOT_CHECKED_IN.
+ *     description: Returns one working schedule with each assigned user's attendance detail when available. If no attendance exists for a user, attendance.status is NOT_CHECKED_IN.
  *     security:
  *       - bearerAuth: []
  *     parameters:

@@ -13,9 +13,10 @@ class StaffService extends BaseService {
     super(User);
   }
 
-  getStaffFilter(tenantId, extra = {}) {
+  getStaffFilter(tenantId, userId, extra = {}) {
     return {
       tenantId,
+      _id: { $ne: userId },
       role: { $in: STAFF_ROLES },
       status: { $ne: "DELETED" },
       ...extra,
@@ -239,11 +240,11 @@ class StaffService extends BaseService {
     return data;
   }
 
-  async getStaffWorkplace({ tenantId, staffId }) {
+  async getStaffWorkplace({ tenantId, userId, staffId }) {
     this.checktenantId(tenantId);
 
     const staff = await User.findOne(
-      this.getStaffFilter(tenantId, { _id: staffId }),
+      this.getStaffFilter(tenantId, userId, { _id: staffId }),
     )
       .select("branchId warehouseId")
       .populate("branchId")
@@ -361,7 +362,7 @@ class StaffService extends BaseService {
     staffIdToExclude,
   }) {
     if (phoneNumber) {
-      const phoneFilter = {phoneNumber};
+      const phoneFilter = { phoneNumber };
 
       if (staffIdToExclude) {
         phoneFilter._id = { $ne: staffIdToExclude };
@@ -443,6 +444,7 @@ class StaffService extends BaseService {
 
   async getStaffList({
     tenantId,
+    userId,
     requesterId,
     requesterRole,
     requesterBranchId,
@@ -472,7 +474,7 @@ class StaffService extends BaseService {
     const roleFilter = normalizedRole ? { role: normalizedRole } : {};
     const statusFilter = this.buildStatusFilter(status);
     const keywordFilter = this.buildKeywordFilter(keyword);
-    const staffFilter = this.getStaffFilter(tenantId, {
+    const staffFilter = this.getStaffFilter(tenantId, userId, {
       ...accessFilter,
       ...roleFilter,
       ...statusFilter,
@@ -491,30 +493,33 @@ class StaffService extends BaseService {
     ]);
 
     return {
-      data,
       pagination: {
         total,
         page: pagination.page,
         recordPerPage: pagination.recordPerPage,
         totalPages: Math.ceil(total / pagination.recordPerPage),
       },
+      data,
     };
   }
 
-  async getStaffById({ tenantId, staffId }) {
+  async getStaffById({ tenantId, userId, staffId }) {
     this.checktenantId(tenantId);
-    return await this.findOne(this.getStaffFilter(tenantId, { _id: staffId }), {
-      select: "-password",
-      populate: ["branchId", "warehouseId"],
-    });
+    return await this.findOne(
+      this.getStaffFilter(tenantId, userId, { _id: staffId }),
+      {
+        select: "-password",
+        populate: ["branchId", "warehouseId"],
+      },
+    );
   }
 
-  async updateStaff({ tenantId, staffId, data, userRole }) {
+  async updateStaff({ tenantId, userId, staffId, data, userRole }) {
     this.checktenantId(tenantId);
     data = this.normalizeWorkplaceUpdateData(data || {});
 
     const currentStaff = await User.findOne(
-      this.getStaffFilter(tenantId, { _id: staffId }),
+      this.getStaffFilter(tenantId, userId, { _id: staffId }),
     );
 
     if (!currentStaff) {
@@ -565,7 +570,7 @@ class StaffService extends BaseService {
     });
 
     const updatedStaff = await User.findOneAndUpdate(
-      this.getStaffFilter(tenantId, { _id: staffId }),
+      this.getStaffFilter(tenantId, userId, { _id: staffId }),
       updateStaffDTO(data),
       { new: true, runValidators: true },
     )
@@ -585,14 +590,14 @@ class StaffService extends BaseService {
     };
   }
 
-  async createStaffAccount({ tenantId, staffId, data }) {
+  async createStaffAccount({ tenantId, userId, staffId, data }) {
     this.checktenantId(tenantId);
     await this.checkStaffId(staffId, tenantId);
 
     const passwordCombo = this.validatePasswordCombo(data);
 
     const staff = await User.findOne(
-      this.getStaffFilter(tenantId, { _id: staffId }),
+      this.getStaffFilter(tenantId, userId, { _id: staffId }),
     );
 
     if (!staff) {
@@ -615,14 +620,14 @@ class StaffService extends BaseService {
     };
   }
 
-  async updateStaffAccountPassword({ tenantId, staffId, data }) {
+  async updateStaffAccountPassword({ tenantId, userId, staffId, data }) {
     this.checktenantId(tenantId);
     await this.checkStaffId(staffId, tenantId);
 
     const passwordCombo = this.validatePasswordCombo(data);
 
     const staff = await User.findOne(
-      this.getStaffFilter(tenantId, { _id: staffId }),
+      this.getStaffFilter(tenantId, userId, { _id: staffId }),
     );
 
     if (!staff) {
@@ -644,12 +649,12 @@ class StaffService extends BaseService {
     };
   }
 
-  async deactivateStaffAccount({ tenantId, staffId }) {
+  async deactivateStaffAccount({ tenantId, userId, staffId }) {
     this.checktenantId(tenantId);
     await this.checkStaffId(staffId, tenantId);
 
     const staff = await User.findOne(
-      this.getStaffFilter(tenantId, { _id: staffId }),
+      this.getStaffFilter(tenantId, userId, { _id: staffId }),
     );
 
     if (!staff) {
@@ -676,7 +681,7 @@ class StaffService extends BaseService {
     await this.checkStaffId(staffId, tenantId);
 
     const staff = await User.findOne(
-      this.getStaffFilter(tenantId, { _id: staffId }),
+      this.getStaffFilter(tenantId, userId, { _id: staffId }),
     );
 
     if (!staff) {

@@ -25,6 +25,7 @@ class WorkingScheduleController {
       return res.status(error.statusCode || 400).json({
         success: false,
         message: error.message,
+        duplicatedWorkingSchedule: error.duplicatedWorkingSchedule,
       });
     }
   }
@@ -48,6 +49,7 @@ class WorkingScheduleController {
       return res.status(error.statusCode || 400).json({
         success: false,
         message: error.message,
+        duplicatedWorkingSchedule: error.duplicatedWorkingSchedule,
       });
     }
   }
@@ -77,6 +79,7 @@ class WorkingScheduleController {
       return res.status(error.statusCode || 400).json({
         success: false,
         message: error.message,
+        duplicatedWorkingSchedule: error.duplicatedWorkingSchedule,
       });
     }
   }
@@ -100,6 +103,7 @@ class WorkingScheduleController {
       return res.status(error.statusCode || 400).json({
         success: false,
         message: error.message,
+        duplicatedWorkingSchedule: error.duplicatedWorkingSchedule,
       });
     }
   }
@@ -119,6 +123,7 @@ class WorkingScheduleController {
       return res.status(error.statusCode || 400).json({
         success: false,
         message: error.message,
+        duplicatedWorkingSchedule: error.duplicatedWorkingSchedule,
       });
     }
   }

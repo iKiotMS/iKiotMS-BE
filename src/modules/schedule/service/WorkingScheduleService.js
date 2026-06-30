@@ -46,7 +46,7 @@ class WorkingScheduleService {
 
   // Kiểm tra tất cả userId được phân ca có thuộc tenant và là staff hợp lệ.
   async validateTenantStaff(tenantId, userIds, userRole) {
-    const uniqueUserIds = [...new Set(userIds.map(String))];
+    const uniqueUserIds = [...new Set(userIds.flat().map(String))];
 
     const users = await User.find({
       _id: { $in: uniqueUserIds },
@@ -70,6 +70,11 @@ class WorkingScheduleService {
         throw error;
       }
     });
+  }
+
+  normalizeScheduleUserIds(userId) {
+    const userIds = Array.isArray(userId) ? userId : [userId];
+    return [...new Set(userIds.filter(Boolean).map(String))];
   }
 
   // Lấy các ca mẫu theo tenant, sau đó gom lại theo id để tra cứu nhanh.
@@ -103,47 +108,75 @@ class WorkingScheduleService {
   }
 
   async checkScheduleOverlaps(tenantId, schedules, ScheduleIdToExclude = null) {
-    for (let i = 0; i < schedules.length; i++) {
-      const current = schedules[i];
+    const expandedSchedules = [];
 
-      for (let j = i + 1; j < schedules.length; j++) {
-        const next = schedules[j];
+    schedules.forEach((schedule) => {
+      const userIds = this.normalizeScheduleUserIds(schedule.userId);
+
+      userIds.forEach((userId) => {
+        expandedSchedules.push({
+          ...schedule,
+          userId,
+          scheduleIdToExclude:
+            schedule.scheduleIdToExclude || ScheduleIdToExclude,
+        });
+      });
+    });
+
+    for (let i = 0; i < expandedSchedules.length; i++) {
+      const current = expandedSchedules[i];
+
+      for (let j = i + 1; j < expandedSchedules.length; j++) {
+        const next = expandedSchedules[j];
 
         const sameUser = String(current.userId) === String(next.userId);
         const isOverlapping =
           current.startAt < next.endAt && current.endAt > next.startAt;
+        const sameScheduleTime =
+          String(current.shiftTemplateId) === String(next.shiftTemplateId) &&
+          Number(current.workDate) === Number(next.workDate) &&
+          Number(current.startAt) === Number(next.startAt) &&
+          Number(current.endAt) === Number(next.endAt);
 
-        if (sameUser && isOverlapping) {
+        if (sameUser && isOverlapping && !sameScheduleTime) {
           const error = new Error(
             `Lịch làm việc bị trùng ca mẫu cho nhân viên ${current.userId} vào ngày ${this.getLocalDateText(current.workDate)}`,
           );
           error.statusCode = 400;
+          error.duplicatedWorkingSchedule = {
+            current,
+            duplicated: next,
+          };
           throw error;
         }
       }
+    }
 
-      for (const schedule of schedules) {
-        const filter = {
-          tenantId,
-          userId: schedule.userId,
-          status: { $nin: ["CANCELLED", "DELETED"] },
-          startAt: { $lt: schedule.endAt },
-          endAt: { $gt: schedule.startAt },
-        };
+    for (const schedule of expandedSchedules) {
+      const filter = {
+        tenantId,
+        userId: schedule.userId,
+        status: { $nin: ["CANCELLED", "DELETED"] },
+        startAt: { $lt: schedule.endAt },
+        endAt: { $gt: schedule.startAt },
+      };
 
-        if (ScheduleIdToExclude) {
-          filter._id = { $ne: ScheduleIdToExclude };
-        }
+      if (schedule.scheduleIdToExclude) {
+        filter._id = { $ne: schedule.scheduleIdToExclude };
+      }
 
-        const existingSchedule = await WorkingSchedule.findOne(filter);
+      const existingSchedule = await WorkingSchedule.findOne(filter)
+        .populate("userId", "phoneNumber profile role")
+        .populate("shiftTemplateId")
+        .lean();
 
-        if (existingSchedule) {
-          const error = new Error(
-            "Nhân viên đã có lịch làm việc bị trùng thời gian",
-          );
-          error.statusCode = 400;
-          throw error;
-        }
+      if (existingSchedule) {
+        const error = new Error(
+          "Nhân viên đã có lịch làm việc bị trùng thời gian",
+        );
+        error.statusCode = 400;
+        error.duplicatedWorkingSchedule = existingSchedule;
+        throw error;
       }
     }
   }
@@ -201,29 +234,186 @@ class WorkingScheduleService {
     };
   }
 
-  async attachAttendanceSummaries(tenantId, schedules) {
+  getScheduleUsers(schedule) {
+    if (Array.isArray(schedule.userId)) {
+      return schedule.userId;
+    }
+
+    if (schedule.userId) {
+      return [schedule.userId];
+    }
+
+    return [];
+  }
+
+  getUserIdText(user) {
+    return String(user?._id || user);
+  }
+
+  getAttendanceKey(scheduleId, userId) {
+    return `${String(scheduleId)}:${String(userId)}`;
+  }
+
+  attachAttendancesToUsers(schedules, attendanceByScheduleAndUser, detail) {
+    return schedules.map((schedule) => {
+      const users = this.getScheduleUsers(schedule);
+      const usersWithAttendance = users.map((user) => {
+        const userId = this.getUserIdText(user);
+        const attendance =
+          attendanceByScheduleAndUser[
+            this.getAttendanceKey(schedule._id, userId)
+          ];
+
+        if (typeof user === "object" && user !== null) {
+          return {
+            ...user,
+            attendance: detail
+              ? this.buildAttendanceDetail(attendance)
+              : this.buildAttendanceSummary(attendance),
+          };
+        }
+
+        return {
+          _id: user,
+          attendance: detail
+            ? this.buildAttendanceDetail(attendance)
+            : this.buildAttendanceSummary(attendance),
+        };
+      });
+
+      return {
+        ...schedule,
+        userId: Array.isArray(schedule.userId)
+          ? usersWithAttendance
+          : usersWithAttendance[0] || null,
+      };
+    });
+  }
+
+  async attachAttendanceSummaries(tenantId, schedules, detail = false) {
     const scheduleIds = schedules.map((schedule) => schedule._id);
+    const selectFields = detail
+      ? "scheduleId userId status actualCheckinAt actualCheckoutAt checkInLocation checkOutLocation workedMinutes overtimeMinute lateMinutes"
+      : "scheduleId userId status actualCheckinAt actualCheckoutAt";
 
     const attendances = await Attendance.find({
       tenantId,
       scheduleId: { $in: scheduleIds },
     })
-      .select("scheduleId status actualCheckinAt actualCheckoutAt")
+      .select(selectFields)
       .lean();
 
-    const attendanceByScheduleId = {};
+    const attendanceByScheduleAndUser = {};
     attendances.forEach((attendance) => {
-      attendanceByScheduleId[String(attendance.scheduleId)] = attendance;
+      attendanceByScheduleAndUser[
+        this.getAttendanceKey(attendance.scheduleId, attendance.userId)
+      ] = attendance;
     });
 
-    return schedules.map((schedule) => {
-      const attendance = attendanceByScheduleId[String(schedule._id)];
+    return this.attachAttendancesToUsers(
+      schedules,
+      attendanceByScheduleAndUser,
+      detail,
+    );
+  }
 
-      return {
-        ...schedule,
-        attendance: this.buildAttendanceSummary(attendance),
-      };
-    });
+  async fetchWorkingSchedules({
+    tenantId,
+    query,
+    selectedFields,
+    populatedFields,
+    page,
+    recordPerPage,
+    detail = false,
+  }) {
+    let filter = { tenantId, status: { $ne: "DELETED" } };
+    const pagination = this.getPagination({ page, recordPerPage });
+
+    if (query._id) filter._id = query._id;
+
+    if (query.userId) filter.userId = query.userId;
+
+    if (query.status) {
+      const status = String(query.status).trim().toUpperCase();
+      const allowedStatuses = ["SCHEDULED", "COMPLETED", "CANCELLED"];
+
+      if (!allowedStatuses.includes(status)) {
+        const error = new Error("Trạng thái lịch làm việc không hợp lệ");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      filter.status = status;
+    }
+
+    if (query.startDate || query.endDate) {
+      filter.workDate = {};
+
+      if (query.startDate && Number.isNaN(new Date(query.startDate).getTime())) {
+        const error = new Error(
+          "Ngày bắt đầu không hợp lệ, hãy nhập(YYYY-MM-DD)",
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (query.endDate && Number.isNaN(new Date(query.endDate).getTime())) {
+        const error = new Error(
+          "Ngày kết thúc không hợp lệ, hãy nhập(YYYY-MM-DD)",
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (
+        query.startDate &&
+        query.endDate &&
+        new Date(query.startDate) > new Date(query.endDate)
+      ) {
+        const error = new Error(
+          "Ngày bắt đầu không được lớn hơn ngày kết thúc",
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (query.startDate) {
+        filter.workDate.$gte = this.buildWorkDate(query.startDate);
+      }
+
+      if (query.endDate) {
+        let endDateExclusive = this.buildWorkDate(query.endDate);
+        endDateExclusive.setDate(endDateExclusive.getDate() + 1);
+        filter.workDate.$lt = endDateExclusive;
+      }
+    }
+
+    const [workingSchedules, total] = await Promise.all([
+      WorkingSchedule.find(filter)
+        .populate(populatedFields)
+        .select(selectedFields)
+        .sort({ workDate: 1, startAt: 1 })
+        .skip(pagination.skip)
+        .limit(pagination.recordPerPage)
+        .lean(),
+      WorkingSchedule.countDocuments(filter),
+    ]);
+
+    const data = await this.attachAttendanceSummaries(
+      tenantId,
+      workingSchedules,
+      detail,
+    );
+
+    return {
+      workingSchedules: data,
+      pagination: {
+        total,
+        page: pagination.page,
+        recordPerPage: pagination.recordPerPage,
+        totalPage: Math.ceil(total / pagination.recordPerPage),
+      },
+    };
   }
 
   //==================================================================================
@@ -241,8 +431,8 @@ class WorkingScheduleService {
       throw error;
     }
 
-    const userIds = dto.schedules.map((schedule) => {
-      return schedule.userId;
+    const userIds = dto.schedules.flatMap((schedule) => {
+      return this.normalizeScheduleUserIds(schedule.userId);
     });
 
     await this.validateTenantStaff(tenantId, userIds, userRole);
@@ -264,11 +454,13 @@ class WorkingScheduleService {
         schedule.workDate,
         shiftTemplate,
       );
+      const scheduleUserIds = this.normalizeScheduleUserIds(schedule.userId);
 
       return {
         tenantId,
         createdBy,
-        userId: schedule.userId,
+        managedBy: createdBy,
+        userId: scheduleUserIds,
         shiftTemplateId: schedule.shiftTemplateId,
         workDate,
         startAt,
@@ -277,9 +469,45 @@ class WorkingScheduleService {
       };
     });
 
-    await this.checkScheduleOverlaps(tenantId, schedules);
+    const schedulesToSave = [];
 
-    const createdSchedules = await WorkingSchedule.insertMany(schedules);
+    for (const schedule of schedules) {
+      const existingSchedule = await WorkingSchedule.findOne({
+        tenantId,
+        shiftTemplateId: schedule.shiftTemplateId,
+        workDate: schedule.workDate,
+        startAt: schedule.startAt,
+        endAt: schedule.endAt,
+        status: { $nin: ["CANCELLED", "DELETED"] },
+      });
+
+      await this.checkScheduleOverlaps(tenantId, [
+        {
+          ...schedule,
+          scheduleIdToExclude: existingSchedule?._id,
+        },
+      ]);
+
+      if (existingSchedule) {
+        const updatedSchedule = await WorkingSchedule.findOneAndUpdate(
+          { _id: existingSchedule._id, tenantId },
+          {
+            $addToSet: {
+              userId: { $each: schedule.userId },
+            },
+            $set: {
+              managedBy: createdBy,
+            },
+          },
+          { new: true, runValidators: true },
+        );
+
+        schedulesToSave.push(updatedSchedule);
+      } else {
+        const createdSchedule = await WorkingSchedule.create(schedule);
+        schedulesToSave.push(createdSchedule);
+      }
+    }
 
     // Data mẫu trả về:
     // {
@@ -299,7 +527,7 @@ class WorkingScheduleService {
     // }
     return {
       message: "Phân ca thành công",
-      data: createdSchedules,
+      data: schedulesToSave,
     };
   }
 
@@ -314,76 +542,25 @@ class WorkingScheduleService {
       throw error;
     }
 
-    const pagination = this.getPagination({ page, recordPerPage });
-    const filter = {
+    const selectedFields = "userId shiftTemplateId workDate startAt endAt status managedBy";
+    const populatedFields = [
+      {
+        path: "userId",
+        select: "phoneNumber profile role",
+      },
+      {
+        path: "shiftTemplateId",
+      },
+    ];
+
+    const result = await this.fetchWorkingSchedules({
       tenantId,
-      status: { $ne: "DELETED" },
-    };
-
-    if (userId) filter.userId = userId;
-    if (status) {
-      const normalizedStatus = String(status).trim().toUpperCase();
-      const allowedStatuses = ["SCHEDULED", "COMPLETED", "CANCELLED"];
-
-      if (!allowedStatuses.includes(normalizedStatus)) {
-        const error = new Error("Trạng thái lịch làm việc không hợp lệ");
-        error.statusCode = 400;
-        throw error;
-      }
-
-      filter.status = normalizedStatus;
-    }
-
-    if (startDate || endDate) {
-      filter.workDate = {};
-
-      if (startDate && Number.isNaN(new Date(startDate).getTime())) {
-        const error = new Error(
-          "Ngày bắt đầu không hợp lệ, hãy nhập(YYYY-MM-DD)",
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-
-      if (endDate && Number.isNaN(new Date(endDate).getTime())) {
-        const error = new Error(
-          "Ngày kết thúc không hợp lệ, hãy nhập(YYYY-MM-DD)",
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-
-      if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-        const error = new Error(
-          "Ngày bắt đầu không được lớn hơn ngày kết thúc",
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-
-      if (startDate) {
-        filter.workDate.$gte = this.buildWorkDate(startDate); //2026-06-20T00:00:00.000Z
-      }
-
-      if (endDate) {
-        let endDateExclusive = this.buildWorkDate(endDate); // increment date by 1 day since creating 2026-06-20T23:59:00.000Z is annoying
-        endDateExclusive.setDate(endDateExclusive.getDate() + 1);
-        filter.workDate.$lt = endDateExclusive;
-      }
-    }
-    //2026-06-21T00:00:00.000Z
-    const data = await WorkingSchedule.find(filter)
-      .populate("userId", "phoneNumber profile role")
-      .populate("shiftTemplateId")
-      .sort({ workDate: 1, startAt: 1 })
-      .skip(pagination.skip)
-      .limit(pagination.recordPerPage)
-      .lean();
-    const total = await WorkingSchedule.countDocuments(filter);
-    const dataWithAttendance = await this.attachAttendanceSummaries(
-      tenantId,
-      data,
-    );
+      query: { userId, startDate, endDate, status },
+      selectedFields,
+      populatedFields,
+      page,
+      recordPerPage,
+    });
 
     // Data mẫu trả về:
     // {
@@ -391,26 +568,35 @@ class WorkingScheduleService {
     //   pagination: { total: 20, page: 1, recordPerPage: 10, totalPages: 2 }
     // }
     return {
-      data: dataWithAttendance,
-      pagination: {
-        total,
-        page: pagination.page,
-        recordPerPage: pagination.recordPerPage,
-        totalPages: Math.ceil(total / pagination.recordPerPage),
-      },
+      data: result.workingSchedules,
+      pagination: result.pagination,
     };
   }
 
   // Lấy chi tiết một lịch làm việc trong tenant hiện tại.
   async getWorkingScheduleById(tenantId, scheduleId) {
-    const schedule = await WorkingSchedule.findOne({
-      _id: scheduleId,
+    const selectedFields = "-__v";
+    const populatedFields = [
+      {
+        path: "userId",
+        select: "phoneNumber profile role",
+      },
+      {
+        path: "shiftTemplateId",
+      },
+    ];
+
+    const result = await this.fetchWorkingSchedules({
       tenantId,
-      status: { $ne: "DELETED" },
-    })
-      .populate("userId", "phoneNumber profile role")
-      .populate("shiftTemplateId")
-      .lean();
+      query: { _id: scheduleId },
+      selectedFields,
+      populatedFields,
+      page: 1,
+      recordPerPage: 1,
+      detail: true,
+    });
+
+    const schedule = result.workingSchedules[0];
 
     if (!schedule) {
       const error = new Error("Không tìm thấy lịch làm việc");
@@ -425,15 +611,7 @@ class WorkingScheduleService {
     //   shiftTemplateId: { name: "Ca hành chính", startTime: "08:00", endTime: "17:00" },
     //   status: "SCHEDULED"
     // }
-    const attendance = await Attendance.findOne({
-      tenantId,
-      scheduleId: schedule._id,
-    }).lean();
-
-    return {
-      ...schedule,
-      attendance: this.buildAttendanceDetail(attendance),
-    };
+    return schedule;
   }
 
   // Cập nhật lịch làm việc; nếu đổi ngày hoặc ShiftTemplate thì tính lại startAt/endAt.

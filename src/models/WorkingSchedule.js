@@ -7,10 +7,14 @@ const workingScheduleSchema = new mongoose.Schema(
       ref: "Tenant",
       required: [true, "Tenant is required"],
     },
-    userId: {
+    userId: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: [true, "User is required"],
+    }],
+    managedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
     shiftTemplateId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -34,6 +38,7 @@ const workingScheduleSchema = new mongoose.Schema(
       enum: ["SCHEDULED", "COMPLETED", "CANCELLED", "DELETED"],
       default: "SCHEDULED",
     },
+
   },
   { timestamps: true },
 );
