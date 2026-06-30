@@ -7,9 +7,9 @@ const { validateRoleHierarchy } = require("../../../utils/permissionChecker");
 const { BulkWorkingScheduleDTO } = require("../dto/WorkingScheduleDTO");
 
 class WorkingScheduleService {
-  //==================================================================================
-  //===========================    Helper Functions    ===============================
-  //==================================================================================
+  //===============================================================================================================================================================================
+  //===================================================================    Helper Functions    ====================================================================================
+  //===============================================================================================================================================================================
 
   // Chuẩn hóa page/recordPerPage và tính số record cần bỏ qua.
   getPagination({ page = 1, recordPerPage = 10 } = {}) {
@@ -349,7 +349,10 @@ class WorkingScheduleService {
     if (query.startDate || query.endDate) {
       filter.workDate = {};
 
-      if (query.startDate && Number.isNaN(new Date(query.startDate).getTime())) {
+      if (
+        query.startDate &&
+        Number.isNaN(new Date(query.startDate).getTime())
+      ) {
         const error = new Error(
           "Ngày bắt đầu không hợp lệ, hãy nhập(YYYY-MM-DD)",
         );
@@ -416,9 +419,9 @@ class WorkingScheduleService {
     };
   }
 
-  //==================================================================================
-  //===========================    Main Services    ==================================
-  //==================================================================================
+  //===============================================================================================================================================================================
+  //===============================================================    Main Services    ===========================================================================================
+  //===============================================================================================================================================================================
 
   // Nhận danh sách phân ca từ FE, validate, tính startAt/endAt rồi insert nhiều record.
   async createBulkWorkingSchedules(tenantId, createdBy, data, userRole) {
@@ -457,6 +460,19 @@ class WorkingScheduleService {
       const scheduleUserIds = this.normalizeScheduleUserIds(schedule.userId);
 
       return {
+        /*
+        {
+          tenantId: "tenant1",
+          createdBy: "manager1",
+          managedBy: "manager1",
+          userId: ["staffA", "staffB"],
+          shiftTemplateId: "morningShift",
+          workDate: "2026-07-01",
+          startAt: "2026-07-01T08:00:00.000Z",
+          endAt: "2026-07-01T12:00:00.000Z",
+          status: "SCHEDULED"
+        }
+        */
         tenantId,
         createdBy,
         managedBy: createdBy,
@@ -472,6 +488,8 @@ class WorkingScheduleService {
     const schedulesToSave = [];
 
     for (const schedule of schedules) {
+
+      //check for already existing schedule with same shiftTemplateId, workDate, startAt, endAt and status not in ["CANCELLED", "DELETED"]
       const existingSchedule = await WorkingSchedule.findOne({
         tenantId,
         shiftTemplateId: schedule.shiftTemplateId,
@@ -509,22 +527,6 @@ class WorkingScheduleService {
       }
     }
 
-    // Data mẫu trả về:
-    // {
-    //   message: "Phân ca thành công",
-    //   data: [
-    //     {
-    //       _id: "...",
-    //       tenantId: "...",
-    //       userId: "...",
-    //       shiftTemplateId: "...",
-    //       workDate: "2026-06-19T17:00:00.000Z",
-    //       startAt: "2026-06-20T01:00:00.000Z",
-    //       endAt: "2026-06-20T10:00:00.000Z",
-    //       status: "SCHEDULED"
-    //     }
-    //   ]
-    // }
     return {
       message: "Phân ca thành công",
       data: schedulesToSave,
@@ -542,7 +544,8 @@ class WorkingScheduleService {
       throw error;
     }
 
-    const selectedFields = "userId shiftTemplateId workDate startAt endAt status managedBy";
+    const selectedFields =
+      "userId shiftTemplateId workDate startAt endAt status managedBy";
     const populatedFields = [
       {
         path: "userId",
@@ -570,6 +573,53 @@ class WorkingScheduleService {
     return {
       data: result.workingSchedules,
       pagination: result.pagination,
+    };
+  }
+
+  async getCurrentWorkingSchedule(tenantId, userId) {
+    if (!tenantId) {
+      const error = new Error("Thiếu thông tin tenant");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (!userId) {
+      const error = new Error("Thiếu thông tin nhân viên");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const now = new Date();
+
+    const schedule = await WorkingSchedule.findOne({
+      tenantId,
+      userId,
+      status: "SCHEDULED",
+      startAt: { $lte: now },
+      endAt: { $gt: now },
+    })
+      .populate("userId", "phoneNumber profile role")
+      .populate("shiftTemplateId")
+      .select("-__v")
+      .lean();
+
+    if (!schedule) {
+      return {
+        data: null,
+        message: "Không có ca làm việc hiện tại",
+        serverTime: now,
+      };
+    }
+
+    const [scheduleWithAttendance] = await this.attachAttendanceSummaries(
+      tenantId,
+      [schedule],
+      true,
+    );
+
+    return {
+      data: zscheduleWithAttendance,
+      serverTime: now,
     };
   }
 

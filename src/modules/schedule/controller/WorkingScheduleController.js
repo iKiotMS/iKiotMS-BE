@@ -54,6 +54,26 @@ class WorkingScheduleController {
     }
   }
 
+  async getCurrentWorkingSchedule(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const userId = req.user.userId;
+
+      const result = await WorkingScheduleService.getCurrentWorkingSchedule(
+        tenantId,
+        userId,
+      );
+
+      return res.status(200).json(result);
+    } catch (error) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+        duplicatedWorkingSchedule: error.duplicatedWorkingSchedule,
+      });
+    }
+  }
+
   async getWorkingScheduleById(req, res) {
     try {
       const tenantId = req.user.tenantId;

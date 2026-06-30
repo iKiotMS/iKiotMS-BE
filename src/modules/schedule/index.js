@@ -182,6 +182,19 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       200:
  *         description: Working schedule list with attendance summary
  *
+ * /working-schedules/current:
+ *   get:
+ *     tags: [Schedule]
+ *     summary: Get current user's active working schedule
+ *     description: Returns the authenticated user's current scheduled shift by comparing server time against startAt and endAt. Returns data null when no current shift exists.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Current working schedule returned
+ *       401:
+ *         description: Unauthorized
+ *
  * /working-schedules/{scheduleId}:
  *   get:
  *     tags: [Schedule]
@@ -298,6 +311,15 @@ function registerScheduleModule(app) {
     verifyJwt,
     authorize("schedules", ["read", "read_own"]),
     WorkingScheduleController.getWorkingScheduleList.bind(
+      WorkingScheduleController,
+    ),
+  );
+
+  app.get(
+    "/working-schedules/current",
+    verifyJwt,
+    authorize("schedules", ["read", "read_own"]),
+    WorkingScheduleController.getCurrentWorkingSchedule.bind(
       WorkingScheduleController,
     ),
   );
