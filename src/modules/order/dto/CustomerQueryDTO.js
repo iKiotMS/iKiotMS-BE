@@ -3,6 +3,7 @@ class CustomerQueryDTO {
     this.page = parseInt(query.page) || 1;
     this.limit = Math.min(parseInt(query.limit) || 20, 100);
     this.search = query.search?.trim();
+    this.branchId = query.branchId?.trim();
   }
 
   validate() {

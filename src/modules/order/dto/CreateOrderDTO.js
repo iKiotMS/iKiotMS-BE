@@ -14,7 +14,6 @@ class CreateOrderDTO {
   validate() {
     const errors = {};
 
-    if (!this.customerId) errors.customerId = "Customer is required";
     if (!this.branchId) errors.branchId = "Branch is required";
 
     if (!this.paymentMethod) {

@@ -1,9 +1,12 @@
 const CategoryService = require("../service/CategoryService");
+const { deleteByPattern, deleteKeys, cacheKeys } = require("../../../utils/cacheHelpers");
 
 class CategoryController {
   async create(req, res) {
     try {
       const category = await CategoryService.create(req.body);
+      deleteByPattern("categories:list:*").catch(() => {});
+      deleteKeys(cacheKeys.categoryTree()).catch(() => {});
       res.status(201).json({
         success: true,
         message: "Category created successfully",
@@ -65,6 +68,11 @@ class CategoryController {
   async update(req, res) {
     try {
       const category = await CategoryService.update(req.params.id, req.body);
+      deleteByPattern("categories:list:*").catch(() => {});
+      deleteKeys(
+        cacheKeys.categoryTree(),
+        cacheKeys.categoryDetail(req.params.id),
+      ).catch(() => {});
       res.status(200).json({
         success: true,
         message: "Category updated successfully",
@@ -81,6 +89,11 @@ class CategoryController {
   async delete(req, res) {
     try {
       await CategoryService.delete(req.params.id);
+      deleteByPattern("categories:list:*").catch(() => {});
+      deleteKeys(
+        cacheKeys.categoryTree(),
+        cacheKeys.categoryDetail(req.params.id),
+      ).catch(() => {});
       res.status(200).json({
         success: true,
         message: "Category deleted successfully",

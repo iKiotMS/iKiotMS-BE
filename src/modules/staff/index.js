@@ -1,9 +1,9 @@
 const StaffController = require("./controller/StaffController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
 const { authorize } = require("../../middlewares/authorizationMiddleware");
-const {
-  requireActiveSubscription,
-} = require("../../middlewares/subscriptionMiddleware");
+const { requireActiveSubscription } = require("../../middlewares/subscriptionMiddleware");
+const { cacheResponse } = require("../../middlewares/cacheMiddleware");
+const { cacheKeys } = require("../../utils/cacheHelpers");
 
 /**
  * @openapi
@@ -560,6 +560,7 @@ function registerStaffModule(app) {
     "/staff/roles",
     verifyJwt,
     authorize("staff", "read"),
+    cacheResponse((req) => cacheKeys.staffRoles(req.user.role), 3600),
     StaffController.getAvailableRoles.bind(StaffController),
   );
 

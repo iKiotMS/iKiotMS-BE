@@ -7,6 +7,10 @@ const customerSchema = new mongoose.Schema(
       ref: "Tenant",
       required: [true, "Tenant is required"],
     },
+    customerCode: {
+      type: String,
+      trim: true,
+    },
     name: {
       type: String,
       required: [true, "Customer name is required"],
@@ -26,6 +30,10 @@ const customerSchema = new mongoose.Schema(
     },
     dob: {
       type: Date,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true },

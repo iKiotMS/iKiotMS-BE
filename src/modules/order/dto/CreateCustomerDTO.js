@@ -2,6 +2,7 @@ const GENDERS = ["MALE", "FEMALE", "OTHER"];
 
 class CreateCustomerDTO {
   constructor(data = {}) {
+    this.customerCode = data.customerCode?.trim();
     this.name = data.name?.trim();
     this.phone = data.phone?.trim();
     this.gender = data.gender;
