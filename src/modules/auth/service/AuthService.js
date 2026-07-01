@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const { User, RefreshToken, Tenant } = require("../../../models");
 const Subscription = require("../../../models/Subscription");
 const Plan = require("../../../models/Plan");
+const otpService = require("../../../services/otpService");
 
 class AuthService {
   async login(phoneNumber, password, userAgent) {
@@ -144,6 +145,7 @@ class AuthService {
       tenantName,
       tenantMainAddress,
       tenantTaxNumber,
+      otpCode,
     } = userData;
 
     const existingUser = await User.findOne({ phoneNumber });
@@ -155,6 +157,10 @@ class AuthService {
     if (existingTenant) {
       throw new Error("Tenant name already in use");
     }
+
+    // Verify the phone number was confirmed via the SMS OTP sent through eSMS
+    // before creating any records. In dev this is bypassed (see otpService).
+    await otpService.verifyOtp(phoneNumber, otpCode);
 
     const tenant = await Tenant.create({
       name: tenantName,

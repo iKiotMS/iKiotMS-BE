@@ -32,6 +32,68 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Validation failed
  *       401:
  *         description: Invalid credentials
+ * /auth/check-availability:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: Check registration field availability
+ *     description: Check whether a phone number and/or store (tenant) name are already taken, before sending an OTP. Returns booleans; does not create anything.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               phoneNumber:
+ *                 type: string
+ *                 example: "0912345678"
+ *               tenantName:
+ *                 type: string
+ *                 example: "iKiot Store"
+ *     responses:
+ *       200:
+ *         description: Availability result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     phoneNumberTaken:
+ *                       type: boolean
+ *                     tenantNameTaken:
+ *                       type: boolean
+ * /auth/send-otp:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: Send registration OTP
+ *     description: Generate a 6-digit OTP, store it (5 min TTL) and send it to the phone number via eSMS SMS. Fails if the phone is already registered.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - phoneNumber
+ *             properties:
+ *               phoneNumber:
+ *                 type: string
+ *                 example: "0912345678"
+ *     responses:
+ *       200:
+ *         description: OTP sent successfully
+ *       400:
+ *         description: Invalid phone number or SMS failure
+ *       409:
+ *         description: Phone number already in use
  * /auth/register:
  *   post:
  *     tags:
@@ -51,7 +113,11 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *             properties:
  *               phoneNumber:
  *                 type: string
- *                 example: "+1234567890"
+ *                 example: "+84912345678"
+ *               otpCode:
+ *                 type: string
+ *                 description: The 6-digit OTP the user received via eSMS SMS (from /auth/send-otp). In development this may be omitted or set to "DEV_BYPASS" to skip verification.
+ *                 example: "483921"
  *               password:
  *                 type: string
  *                 example: securepassword123
@@ -267,6 +333,18 @@ const registerAuthModule = (app) => {
       method: "post",
       path: "/auth/login",
       handler: AuthController.login.bind(AuthController),
+      protected: false,
+    },
+    {
+      method: "post",
+      path: "/auth/check-availability",
+      handler: AuthController.checkAvailability.bind(AuthController),
+      protected: false,
+    },
+    {
+      method: "post",
+      path: "/auth/send-otp",
+      handler: AuthController.sendOtp.bind(AuthController),
       protected: false,
     },
     {
