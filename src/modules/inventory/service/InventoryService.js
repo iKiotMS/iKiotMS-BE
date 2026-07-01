@@ -66,6 +66,16 @@ class InventoryService {
 
     await Inventory.insertMany(inventoryDocs, { session });
   }
+
+  async adjustStock(tenantId, locationId, locationType, productItemId, amount, session) {
+    if (!amount) return;
+
+    await Inventory.findOneAndUpdate(
+      { tenantId, locationId, locationType, productItemId },
+      { $inc: { stock: amount } },
+      { upsert: true, new: true, session }
+    );
+  }
 }
 
 module.exports = new InventoryService();

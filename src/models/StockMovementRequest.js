@@ -9,7 +9,7 @@ const stockMovementRequestSchema = new mongoose.Schema(
     },
     movementType: {
       type: String,
-      enum: ["TRANSFER", "RETURN", "ADJUST"],
+      enum: ["TRANSFER", "RETURN", "ADJUST", "IMPORT"],
       required: [true, "Movement type is required"],
     },
     status: {
@@ -23,12 +23,10 @@ const stockMovementRequestSchema = new mongoose.Schema(
     },
     fromLocationId: {
       type: mongoose.Schema.Types.ObjectId,
-      required: [true, "From location is required"],
     },
     fromLocationType: {
       type: String,
       enum: ["branch", "warehouse"],
-      required: [true, "From location type is required"],
     },
     toLocationId: {
       type: mongoose.Schema.Types.ObjectId,
