@@ -32,7 +32,7 @@
     "promotions": ["create", "read", "update", "delete"],
     "reports": ["read", "export"],
     "paysheets": ["create", "read", "update", "delete"],
-    "schedules": ["create", "read", "update", "delete"],
+    "schedules": ["create", "read", "read_all", "update", "delete", "readBR", "readWH"],
     "attendances": ["read"],
     "leaveRequests": ["read", "update", "delete", "read_all","approve","reject", "create_emergency","readBR","readWH"]
   },
@@ -46,7 +46,7 @@
     "promotions": ["read"],
     "reports": ["read"],
     "paysheets": ["create", "read", "update", "delete"],
-    "schedules": ["create", "read", "update", "delete"],
+    "schedules": ["create", "read", "readBR", "update", "delete"],
     "attendances": ["read"],
     "leaveRequests": ["create", "readBR", "update", "read_mine", "cancel","approve","reject", "create_emergency"]
   },
@@ -57,7 +57,7 @@
     "stock_movement": ["create", "read", "update"],
     "reports": ["read"],
     "attendances": ["read"],
-    "schedules": ["read"],
+    "schedules": ["read", "readWH"],
     "leaveRequests": ["create", "readWH", "update", "read_mine", "cancel"]
   },
   "STAFF": {

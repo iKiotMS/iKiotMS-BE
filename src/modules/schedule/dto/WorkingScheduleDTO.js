@@ -34,7 +34,10 @@ class BulkWorkingScheduleDTO {
       this.schedules.forEach((schedule, index) => {
         const prefix = `Phân ca ${index + 1}`;
 
-        if (!schedule.userId) {
+        if (
+          !schedule.userId ||
+          (Array.isArray(schedule.userId) && schedule.userId.length === 0)
+        ) {
           errors.push(`${prefix}: thiếu nhân viên`);
         }
 

@@ -40,6 +40,7 @@ class StaffController {
 
       const result = await StaffService.getStaffList({
         tenantId: req.user.tenantId,
+        userId: req.user.userId,
         requesterId: req.user.userId,
         requesterRole: req.user.role,
         requesterBranchId: req.user.branchId,
@@ -67,10 +68,12 @@ class StaffController {
       const tenantId = req.user.tenantId;
       const userRole = req.user.role;
       const staffId = req.params.staffId;
+      const userId = req.user.userId;
       const data = this.getRequestData(req);
 
       const staff = await StaffService.updateStaff({
         tenantId,
+        userId,
         staffId,
         data,
         userRole,
@@ -87,8 +90,13 @@ class StaffController {
     try {
       const tenantId = req.user.tenantId;
       const staffId = req.params.staffId;
+      const userId = req.user.userId;
 
-      const result = await StaffService.deleteStaff({ tenantId, staffId });
+      const result = await StaffService.deleteStaff({
+        tenantId,
+        userId,
+        staffId,
+      });
 
       res.status(200).json({ message: result.message, staff: result.data });
     } catch (error) {
@@ -100,10 +108,12 @@ class StaffController {
     try {
       const tenantId = req.user.tenantId;
       const staffId = req.params.staffId;
+      const userId = req.user.userId;
       const data = this.getRequestData(req);
 
       const result = await StaffService.createStaffAccount({
         tenantId,
+        userId,
         staffId,
         data,
       });
@@ -119,10 +129,12 @@ class StaffController {
     try {
       const tenantId = req.user.tenantId;
       const staffId = req.params.staffId;
+      const userId = req.user.userId;
       const data = this.getRequestData(req);
 
       const result = await StaffService.updateStaffAccountPassword({
         tenantId,
+        userId,
         staffId,
         data,
       });
@@ -139,8 +151,11 @@ class StaffController {
       const tenantId = req.user.tenantId;
       const staffId = req.params.staffId;
 
+      const userId = req.user.userId;
+
       const result = await StaffService.deactivateStaffAccount({
         tenantId,
+        userId,
         staffId,
       });
 
