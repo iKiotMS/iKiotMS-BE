@@ -25,12 +25,30 @@ class OrderService {
     const { customerId, branchId, paymentMethod, items, grandTotal, customerPay, note } = dto;
 
     // Pre-flight checks (outside transaction for read performance)
-    const [customer, branch, tenant] = await Promise.all([
-      Customer.findOne({ _id: customerId, tenantId }).lean(),
+    let customer;
+    if (customerId) {
+      customer = await Customer.findOne({ _id: customerId, tenantId }).lean();
+      if (!customer) throw new Error("Customer not found");
+    } else {
+      customer = await Customer.findOneAndUpdate(
+        { tenantId, customerCode: "KH_VANGLAI" },
+        {
+          $setOnInsert: {
+            tenantId,
+            customerCode: "KH_VANGLAI",
+            name: "Khách vãng lai",
+            gender: "OTHER",
+            isDeleted: false,
+          }
+        },
+        { upsert: true, new: true, lean: true }
+      );
+    }
+
+    const [branch, tenant] = await Promise.all([
       Branch.findOne({ _id: branchId, tenantId }).lean(),
       paymentMethod === "SEPAY" ? Tenant.findById(tenantId).select("+banking.sepayWebhookApiKey").lean() : null,
     ]);
-    if (!customer) throw new Error("Customer not found");
     if (!branch) throw new Error("Branch not found");
 
     if (paymentMethod === "SEPAY" && (!tenant?.banking?.accountNumber || !tenant?.banking?.bankName)) {
@@ -65,7 +83,7 @@ class OrderService {
           {
             tenantId,
             branchId,
-            customerId,
+            customerId: customer._id,
             userId,
             paymentMethod,
             paymentReference: sepayRef,
