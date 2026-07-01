@@ -9,6 +9,7 @@ class RegisterRequestDTO {
     tenantPhoneNumber,
     tenantMainAddress,
     tenantTaxNumber,
+    otpCode,
   ) {
     this.email = email;
     this.phoneNumber = phoneNumber;
@@ -19,6 +20,9 @@ class RegisterRequestDTO {
     this.tenantPhoneNumber = tenantPhoneNumber;
     this.tenantMainAddress = tenantMainAddress;
     this.tenantTaxNumber = tenantTaxNumber;
+    // The 6-digit OTP the user received via eSMS SMS. May be empty/"DEV_BYPASS"
+    // in dev (OTP bypass); verified against Redis by the service in production.
+    this.otpCode = otpCode;
   }
 
   validate() {

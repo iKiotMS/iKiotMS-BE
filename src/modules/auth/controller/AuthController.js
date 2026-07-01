@@ -1,4 +1,6 @@
 const AuthService = require("../service/AuthService");
+const { User } = require("../../../models");
+const otpService = require("../../../services/otpService");
 const LoginRequestDTO = require("../dto/LoginRequestDTO");
 const LoginResponseDTO = require("../dto/LoginResponseDTO");
 const RegisterRequestDTO = require("../dto/RegisterRequestDTO");
@@ -50,6 +52,7 @@ class AuthController {
         tenantPhoneNumber,
         tenantMainAddress,
         tenantTaxNumber,
+        otpCode,
       } = req.body;
 
       const registerDTO = new RegisterRequestDTO(
@@ -62,6 +65,7 @@ class AuthController {
         tenantPhoneNumber,
         tenantMainAddress,
         tenantTaxNumber,
+        otpCode,
       );
 
       registerDTO.validate();
@@ -75,6 +79,41 @@ class AuthController {
       return res.status(400).json({
         success: false,
         message: error.message || "Registration failed",
+      });
+    }
+  }
+
+  async sendOtp(req, res) {
+    try {
+      const { phoneNumber } = req.body;
+
+      if (!phoneNumber || String(phoneNumber).trim().length < 9) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid phone number is required",
+        });
+      }
+
+      // Reject up front if the phone is already registered, so we don't send
+      // an OTP the user can never complete registration with.
+      const existingUser = await User.findOne({ phoneNumber }).lean();
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          message: "Phone number already in use",
+        });
+      }
+
+      await otpService.sendOtp(phoneNumber);
+
+      res.status(200).json({
+        success: true,
+        message: "OTP sent successfully",
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to send OTP",
       });
     }
   }
