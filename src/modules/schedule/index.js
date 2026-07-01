@@ -164,6 +164,16 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         schema:
  *           type: string
  *       - in: query
+ *         name: branchId
+ *         description: Tenant owner only. Filter schedules by assigned users in a branch.
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: warehouseId
+ *         description: Tenant owner only. Filter schedules by assigned users in a warehouse.
+ *         schema:
+ *           type: string
+ *       - in: query
  *         name: startDate
  *         schema:
  *           type: string
@@ -181,6 +191,99 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *     responses:
  *       200:
  *         description: Working schedule list with attendance summary
+ *       403:
+ *         description: Forbidden
+ *
+ * /working-schedules/me:
+ *   get:
+ *     tags: [Schedule]
+ *     summary: Get current user's working schedules
+ *     description: Returns schedules assigned to the authenticated user with lightweight attendance summary.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [SCHEDULED, COMPLETED, CANCELLED]
+ *     responses:
+ *       200:
+ *         description: Current user's schedule list
+ *       401:
+ *         description: Unauthorized
+ *
+ * /working-schedules/branches:
+ *   get:
+ *     tags: [Schedule]
+ *     summary: Get current branch manager's working schedules
+ *     description: Uses branchId from the authenticated branch manager. Staff cannot access this endpoint.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [SCHEDULED, COMPLETED, CANCELLED]
+ *     responses:
+ *       200:
+ *         description: Branch working schedule list
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *
+ * /working-schedules/warehouses:
+ *   get:
+ *     tags: [Schedule]
+ *     summary: Get current warehouse manager's working schedules
+ *     description: Uses warehouseId from the authenticated warehouse manager. Staff cannot access this endpoint.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [SCHEDULED, COMPLETED, CANCELLED]
+ *     responses:
+ *       200:
+ *         description: Warehouse working schedule list
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
  *
  * /working-schedules/current:
  *   get:
@@ -194,6 +297,34 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Current working schedule returned
  *       401:
  *         description: Unauthorized
+ *
+ * /working-schedules/{scheduleId}/users/{userId}:
+ *   get:
+ *     tags: [Schedule]
+ *     summary: Get one user's detail in a working schedule
+ *     description: Managers can view any assigned user. Staff can only view their own schedule detail.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: scheduleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Schedule detail with one selected user and full attendance detail
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Schedule/user assignment not found
  *
  * /working-schedules/{scheduleId}:
  *   get:
@@ -211,41 +342,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *     responses:
  *       200:
  *         description: Working schedule detail with attendance detail
- *   patch:
- *     tags: [Schedule]
- *     summary: Update working schedule
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: scheduleId
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *                 example: 665aaa1234567890abcdef12
- *               shiftTemplateId:
- *                 type: string
- *                 example: 665bbb1234567890abcdef12
- *               workDate:
- *                 type: string
- *                 format: date
- *                 example: "2026-06-20"
- *               status:
- *                 type: string
- *                 enum: [SCHEDULED, COMPLETED, CANCELLED]
- *                 example: SCHEDULED
- *     responses:
- *       200:
- *         description: Updated
  *   delete:
  *     tags: [Schedule]
  *     summary: Delete working schedule
@@ -309,8 +405,26 @@ function registerScheduleModule(app) {
   app.get(
     "/working-schedules",
     verifyJwt,
-    authorize("schedules", ["read", "read_own"]),
+    authorize("schedules", "read_all"),
     WorkingScheduleController.getWorkingScheduleList.bind(
+      WorkingScheduleController,
+    ),
+  );
+
+  app.get(
+    "/working-schedules/branches",
+    verifyJwt,
+    authorize("schedules", "readBR"),
+    WorkingScheduleController.getBranchWorkingSchedules.bind(
+      WorkingScheduleController,
+    ),
+  );
+
+  app.get(
+    "/working-schedules/warehouses",
+    verifyJwt,
+    authorize("schedules", "readWH"),
+    WorkingScheduleController.getWarehouseWorkingSchedules.bind(
       WorkingScheduleController,
     ),
   );
@@ -325,19 +439,28 @@ function registerScheduleModule(app) {
   );
 
   app.get(
-    "/working-schedules/:scheduleId",
+    "/working-schedules/me",
     verifyJwt,
     authorize("schedules", ["read", "read_own"]),
-    WorkingScheduleController.getWorkingScheduleById.bind(
+    WorkingScheduleController.getMyWorkingSchedules.bind(
       WorkingScheduleController,
     ),
   );
 
-  app.patch(
+  app.get(
+    "/working-schedules/:scheduleId/users/:userId",
+    verifyJwt,
+    authorize("schedules", ["read", "read_own"]),
+    WorkingScheduleController.getWorkingScheduleUserDetail.bind(
+      WorkingScheduleController,
+    ),
+  );
+
+  app.get(
     "/working-schedules/:scheduleId",
     verifyJwt,
-    authorize("schedules", ["update"]),
-    WorkingScheduleController.updateWorkingSchedule.bind(
+    authorize("schedules", ["read", "read_own"]),
+    WorkingScheduleController.getWorkingScheduleById.bind(
       WorkingScheduleController,
     ),
   );

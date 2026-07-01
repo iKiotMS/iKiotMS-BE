@@ -5,44 +5,22 @@ const User = require("../../../models/User");
 const WorkingSchedule = require("../../../models/WorkingSchedule");
 const { validateRoleHierarchy } = require("../../../utils/permissionChecker");
 const { BulkWorkingScheduleDTO } = require("../dto/WorkingScheduleDTO");
+const {
+  attachAttendancesToUsers,
+  getAttendanceKey,
+  pickScheduleUser,
+} = require("./WorkingScheduleAttendanceMapper");
+const {
+  buildWorkDate,
+  configWorkAndEndDate,
+  getLocalDateText,
+  getPagination,
+} = require("./WorkingScheduleDateUtils");
 
 class WorkingScheduleService {
   //===============================================================================================================================================================================
   //===================================================================    Helper Functions    ====================================================================================
   //===============================================================================================================================================================================
-
-  // Chuẩn hóa page/recordPerPage và tính số record cần bỏ qua.
-  getPagination({ page = 1, recordPerPage = 10 } = {}) {
-    const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
-    const perPage = Math.max(parseInt(recordPerPage, 10) || 10, 1);
-
-    return {
-      page: pageNumber,
-      recordPerPage: perPage,
-      skip: (pageNumber - 1) * perPage,
-    };
-  }
-
-  // Lấy phần YYYY-MM-DD từ date string hoặc Date.
-  getLocalDateText(dateValue) {
-    if (typeof dateValue === "string") {
-      return dateValue.slice(0, 10);
-    }
-
-    return dateValue.toISOString().slice(0, 10);
-  }
-
-  // Ghép ngày làm việc + giờ ca mẫu thành Date đầy đủ.
-  buildDateTime(workDate, timeText) {
-    const dateText = this.getLocalDateText(workDate);
-    return new Date(`${dateText}T${timeText}:00.000Z`);
-  }
-
-  // Lưu ngày làm việc ở mốc 00:00 UTC để ISO string giữ nguyên ngày FE gửi.
-  buildWorkDate(workDate) {
-    const dateText = this.getLocalDateText(workDate);
-    return new Date(`${dateText}T00:00:00.000Z`);
-  }
 
   // Kiểm tra tất cả userId được phân ca có thuộc tenant và là staff hợp lệ.
   async validateTenantStaff(tenantId, userIds, userRole) {
@@ -140,7 +118,7 @@ class WorkingScheduleService {
 
         if (sameUser && isOverlapping && !sameScheduleTime) {
           const error = new Error(
-            `Lịch làm việc bị trùng ca mẫu cho nhân viên ${current.userId} vào ngày ${this.getLocalDateText(current.workDate)}`,
+            `Lịch làm việc bị trùng ca mẫu cho nhân viên ${current.userId} vào ngày ${getLocalDateText(current.workDate)}`,
           );
           error.statusCode = 400;
           error.duplicatedWorkingSchedule = {
@@ -181,115 +159,6 @@ class WorkingScheduleService {
     }
   }
 
-  configWorkAndEndDate(workDate, shiftTemplate) {
-    const startTime = shiftTemplate.startTime;
-    const endTime = shiftTemplate.endTime;
-
-    const startAt = this.buildDateTime(workDate, startTime);
-    const endAt = this.buildDateTime(workDate, endTime);
-
-    if (startTime > endTime) {
-      endAt.setUTCDate(endAt.getUTCDate() + 1);
-    }
-
-    return { startAt, endAt };
-  }
-
-  buildAttendanceSummary(attendance) {
-    if (!attendance) {
-      return {
-        status: "NOT_CHECKED_IN",
-        actualCheckinAt: null,
-        actualCheckoutAt: null,
-      };
-    }
-
-    return {
-      _id: attendance._id,
-      status: attendance.status,
-      actualCheckinAt: attendance.actualCheckinAt || null,
-      actualCheckoutAt: attendance.actualCheckoutAt || null,
-    };
-  }
-
-  buildAttendanceDetail(attendance) {
-    if (!attendance) {
-      return {
-        status: "NOT_CHECKED_IN",
-        actualCheckinAt: null,
-        actualCheckoutAt: null,
-      };
-    }
-
-    return {
-      _id: attendance._id,
-      status: attendance.status,
-      actualCheckinAt: attendance.actualCheckinAt || null,
-      actualCheckoutAt: attendance.actualCheckoutAt || null,
-      checkInLocation: attendance.checkInLocation || null,
-      checkOutLocation: attendance.checkOutLocation || null,
-      workedMinutes: attendance.workedMinutes,
-      overtimeMinute: attendance.overtimeMinute,
-      lateMinutes: attendance.lateMinutes,
-    };
-  }
-
-  getScheduleUsers(schedule) {
-    if (Array.isArray(schedule.userId)) {
-      return schedule.userId;
-    }
-
-    if (schedule.userId) {
-      return [schedule.userId];
-    }
-
-    return [];
-  }
-
-  getUserIdText(user) {
-    return String(user?._id || user);
-  }
-
-  getAttendanceKey(scheduleId, userId) {
-    return `${String(scheduleId)}:${String(userId)}`;
-  }
-
-  attachAttendancesToUsers(schedules, attendanceByScheduleAndUser, detail) {
-    return schedules.map((schedule) => {
-      const users = this.getScheduleUsers(schedule);
-      const usersWithAttendance = users.map((user) => {
-        const userId = this.getUserIdText(user);
-        const attendance =
-          attendanceByScheduleAndUser[
-            this.getAttendanceKey(schedule._id, userId)
-          ];
-
-        if (typeof user === "object" && user !== null) {
-          return {
-            ...user,
-            attendance: detail
-              ? this.buildAttendanceDetail(attendance)
-              : this.buildAttendanceSummary(attendance),
-          };
-        }
-
-        return {
-          _id: user,
-          attendance: detail
-            ? this.buildAttendanceDetail(attendance)
-            : this.buildAttendanceSummary(attendance),
-        };
-      });
-
-      return {
-        ...schedule,
-        userId: Array.isArray(schedule.userId)
-          ? usersWithAttendance
-          : usersWithAttendance[0] || null,
-      };
-    });
-  }
-
   async attachAttendanceSummaries(tenantId, schedules, detail = false) {
     const scheduleIds = schedules.map((schedule) => schedule._id);
     const selectFields = detail
@@ -306,11 +175,11 @@ class WorkingScheduleService {
     const attendanceByScheduleAndUser = {};
     attendances.forEach((attendance) => {
       attendanceByScheduleAndUser[
-        this.getAttendanceKey(attendance.scheduleId, attendance.userId)
+        getAttendanceKey(attendance.scheduleId, attendance.userId)
       ] = attendance;
     });
 
-    return this.attachAttendancesToUsers(
+    return attachAttendancesToUsers(
       schedules,
       attendanceByScheduleAndUser,
       detail,
@@ -327,11 +196,32 @@ class WorkingScheduleService {
     detail = false,
   }) {
     let filter = { tenantId, status: { $ne: "DELETED" } };
-    const pagination = this.getPagination({ page, recordPerPage });
+    const pagination = getPagination({ page, recordPerPage });
 
     if (query._id) filter._id = query._id;
 
     if (query.userId) filter.userId = query.userId;
+
+    if (query.branchId || query.warehouseId) {
+      const userFilter = {
+        tenantId,
+        status: { $ne: "DELETED" },
+      };
+
+      if (query.branchId) userFilter.branchId = query.branchId;
+      if (query.warehouseId) userFilter.warehouseId = query.warehouseId;
+
+      const users = await User.find(userFilter).select("_id").lean();
+      const scopedUserIds = users.map((user) => user._id);
+
+      filter.userId = query.userId
+        ? {
+            $in: scopedUserIds.filter((id) => {
+              return String(id) === String(query.userId);
+            }),
+          }
+        : { $in: scopedUserIds };
+    }
 
     if (query.status) {
       const status = String(query.status).trim().toUpperCase();
@@ -381,11 +271,11 @@ class WorkingScheduleService {
       }
 
       if (query.startDate) {
-        filter.workDate.$gte = this.buildWorkDate(query.startDate);
+        filter.workDate.$gte = buildWorkDate(query.startDate);
       }
 
       if (query.endDate) {
-        let endDateExclusive = this.buildWorkDate(query.endDate);
+        let endDateExclusive = buildWorkDate(query.endDate);
         endDateExclusive.setDate(endDateExclusive.getDate() + 1);
         filter.workDate.$lt = endDateExclusive;
       }
@@ -452,8 +342,8 @@ class WorkingScheduleService {
     const schedules = dto.schedules.map((schedule) => {
       const shiftTemplateId = String(schedule.shiftTemplateId);
       const shiftTemplate = shiftTemplatesById[shiftTemplateId];
-      const workDate = this.buildWorkDate(schedule.workDate);
-      const { startAt, endAt } = this.configWorkAndEndDate(
+      const workDate = buildWorkDate(schedule.workDate);
+      const { startAt, endAt } = configWorkAndEndDate(
         schedule.workDate,
         shiftTemplate,
       );
@@ -488,7 +378,6 @@ class WorkingScheduleService {
     const schedulesToSave = [];
 
     for (const schedule of schedules) {
-
       //check for already existing schedule with same shiftTemplateId, workDate, startAt, endAt and status not in ["CANCELLED", "DELETED"]
       const existingSchedule = await WorkingSchedule.findOne({
         tenantId,
@@ -536,7 +425,16 @@ class WorkingScheduleService {
   // Lấy danh sách lịch làm việc, có filter theo nhân viên, ngày và trạng thái.
   async getWorkingScheduleList(
     tenantId,
-    { page, recordPerPage, userId, startDate, endDate, status } = {},
+    {
+      page,
+      recordPerPage,
+      userId,
+      branchId,
+      warehouseId,
+      startDate,
+      endDate,
+      status,
+    } = {},
   ) {
     if (!tenantId) {
       const error = new Error("Thiếu thông tin tenant");
@@ -549,7 +447,7 @@ class WorkingScheduleService {
     const populatedFields = [
       {
         path: "userId",
-        select: "phoneNumber profile role",
+        select: "phoneNumber profile role branchId warehouseId",
       },
       {
         path: "shiftTemplateId",
@@ -558,7 +456,7 @@ class WorkingScheduleService {
 
     const result = await this.fetchWorkingSchedules({
       tenantId,
-      query: { userId, startDate, endDate, status },
+      query: { userId, branchId, warehouseId, startDate, endDate, status },
       selectedFields,
       populatedFields,
       page,
@@ -589,14 +487,20 @@ class WorkingScheduleService {
       throw error;
     }
 
-    const now = new Date();
+    const now = new Date().toLocaleString("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+    });
+    const [time, date] = now.split(" ");
+    const [day, month, year] = date.split("/");
 
+    const formattedDate = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${time}.000Z`;
+    
     const schedule = await WorkingSchedule.findOne({
       tenantId,
       userId,
       status: "SCHEDULED",
-      startAt: { $lte: now },
-      endAt: { $gt: now },
+      startAt: { $lte: formattedDate },
+      endAt: { $gt: formattedDate },
     })
       .populate("userId", "phoneNumber profile role")
       .populate("shiftTemplateId")
@@ -607,7 +511,7 @@ class WorkingScheduleService {
       return {
         data: null,
         message: "Không có ca làm việc hiện tại",
-        serverTime: now,
+        serverTime: formattedDate,
       };
     }
 
@@ -618,9 +522,76 @@ class WorkingScheduleService {
     );
 
     return {
-      data: zscheduleWithAttendance,
-      serverTime: now,
+      data: scheduleWithAttendance,
+      serverTime: formattedDate,
     };
+  }
+
+  async getMyWorkingSchedules(
+    tenantId,
+    userId,
+    { page, recordPerPage, startDate, endDate, status } = {},
+  ) {
+    const result = await this.getWorkingScheduleList(tenantId, {
+      page,
+      recordPerPage,
+      userId,
+      startDate,
+      endDate,
+      status,
+    });
+
+    return {
+      ...result,
+      data: result.data.map((schedule) => {
+        return {
+          ...schedule,
+          userId: pickScheduleUser(schedule, userId) || null,
+        };
+      }),
+    };
+  }
+
+  async getBranchWorkingSchedules(
+    tenantId,
+    branchId,
+    { page, recordPerPage, startDate, endDate, status } = {},
+  ) {
+    if (!branchId) {
+      const error = new Error("Thiếu thông tin chi nhánh");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return this.getWorkingScheduleList(tenantId, {
+      page,
+      recordPerPage,
+      branchId,
+      startDate,
+      endDate,
+      status,
+    });
+  }
+
+  async getWarehouseWorkingSchedules(
+    tenantId,
+    warehouseId,
+    { page, recordPerPage, startDate, endDate, status } = {},
+  ) {
+    if (!warehouseId) {
+      const error = new Error("Thiếu thông tin kho");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return this.getWorkingScheduleList(tenantId, {
+      page,
+      recordPerPage,
+      warehouseId,
+      startDate,
+      endDate,
+      status,
+    });
   }
 
   // Lấy chi tiết một lịch làm việc trong tenant hiện tại.
@@ -629,7 +600,7 @@ class WorkingScheduleService {
     const populatedFields = [
       {
         path: "userId",
-        select: "phoneNumber profile role",
+        select: "phoneNumber profile role branchId warehouseId",
       },
       {
         path: "shiftTemplateId",
@@ -664,112 +635,49 @@ class WorkingScheduleService {
     return schedule;
   }
 
-  // Cập nhật lịch làm việc; nếu đổi ngày hoặc ShiftTemplate thì tính lại startAt/endAt.
-  async updateWorkingSchedule(tenantId, scheduleId, data = {}, userRole) {
-    const existingSchedule = await WorkingSchedule.findOne({
-      _id: scheduleId,
+  async getWorkingScheduleUserDetail(tenantId, scheduleId, userId) {
+    const selectedFields = "-__v";
+    const populatedFields = [
+      {
+        path: "userId",
+        select: "phoneNumber profile role branchId warehouseId",
+      },
+      {
+        path: "shiftTemplateId",
+      },
+    ];
+
+    const result = await this.fetchWorkingSchedules({
       tenantId,
-      status: { $ne: "DELETED" },
+      query: { _id: scheduleId, userId },
+      selectedFields,
+      populatedFields,
+      page: 1,
+      recordPerPage: 1,
+      detail: true,
     });
 
-    if (!existingSchedule) {
-      const error = new Error("Không tìm thấy lịch làm việc");
+    const schedule = result.workingSchedules[0];
+
+    if (!schedule) {
+      const error = new Error("Không tìm thấy lịch làm việc của nhân viên");
       error.statusCode = 404;
       throw error;
     }
 
-    if (existingSchedule.status === "COMPLETED") {
-      const error = new Error("Không thể cập nhật lịch làm việc đã hoàn thành");
-      error.statusCode = 400;
+    const user = pickScheduleUser(schedule, userId);
+
+    if (!user) {
+      const error = new Error("Nhân viên không thuộc lịch làm việc này");
+      error.statusCode = 404;
       throw error;
     }
 
-    const updateData = {};
+    const { userId: _users, ...scheduleData } = schedule;
 
-    if (data.userId !== undefined) {
-      await this.validateTenantStaff(tenantId, [data.userId], userRole);
-      updateData.userId = data.userId;
-    }
-
-    const shiftTemplateToUseId =
-      data.shiftTemplateId !== undefined
-        ? data.shiftTemplateId
-        : existingSchedule.shiftTemplateId;
-
-    const nextWorkDate =
-      data.workDate !== undefined ? data.workDate : existingSchedule.workDate;
-
-    if (data.shiftTemplateId !== undefined || data.workDate !== undefined) {
-      const shiftTemplatesById = await this.getTenantShiftTemplates(tenantId, [
-        shiftTemplateToUseId,
-      ]);
-
-      const shiftTemplateId = String(shiftTemplateToUseId);
-      const shiftTemplate = shiftTemplatesById[shiftTemplateId];
-      const workDate = this.buildWorkDate(nextWorkDate);
-      const { startAt, endAt } = this.configWorkAndEndDate(
-        nextWorkDate,
-        shiftTemplate,
-      );
-
-      updateData.shiftTemplateId = shiftTemplateToUseId;
-      updateData.workDate = workDate;
-      updateData.startAt = startAt;
-      updateData.endAt = endAt;
-    }
-    // Nếu có thay đổi userId hoặc startAt/endAt thì phải check trùng lịch.
-    if (
-      updateData.userId !== undefined ||
-      updateData.startAt !== undefined ||
-      updateData.endAt !== undefined
-    ) {
-      await this.checkScheduleOverlaps(
-        tenantId,
-        [
-          {
-            userId: updateData.userId || existingSchedule.userId,
-            startAt: updateData.startAt || existingSchedule.startAt,
-            endAt: updateData.endAt || existingSchedule.endAt,
-          },
-        ],
-        scheduleId,
-      );
-    }
-
-    if (data.status !== undefined) {
-      const status = String(data.status).trim().toUpperCase();
-      const allowedStatuses = ["SCHEDULED", "COMPLETED", "CANCELLED"];
-
-      if (!allowedStatuses.includes(status)) {
-        const error = new Error("Trạng thái lịch làm việc không hợp lệ");
-        error.statusCode = 400;
-        throw error;
-      }
-
-      updateData.status = status;
-    }
-
-    if (Object.keys(updateData).length === 0) {
-      const error = new Error("Không có dữ liệu để cập nhật");
-      error.statusCode = 400;
-      throw error;
-    }
-
-    const updatedSchedule = await WorkingSchedule.findOneAndUpdate(
-      { _id: scheduleId, tenantId, status: { $ne: "DELETED" } },
-      { $set: updateData },
-      { new: true, runValidators: true },
-    )
-      .populate("userId", "phoneNumber profile role")
-      .populate("shiftTemplateId");
-
-    // {
-    //   message: "Cập nhật lịch làm việc thành công",
-    //   data: { _id: "...", userId: {...}, shiftTemplateId: {...}, status: "COMPLETED" }
-    // }
     return {
-      message: "Cập nhật lịch làm việc thành công",
-      data: updatedSchedule,
+      ...scheduleData,
+      user,
     };
   }
 
