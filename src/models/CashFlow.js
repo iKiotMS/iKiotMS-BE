@@ -29,6 +29,10 @@ const cashFlowSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Order",
     },
+    supplierId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Supplier",
+    },
     description: {
       type: String,
       trim: true,
