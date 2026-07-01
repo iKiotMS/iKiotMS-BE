@@ -13,6 +13,7 @@ const { registerPayrollModule } = require("./payroll");
 const { registerWarehouseModule } = require("./warehouse");
 const { registerScheduleModule } = require("./schedule");
 const { registerInventoryModule } = require("./inventory");
+const { registerStockMovementModule } = require("./stock-movement");
 const { registerOrderModule } = require("./order");
 const { registerAttendanceModule } = require("./attendances");
 const { registerLeaveRequestModule } = require("./leaveRequest");
@@ -33,6 +34,7 @@ function registerModules(app) {
   registerWarehouseModule(app);
   registerScheduleModule(app);
   registerInventoryModule(app);
+  registerStockMovementModule(app);
   registerOrderModule(app);
   registerAttendanceModule(app);
   registerLeaveRequestModule(app);
