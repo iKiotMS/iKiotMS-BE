@@ -32,6 +32,43 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Validation failed
  *       401:
  *         description: Invalid credentials
+ * /auth/check-availability:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: Check registration field availability
+ *     description: Check whether a phone number and/or store (tenant) name are already taken, before sending an OTP. Returns booleans; does not create anything.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               phoneNumber:
+ *                 type: string
+ *                 example: "0912345678"
+ *               tenantName:
+ *                 type: string
+ *                 example: "iKiot Store"
+ *     responses:
+ *       200:
+ *         description: Availability result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     phoneNumberTaken:
+ *                       type: boolean
+ *                     tenantNameTaken:
+ *                       type: boolean
  * /auth/send-otp:
  *   post:
  *     tags:
@@ -296,6 +333,12 @@ const registerAuthModule = (app) => {
       method: "post",
       path: "/auth/login",
       handler: AuthController.login.bind(AuthController),
+      protected: false,
+    },
+    {
+      method: "post",
+      path: "/auth/check-availability",
+      handler: AuthController.checkAvailability.bind(AuthController),
       protected: false,
     },
     {

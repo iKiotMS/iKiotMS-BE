@@ -1,5 +1,5 @@
 const AuthService = require("../service/AuthService");
-const { User } = require("../../../models");
+const { User, Tenant } = require("../../../models");
 const otpService = require("../../../services/otpService");
 const LoginRequestDTO = require("../dto/LoginRequestDTO");
 const LoginResponseDTO = require("../dto/LoginResponseDTO");
@@ -79,6 +79,29 @@ class AuthController {
       return res.status(400).json({
         success: false,
         message: error.message || "Registration failed",
+      });
+    }
+  }
+
+  async checkAvailability(req, res) {
+    try {
+      const { phoneNumber, tenantName } = req.body;
+      const result = { phoneNumberTaken: false, tenantNameTaken: false };
+
+      if (phoneNumber) {
+        const existingUser = await User.findOne({ phoneNumber }).lean();
+        result.phoneNumberTaken = Boolean(existingUser);
+      }
+      if (tenantName) {
+        const existingTenant = await Tenant.findOne({ name: tenantName }).lean();
+        result.tenantNameTaken = Boolean(existingTenant);
+      }
+
+      res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to check availability",
       });
     }
   }

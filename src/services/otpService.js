@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const redisClient = require("../config/redis");
 const esmsService = require("./esmsService");
-const { normalizePhone } = require("./firebaseAuthService");
+const { normalizePhone } = require("../utils/phone");
 
 const OTP_TTL_SECONDS = 5 * 60;
 
