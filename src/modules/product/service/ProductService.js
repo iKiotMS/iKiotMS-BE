@@ -23,8 +23,14 @@ class ProductService {
       }
 
       try {
-        // 1. Validate SKU Uniqueness for all items
+        // 0. Validate SKU Uniqueness within the payload itself
         const skus = productData.items.map((item) => item.sku);
+        const uniqueSkus = new Set(skus);
+        if (uniqueSkus.size !== skus.length) {
+          throw new Error("Duplicate SKUs found in the request payload");
+        }
+
+        // 1. Validate SKU Uniqueness against Database
         const existingItems = await ProductItem.find({
           tenantId,
           sku: { $in: skus },
