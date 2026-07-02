@@ -73,7 +73,7 @@ class InventoryService {
     await Inventory.findOneAndUpdate(
       { tenantId, locationId, locationType, productItemId },
       { $inc: { stock: amount } },
-      { upsert: true, new: true, session }
+      { upsert: true, new: true, runValidators: true, session }
     );
   }
 }
