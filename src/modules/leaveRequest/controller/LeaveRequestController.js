@@ -91,6 +91,7 @@ class LeaveRequestController {
         tenantId: req.user.tenantId,
         userId: req.user.userId,
         leaveRequestData: req.body,
+        user: req.user,
       });
 
       return res.status(201).json({
@@ -169,6 +170,25 @@ class LeaveRequestController {
       });
     } catch (error) {
       return this.handleError(res, error, "Failed to create emergency leave request");
+    }
+  }
+
+  async previewScheduleHandover(req, res) {
+    try {
+      const result = await LeaveRequestService.previewScheduleHandover({
+        tenantId: req.user.tenantId,
+        user: req.user,
+        startDate: req.body?.startDate,
+        endDate: req.body?.endDate,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Schedule handover preview retrieved successfully",
+        data: result,
+      });
+    } catch (error) {
+      return this.handleError(res, error, "Failed to preview schedule handover");
     }
   }
 

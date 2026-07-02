@@ -10,6 +10,7 @@ class CreateLeaveRequestDTO {
     this.endDate = data.endDate;
     this.status = data.status || "PENDING";
     this.reason = data.reason ? data.reason.trim() : "";
+    this.handoverToUserId = data.handoverToUserId || null;
   }
 
   validate() {
@@ -77,6 +78,13 @@ class CreateLeaveRequestDTO {
       errors.push("Reason is required and must be a non-empty string");
     }
 
+    if (
+      this.handoverToUserId &&
+      !mongoose.Types.ObjectId.isValid(this.handoverToUserId)
+    ) {
+      errors.push("handoverToUserId must be a valid user id");
+    }
+
     return {
       isValid: errors.length === 0,
       statusCode: errors.length === 0 ? 200 : 400,
@@ -86,3 +94,5 @@ class CreateLeaveRequestDTO {
 }
 
 module.exports = CreateLeaveRequestDTO;
+
+

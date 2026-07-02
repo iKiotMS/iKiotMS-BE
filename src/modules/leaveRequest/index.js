@@ -22,6 +22,9 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *               startDate: { type: string, format: date-time }
  *               endDate: { type: string, format: date-time }
  *               reason: { type: string }
+ *               handoverToUserId:
+ *                 type: string
+ *                 description: Required only when a branch or warehouse manager has schedules to hand over during the leave date range.
  *     responses:
  *       201:
  *         description: Leave request created successfully
@@ -95,6 +98,31 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Unauthorized
  *       403:
  *         description: Forbidden
+ *
+ * /leave-requests/handover/preview:
+ *   post:
+ *     summary: Preview schedules that need manager leave handover
+ *     description: Read-only check. Branch and warehouse managers get schedules they manage during the requested leave dates. Other roles return requiresHandover false.
+ *     tags: [Leave Requests]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [startDate, endDate]
+ *             properties:
+ *               startDate: { type: string, format: date-time }
+ *               endDate: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: Schedule handover preview retrieved successfully
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
  *
  * /leave-requests/me:
  *   get:
@@ -359,6 +387,12 @@ function registerLeaveRequestModule(app) {
     "/leave-requests",
     verifyJwt,
     LeaveRequestController.create.bind(LeaveRequestController),
+  );
+
+  app.post(
+    "/leave-requests/handover/preview",
+    verifyJwt,
+    LeaveRequestController.previewScheduleHandover.bind(LeaveRequestController),
   );
 
   app.get(

@@ -276,7 +276,7 @@ class WorkingScheduleService {
 
       if (query.endDate) {
         let endDateExclusive = buildWorkDate(query.endDate);
-        endDateExclusive.setDate(endDateExclusive.getDate() + 1);
+        endDateExclusive.setUTCDate(endDateExclusive.getUTCDate() + 1);
         filter.workDate.$lt = endDateExclusive;
       }
     }
@@ -358,8 +358,8 @@ class WorkingScheduleService {
           userId: ["staffA", "staffB"],
           shiftTemplateId: "morningShift",
           workDate: "2026-07-01",
-          startAt: "2026-07-01T08:00:00.000Z",
-          endAt: "2026-07-01T12:00:00.000Z",
+          startAt: "2026-07-01T01:00:00.000Z",
+          endAt: "2026-07-01T05:00:00.000Z",
           status: "SCHEDULED"
         }
         */
@@ -374,10 +374,35 @@ class WorkingScheduleService {
         status: "SCHEDULED",
       };
     });
+    const schedulesByTimeSlot = new Map();
+
+    for (const schedule of schedules) {
+      const key = [
+        schedule.shiftTemplateId,
+        schedule.workDate.toISOString(),
+        schedule.startAt.toISOString(),
+        schedule.endAt.toISOString(),
+      ].join("|");
+      const existingSchedule = schedulesByTimeSlot.get(key);
+
+      if (existingSchedule) {
+        const existingUserIds = new Set(existingSchedule.userId.map(String));
+
+        schedule.userId.forEach((userId) => {
+          if (!existingUserIds.has(String(userId))) {
+            existingSchedule.userId.push(userId);
+            existingUserIds.add(String(userId));
+          }
+        });
+      } else {
+        schedulesByTimeSlot.set(key, schedule);
+      }
+    }
+    const mergedSchedules = Array.from(schedulesByTimeSlot.values());
 
     const schedulesToSave = [];
 
-    for (const schedule of schedules) {
+    for (const schedule of mergedSchedules) {
       //check for already existing schedule with same shiftTemplateId, workDate, startAt, endAt and status not in ["CANCELLED", "DELETED"]
       const existingSchedule = await WorkingSchedule.findOne({
         tenantId,
@@ -487,20 +512,14 @@ class WorkingScheduleService {
       throw error;
     }
 
-    const now = new Date().toLocaleString("vi-VN", {
-      timeZone: "Asia/Ho_Chi_Minh",
-    });
-    const [time, date] = now.split(" ");
-    const [day, month, year] = date.split("/");
-
-    const formattedDate = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${time}.000Z`;
+    const now = new Date();
     
     const schedule = await WorkingSchedule.findOne({
       tenantId,
       userId,
       status: "SCHEDULED",
-      startAt: { $lte: formattedDate },
-      endAt: { $gt: formattedDate },
+      startAt: { $lte: now },
+      endAt: { $gt: now },
     })
       .populate("userId", "phoneNumber profile role")
       .populate("shiftTemplateId")
@@ -511,7 +530,7 @@ class WorkingScheduleService {
       return {
         data: null,
         message: "Không có ca làm việc hiện tại",
-        serverTime: formattedDate,
+        serverTime: now.toISOString(),
       };
     }
 
@@ -523,7 +542,7 @@ class WorkingScheduleService {
 
     return {
       data: scheduleWithAttendance,
-      serverTime: formattedDate,
+      serverTime: now.toISOString(),
     };
   }
 
