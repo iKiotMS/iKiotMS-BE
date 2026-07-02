@@ -47,6 +47,14 @@ const {
  *                     costPrice: { type: number }
  *                     VAT: { type: number }
  *                     warrantyPeriod: { type: string }
+ *                     productDetails:
+ *                       type: array
+ *                       description: "List of variant attributes (e.g., Color, Size)"
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           name: { type: string, example: "Màu sắc" }
+ *                           value: { type: string, example: "Titan Tự Nhiên" }
  *                     initialStock:
  *                       type: array
  *                       items:
@@ -221,6 +229,13 @@ const {
  *               costPrice: { type: number }
  *               VAT: { type: number }
  *               warrantyPeriod: { type: string }
+ *               productDetails:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     name: { type: string }
+ *                     value: { type: string }
  *               initialStock:
  *                 type: array
  *                 items:
