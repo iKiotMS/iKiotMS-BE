@@ -10,11 +10,18 @@ jest.mock("../../src/models/WorkingSchedule", () => ({
   findOne: jest.fn(),
   findOneAndUpdate: jest.fn(),
   create: jest.fn(),
+  find: jest.fn(),
+  countDocuments: jest.fn(),
+}));
+
+jest.mock("../../src/models/Attendance", () => ({
+  find: jest.fn(),
 }));
 
 const User = require("../../src/models/User");
 const ShiftTemplate = require("../../src/models/ShiftTemplate");
 const WorkingSchedule = require("../../src/models/WorkingSchedule");
+const Attendance = require("../../src/models/Attendance");
 const WorkingScheduleService = require("../../src/modules/schedule/service/WorkingScheduleService");
 
 const sameDate = (left, right) => {
@@ -166,8 +173,8 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
       userId: ["staffA"],
       shiftTemplateId: "morningShift",
       workDate: new Date("2026-07-01T00:00:00.000Z"),
-      startAt: new Date("2026-07-01T08:00:00.000Z"),
-      endAt: new Date("2026-07-01T12:00:00.000Z"),
+      startAt: new Date("2026-07-01T01:00:00.000Z"),
+      endAt: new Date("2026-07-01T05:00:00.000Z"),
       status: "SCHEDULED",
     });
 
@@ -231,11 +238,49 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
       userId: ["staffA"],
       shiftTemplateId: "morningShift",
       workDate: new Date("2026-07-01T00:00:00.000Z"),
-      startAt: new Date("2026-07-01T08:00:00.000Z"),
-      endAt: new Date("2026-07-01T12:00:00.000Z"),
+      startAt: new Date("2026-07-01T01:00:00.000Z"),
+      endAt: new Date("2026-07-01T05:00:00.000Z"),
       status: "SCHEDULED",
     });
     expect(schedules).toHaveLength(1);
+  });
+
+  test("merges duplicate schedules from the same request before saving", async () => {
+    const result = await WorkingScheduleService.createBulkWorkingSchedules(
+      "tenant1",
+      "manager1",
+      {
+        schedules: [
+          {
+            userId: "staffA",
+            shiftTemplateId: "morningShift",
+            workDate: "2026-07-01",
+          },
+          {
+            userId: "staffB",
+            shiftTemplateId: "morningShift",
+            workDate: "2026-07-01",
+          },
+        ],
+      },
+      "TENANT_OWNER",
+    );
+
+    expect(result.message).toBe("Phân ca thành công");
+    expect(result.data).toHaveLength(1);
+    expect(WorkingSchedule.create).toHaveBeenCalledTimes(1);
+    expect(WorkingSchedule.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(WorkingSchedule.create).toHaveBeenCalledWith({
+      tenantId: "tenant1",
+      createdBy: "manager1",
+      managedBy: "manager1",
+      userId: ["staffA", "staffB"],
+      shiftTemplateId: "morningShift",
+      workDate: new Date("2026-07-01T00:00:00.000Z"),
+      startAt: new Date("2026-07-01T01:00:00.000Z"),
+      endAt: new Date("2026-07-01T05:00:00.000Z"),
+      status: "SCHEDULED",
+    });
   });
 
   test("rejects a schedule when the staff member already has an overlapping schedule", async () => {
@@ -247,8 +292,8 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
       userId: ["staffA"],
       shiftTemplateId: "morningShift",
       workDate: new Date("2026-07-01T00:00:00.000Z"),
-      startAt: new Date("2026-07-01T08:00:00.000Z"),
-      endAt: new Date("2026-07-01T12:00:00.000Z"),
+      startAt: new Date("2026-07-01T01:00:00.000Z"),
+      endAt: new Date("2026-07-01T05:00:00.000Z"),
       status: "SCHEDULED",
     });
 
@@ -275,5 +320,41 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
     expect(WorkingSchedule.findOneAndUpdate).not.toHaveBeenCalled();
     expect(WorkingSchedule.create).not.toHaveBeenCalled();
     expect(schedules).toHaveLength(1);
+  });
+});
+
+describe("WorkingScheduleService date filters", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    WorkingSchedule.find.mockReturnValue({
+      populate: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([]),
+    });
+    WorkingSchedule.countDocuments.mockResolvedValue(0);
+    Attendance.find.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([]),
+    });
+  });
+
+  test("uses UTC next day as exclusive end date for workDate filters", async () => {
+    await WorkingScheduleService.getWorkingScheduleList("tenant1", {
+      startDate: "2026-07-02",
+      endDate: "2026-07-04",
+    });
+
+    expect(WorkingSchedule.find).toHaveBeenCalledWith({
+      tenantId: "tenant1",
+      status: { $ne: "DELETED" },
+      workDate: {
+        $gte: new Date("2026-07-02T00:00:00.000Z"),
+        $lt: new Date("2026-07-05T00:00:00.000Z"),
+      },
+    });
   });
 });

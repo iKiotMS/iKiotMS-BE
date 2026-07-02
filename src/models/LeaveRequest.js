@@ -40,7 +40,11 @@ const leaveRequestSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    
+    handoverToUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   { timestamps: true },
 );

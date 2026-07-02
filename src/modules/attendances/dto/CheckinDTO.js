@@ -24,6 +24,12 @@ class CheckinDTO {
     if (!this.scheduleId) {
       errors.push("Thiếu lịch làm việc");
     }
+    if (
+      !this.actualCheckinAt ||
+      Number.isNaN(this.actualCheckinAt.getTime())
+    ) {
+      errors.push("Thời gian check-in không hợp lệ");
+    }
 
     if(this.checkInLocation.latitude === undefined || this.checkInLocation.latitude === null) {
       errors.push("Thiếu thông tin latitude(vĩ độ)");

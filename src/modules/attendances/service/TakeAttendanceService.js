@@ -107,14 +107,13 @@ class TakeAttendanceService {
   }
 
   checkDate(actualCheckinAt, schedule) {
-
-    if (actualCheckinAt < schedule.startTime || actualCheckinAt > schedule.endTime) {
+    if (actualCheckinAt < schedule.startAt || actualCheckinAt > schedule.endAt) {
       const error = new Error("Nhân viên chỉ được check-in trong khoảng thời gian của ca làm");
       error.statusCode = 422;
       error.errors = {
         actualCheckinAt,
-        scheduleStartTime: schedule.startTime,
-        scheduleEndTime: schedule.endTime,
+        scheduleStartAt: schedule.startAt,
+        scheduleEndAt: schedule.endAt,
       };
       throw error;
     }
@@ -142,6 +141,7 @@ class TakeAttendanceService {
       error.statusCode = 404;
       throw error;
     }
+    this.checkDate(newAttendanceRecord.actualCheckinAt, schedule);
 
     const existingAttendance = await Attendance.findOne({
       tenantId,

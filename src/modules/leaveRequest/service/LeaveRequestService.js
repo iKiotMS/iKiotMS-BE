@@ -2,7 +2,7 @@ const BaseService = require("../../../common/services/baseService");
 const LeaveRequest = require("../../../models/LeaveRequest");
 const CreateLeaveRequestDTO = require("../dto/CreateLeaveRequestDTO");
 const mongoose = require("mongoose");
-const { User } = require("../../../models");
+const { User, WorkingSchedule } = require("../../../models");
 const UpdateLeaveRequestDTO = require("../dto/UpdateLeaveRequestDTO");
 
 class LeaveRequestService extends BaseService {
@@ -210,7 +210,169 @@ class LeaveRequestService extends BaseService {
     return leaveRequest;
   }
 
-  async createLeaveRequest({ tenantId, userId, leaveRequestData }) {
+  getLocalDateText(dateValue) {
+    if (typeof dateValue === "string") {
+      return dateValue.slice(0, 10);
+    }
+
+    return dateValue.toISOString().slice(0, 10);
+  }
+
+  buildWorkDate(dateValue) {
+    return new Date(`${this.getLocalDateText(dateValue)}T00:00:00.000Z`);
+  }
+
+  getPreviewDateRange(startDate, endDate) {
+    if (!startDate || !endDate) {
+      const error = new Error("startDate and endDate are required");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      const error = new Error("Invalid leave date range");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const startWorkDate = this.buildWorkDate(startDate);
+    const endWorkDateExclusive = this.buildWorkDate(endDate);
+    endWorkDateExclusive.setUTCDate(endWorkDateExclusive.getUTCDate() + 1); // append one day to enddate to... 2026-07-1T00:00:00.000Z <= date < 2026-07-2T00:00:00.000Z 
+
+    if (startWorkDate >= endWorkDateExclusive) {
+      const error = new Error("End date cannot be before start date");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return { startWorkDate, endWorkDateExclusive };
+  }
+
+  async previewScheduleHandover({ tenantId, user, startDate, endDate }) {
+    const managerRoles = ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"];
+    const { startWorkDate, endWorkDateExclusive } = this.getPreviewDateRange(
+      startDate,
+      endDate,
+    );
+
+    if (!managerRoles.includes(user.role)) {
+      return {
+        requiresHandover: false,
+        count: 0,
+        affectedSchedules: [],
+        message: "Current user does not need schedule handover",
+      };
+    }
+
+    const affectedSchedules = await WorkingSchedule.find({
+      tenantId,
+      managedBy: user.userId,
+      workDate: {
+        $gte: startWorkDate,
+        $lt: endWorkDateExclusive,
+      },
+      status: "SCHEDULED",
+    })
+      .populate("userId", "phoneNumber profile role branchId warehouseId")
+      .populate("shiftTemplateId")
+      .populate("managedBy", "phoneNumber profile role")
+      .select(
+        "_id userId managedBy shiftTemplateId workDate startAt endAt status",
+      )
+      .sort({ workDate: 1, startAt: 1 })
+      .lean();
+
+    return {
+      requiresHandover: affectedSchedules.length > 0,
+      count: affectedSchedules.length,
+      affectedSchedules,
+    };
+  }
+
+  isManager(user, userId) {
+    return (
+      ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(user?.role) &&
+      this.sameId(user.userId, userId)
+    );
+  }
+
+  buildManagedScheduleFilter({ tenantId, managerId, startDate, endDate }) {
+    const { startWorkDate, endWorkDateExclusive } = this.getPreviewDateRange(
+      startDate,
+      endDate,
+    );
+
+    return {
+      tenantId,
+      managedBy: managerId,
+      workDate: {
+        $gte: startWorkDate,
+        $lt: endWorkDateExclusive,
+      },
+      status: "SCHEDULED",
+    };
+  }
+
+  async validateScheduleHandoverTarget({
+    tenantId,
+    manager,
+    handoverToUserId,
+    session,
+  }) {
+    if (!handoverToUserId) {
+      const error = new Error(
+        "handoverToUserId is required because this manager has schedules during the leave date range",
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (this.sameId(manager.userId, handoverToUserId)) {
+      const error = new Error("Manager cannot hand over schedules to themselves");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const handoverUser = await User.findOne({
+      _id: handoverToUserId,
+      tenantId,
+      status: { $nin: ["DELETED", "SUSPENDED", "INACTIVE"] },
+    })
+      .select("_id role branchId warehouseId")
+      .session(session)
+      .lean();
+
+    if (!handoverUser) {
+      const error = new Error("Handover user not found or inactive");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (
+      manager.role === "BRANCH_MANAGER" &&
+      !this.sameId(handoverUser.branchId, manager.branchId)
+    ) {
+      const error = new Error("Handover user must be in the same branch");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (
+      manager.role === "WAREHOUSE_MANAGER" &&
+      !this.sameId(handoverUser.warehouseId, manager.warehouseId)
+    ) {
+      const error = new Error("Handover user must be in the same warehouse");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return handoverUser;
+  }
+
+  async createLeaveRequest({ tenantId, userId, leaveRequestData, user }) {
     const leaveRequest = new CreateLeaveRequestDTO(
       tenantId,
       userId,
@@ -225,12 +387,93 @@ class LeaveRequestService extends BaseService {
       throw error;
     }
 
-    const createdLeaveRequest = await LeaveRequest.create(leaveRequest);
+    const isManagerLeave = this.isManager(user, userId);
+
+    if (!isManagerLeave && leaveRequest.handoverToUserId) {
+      let error = new Error(
+        "handoverToUserId is only allowed for your own manager leave request",
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const session = await mongoose.startSession();
+    let createdLeaveRequest;
+    let handover = {
+      required: false,
+      reassignedSchedules: 0,
+      handoverToUserId: null,
+    };
+
+    try {
+      await session.withTransaction(async () => {
+        let affectedScheduleIds = [];
+
+        if (isManagerLeave) {
+          const scheduleFilter = this.buildManagedScheduleFilter({
+            tenantId,
+            managerId: userId,
+            startDate: leaveRequest.startDate,
+            endDate: leaveRequest.endDate,
+          });
+
+          const affectedSchedules = await WorkingSchedule.find(scheduleFilter)
+            .select("_id")
+            .session(session)
+            .lean();
+
+          affectedScheduleIds = affectedSchedules.map((schedule) => schedule._id);
+          handover.required = affectedScheduleIds.length > 0;
+
+          if (handover.required) {
+            await this.validateScheduleHandoverTarget({
+              tenantId,
+              manager: user,
+              handoverToUserId: leaveRequest.handoverToUserId,
+              session,
+            });
+          } else {
+            leaveRequest.handoverToUserId = null;
+          }
+        }
+
+        const createdLeaveRequests = await LeaveRequest.create([leaveRequest], {
+          session,
+        });
+        createdLeaveRequest = createdLeaveRequests[0];
+
+        if (affectedScheduleIds.length > 0) {
+          await WorkingSchedule.updateMany(
+            {
+              _id: { $in: affectedScheduleIds },
+              tenantId,
+              managedBy: userId,
+            },
+            {
+              $set: {
+                managedBy: leaveRequest.handoverToUserId,
+              },
+            },
+            { session },
+          );
+
+          handover = {
+            required: true,
+            reassignedSchedules: affectedScheduleIds.length,
+            handoverToUserId: leaveRequest.handoverToUserId,
+          };
+        }
+      });
+    } finally {
+      await session.endSession();
+    }
+
     return {
       statusCode: validation.statusCode,
       success: true,
       message: "Leave request created successfully",
       leaveRequest: createdLeaveRequest,
+      handover,
     };
   }
 
@@ -372,10 +615,10 @@ class LeaveRequestService extends BaseService {
     }
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
 
     const startDate = new Date(leaveRequest.startDate);
-    startDate.setHours(0, 0, 0, 0);
+    startDate.setUTCHours(0, 0, 0, 0);
 
     if (startDate <= today) {
       let error = new Error(
