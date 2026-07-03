@@ -91,11 +91,13 @@ class StaffController {
       const tenantId = req.user.tenantId;
       const staffId = req.params.staffId;
       const userId = req.user.userId;
+      const data = this.getRequestData(req);
 
       const result = await StaffService.deleteStaff({
         tenantId,
         userId,
         staffId,
+        replacementManagerId: data.replacementManagerId,
       });
 
       res.status(200).json({ message: result.message, staff: result.data });
@@ -150,13 +152,14 @@ class StaffController {
     try {
       const tenantId = req.user.tenantId;
       const staffId = req.params.staffId;
-
       const userId = req.user.userId;
+      const data = this.getRequestData(req);
 
       const result = await StaffService.deactivateStaffAccount({
         tenantId,
         userId,
         staffId,
+        replacementManagerId: data.replacementManagerId,
       });
 
       res.status(200).json({ message: result.message, staff: result.data });

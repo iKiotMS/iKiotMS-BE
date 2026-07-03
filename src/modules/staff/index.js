@@ -109,6 +109,13 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *           format: password
  *           minLength: 6
  *           example: "123456"
+ *     StaffManagerReplacementRequest:
+ *       type: object
+ *       properties:
+ *         replacementManagerId:
+ *           type: string
+ *           description: Required when deleting or deactivating a branch manager. Must be an active staff member in the same branch.
+ *           example: 665abc1234567890abcdef12
  *     StaffRoleOption:
  *       type: object
  *       properties:
@@ -344,8 +351,8 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *   delete:
  *     tags:
  *       - Staff
- *     summary: Deactivate staff
- *     description: Soft delete a staff user by setting status to INACTIVE.
+ *     summary: Delete staff
+ *     description: Soft delete a staff user by setting status to DELETED. If the staff is a branch manager, replacementManagerId is required and the replacement staff is promoted before deletion.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -354,9 +361,15 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         required: true
  *         schema:
  *           type: string
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StaffManagerReplacementRequest'
  *     responses:
  *       200:
- *         description: Staff deactivated successfully
+ *         description: Staff deleted successfully
  *         content:
  *           application/json:
  *             schema:
@@ -468,7 +481,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *     tags:
  *       - Staff
  *     summary: Deactivate staff account
- *     description: Remove the staff password and set status to INACTIVE.
+ *     description: Remove the staff password and set status to INACTIVE. If the staff is a branch manager, replacementManagerId is required and the replacement staff is promoted before deactivation.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -477,6 +490,12 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         required: true
  *         schema:
  *           type: string
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StaffManagerReplacementRequest'
  *     responses:
  *       200:
  *         description: Staff account deactivated successfully
