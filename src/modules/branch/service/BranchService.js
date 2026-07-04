@@ -1,4 +1,5 @@
 const Branch = require("../../../models/Branch");
+const { User } = require("../../../models");
 const { BRANCH_STATUS } = require("../../../constants/branchConstants");
 
 class BranchService {
@@ -101,6 +102,73 @@ class BranchService {
     }
 
     return branch;
+  }
+
+  async assignBranchManager({ tenantId, branchId, staffId }) {
+    const session = await User.startSession();
+
+    try {
+      let result;
+
+      await session.withTransaction(async () => {
+        const branch = await Branch.findOne({
+          _id: branchId,
+          tenantId,
+          status: { $ne: BRANCH_STATUS.DELETED },
+        }).session(session);
+
+        if (!branch) {
+          throw new Error("Branch not found");
+        }
+
+        const newManager = await User.findOne({
+          _id: staffId,
+          tenantId,
+          branchId,
+          role: "STAFF",
+          status: "ACTIVE",
+        }).session(session);
+
+        if (!newManager) {
+          throw new Error(
+            "New branch manager must be an active staff member in the same branch",
+          );
+        }
+
+        const currentManager = await User.findOne({
+          tenantId,
+          branchId,
+          role: "BRANCH_MANAGER",
+          status: { $ne: "DELETED" },
+        }).session(session);
+
+        if (currentManager) {
+          currentManager.role = "STAFF";
+          await currentManager.save({ session });
+        }
+
+        newManager.role = "BRANCH_MANAGER";
+        newManager.branchId = branchId;
+        newManager.warehouseId = null;
+        await newManager.save({ session });
+
+        const manager = await User.findById(newManager._id)
+          .select("-password")
+          .populate("branchId")
+          .populate("warehouseId")
+          .session(session)
+          .lean();
+
+        result = {
+          branchId,
+          manager,
+        };
+      });
+
+      return result;
+    } finally {
+      session.endSession();
+    }
   }
 }
 

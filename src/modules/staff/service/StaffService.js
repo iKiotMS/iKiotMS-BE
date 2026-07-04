@@ -1,78 +1,38 @@
 const { User, Branch, Warehouse } = require("../../../models");
 const BaseService = require("../../../common/services/baseService");
 const { STAFF_ROLES } = require("../../../constants/role");
-const {
-  createStaffDTO,
-  updateStaffDTO,
-  createStaffAccountDTO,
-} = require("../dto/StaffDTO");
+const { createStaffDTO, updateStaffDTO } = require("../dto/StaffDTO");
 const { validateRoleHierarchy } = require("../../../utils/permissionChecker");
+const {
+  buildKeywordFilter,
+  buildStatusFilter,
+  checktenantId,
+  getAvailableStaffRoles,
+  getStaffFilter,
+  normalizeWorkplaceUpdateData,
+  validatePasswordCombo,
+  validateManagerUpdateRestrictions,
+  validateSingleWorkplaceAssignment,
+  validateStaffRole,
+  replaceBranchManagerBeforeRemove,
+  replaceWarehouseManagerBeforeRemove,
+} = require("./StaffHelperFunctions");
 
 class StaffService extends BaseService {
   constructor() {
     super(User);
   }
 
-  getStaffFilter(tenantId, userId, extra = {}) {
-    return {
-      tenantId,
-      _id: { $ne: userId },
-      role: { $in: STAFF_ROLES },
-      status: { $ne: "DELETED" },
-      ...extra,
-    };
-  }
-
-  validatePasswordCombo(data) {
-    const passwordCombo = createStaffAccountDTO(data || {});
-
-    if (!passwordCombo.newPassword || !passwordCombo.reEnterPassword) {
-      throw new Error("Password and confirmation password are required");
-    }
-
-    if (passwordCombo.newPassword.length < 6) {
-      throw new Error("Password must be at least 6 characters");
-    }
-
-    if (passwordCombo.newPassword !== passwordCombo.reEnterPassword) {
-      throw new Error("Passwords do not match");
-    }
-
-    return passwordCombo;
-  }
-
-  async getStaffAccountResponse(staffId) {
-    return await User.findById(staffId)
+  async getStaffAccountResponse(staffId, session = null) {
+    let query = User.findById(staffId)
       .select("-password")
       .populate("branchId")
-      .populate("warehouseId")
-      .lean();
-  }
-
-  validateStaffRole(role, { required = false } = {}) {
-    const normalizedRole = this.normalizeStaffRole(role);
-
-    if (!normalizedRole && required) {
-      throw new Error("Staff role is required");
+      .populate("warehouseId");
+    if (session) {
+      query = query.session(session);
     }
 
-    if (!normalizedRole) {
-      return null;
-    }
-
-    if (!STAFF_ROLES.includes(normalizedRole)) {
-      throw new Error(
-        `Invalid staff role. Allowed roles: ${STAFF_ROLES.join(", ")}`,
-      );
-    }
-
-    return normalizedRole;
-  }
-
-  checktenantId(tenantId) {
-    if (!tenantId || tenantId === null || tenantId === undefined) {
-      throw new Error("Tenant ID is required");
-    }
+    return await query.lean();
   }
 
   async checkStaffId(staffId, tenantId) {
@@ -89,40 +49,6 @@ class StaffService extends BaseService {
     if (!staff) {
       throw new Error("Invalid staff ID");
     }
-  }
-
-  buildKeywordFilter(keyword) {
-    if (!keyword || !String(keyword).trim()) {
-      return {};
-    }
-
-    const regex = new RegExp(String(keyword).trim(), "i");
-
-    return {
-      $or: [
-        { email: regex },
-        { phoneNumber: regex },
-        { "profile.firstName": regex },
-        { "profile.lastName": regex },
-      ],
-    };
-  }
-
-  buildStatusFilter(status) {
-    if (!status) {
-      return {};
-    }
-
-    const normalizedStatus = String(status).trim().toUpperCase();
-    const allowedStatuses = ["ACTIVE", "INACTIVE", "SUSPENDED"];
-
-    if (!allowedStatuses.includes(normalizedStatus)) {
-      throw new Error(
-        `Invalid status. Allowed statuses: ${allowedStatuses.join(", ")}`,
-      );
-    }
-
-    return { status: normalizedStatus };
   }
 
   async buildStaffAccessFilter({
@@ -192,59 +118,11 @@ class StaffService extends BaseService {
     return requester?.warehouseId;
   }
 
-  validateSingleWorkplaceAssignment(role, branchId, warehouseId) {
-    if (branchId && warehouseId) {
-      throw new Error(
-        "Staff can only be assigned to one branch or one warehouse",
-      );
-    }
-
-    if (role === "BRANCH_MANAGER" && !branchId) {
-      throw new Error("Branch manager must be assigned to a branch");
-    }
-
-    if (role === "BRANCH_MANAGER" && warehouseId) {
-      throw new Error("Branch manager cannot be assigned to a warehouse");
-    }
-
-    if (role === "WAREHOUSE_MANAGER" && !warehouseId) {
-      throw new Error("Warehouse manager must be assigned to a warehouse");
-    }
-
-    if (role === "WAREHOUSE_MANAGER" && branchId) {
-      throw new Error("Warehouse manager cannot be assigned to a branch");
-    }
-
-    if (role === "STAFF" && !branchId && !warehouseId) {
-      throw new Error("Staff must be assigned to a branch or warehouse");
-    }
-  }
-
-  normalizeWorkplaceUpdateData(data) {
-    // if API sends:
-    // { branchId: "..." }
-    // it automatically clears:
-    // warehouseId = null
-    if (data.branchId !== undefined && data.warehouseId === undefined) {
-      data.warehouseId = null;
-    }
-
-    // if API sends:
-    // { warehouseId: "..." }
-    // it clears:
-    // branchId = null
-    if (data.warehouseId !== undefined && data.branchId === undefined) {
-      data.branchId = null;
-    }
-
-    return data;
-  }
-
   async getStaffWorkplace({ tenantId, userId, staffId }) {
-    this.checktenantId(tenantId);
+    checktenantId(tenantId);
 
     const staff = await User.findOne(
-      this.getStaffFilter(tenantId, userId, { _id: staffId }),
+      getStaffFilter(tenantId, userId, { _id: staffId }),
     )
       .select("branchId warehouseId")
       .populate("branchId")
@@ -292,7 +170,7 @@ class StaffService extends BaseService {
     tenantId,
     staffIdToExclude = null,
   ) {
-    this.validateSingleWorkplaceAssignment(role, branchId, warehouseId);
+    validateSingleWorkplaceAssignment(role, branchId, warehouseId);
 
     if (branchId) {
       const branch = await Branch.findOne({
@@ -394,9 +272,9 @@ class StaffService extends BaseService {
   }
 
   async createStaff({ tenantId, data, userRole, subscription }) {
-    this.checktenantId(tenantId);
-    data = this.normalizeWorkplaceUpdateData(data || {});
-    data.role = this.validateStaffRole(data.role, { required: true });
+    checktenantId(tenantId);
+    data = normalizeWorkplaceUpdateData(data || {});
+    data.role = validateStaffRole(data.role, { required: true });
 
     if (validateRoleHierarchy(userRole, data.role) === false)
       throw new Error(
@@ -457,7 +335,7 @@ class StaffService extends BaseService {
     keyword,
     role,
   }) {
-    this.checktenantId(tenantId);
+    checktenantId(tenantId);
 
     const pagination = this.getPagination({ page, recordPerPage });
     const accessFilter = await this.buildStaffAccessFilter({
@@ -470,11 +348,11 @@ class StaffService extends BaseService {
       warehouseId,
     });
 
-    const normalizedRole = this.validateStaffRole(role);
+    const normalizedRole = validateStaffRole(role);
     const roleFilter = normalizedRole ? { role: normalizedRole } : {};
-    const statusFilter = this.buildStatusFilter(status);
-    const keywordFilter = this.buildKeywordFilter(keyword);
-    const staffFilter = this.getStaffFilter(tenantId, userId, {
+    const statusFilter = buildStatusFilter(status);
+    const keywordFilter = buildKeywordFilter(keyword);
+    const staffFilter = getStaffFilter(tenantId, userId, {
       ...accessFilter,
       ...roleFilter,
       ...statusFilter,
@@ -504,9 +382,9 @@ class StaffService extends BaseService {
   }
 
   async getStaffById({ tenantId, userId, staffId }) {
-    this.checktenantId(tenantId);
+    checktenantId(tenantId);
     return await this.findOne(
-      this.getStaffFilter(tenantId, userId, { _id: staffId }),
+      getStaffFilter(tenantId, userId, { _id: staffId }),
       {
         select: "-password",
         populate: ["branchId", "warehouseId"],
@@ -515,11 +393,11 @@ class StaffService extends BaseService {
   }
 
   async updateStaff({ tenantId, userId, staffId, data, userRole }) {
-    this.checktenantId(tenantId);
-    data = this.normalizeWorkplaceUpdateData(data || {});
+    checktenantId(tenantId);
+    data = normalizeWorkplaceUpdateData(data || {});
 
     const currentStaff = await User.findOne(
-      this.getStaffFilter(tenantId, userId, { _id: staffId }),
+      getStaffFilter(tenantId, userId, { _id: staffId }),
     );
 
     if (!currentStaff) {
@@ -527,7 +405,7 @@ class StaffService extends BaseService {
     }
 
     if (data.role) {
-      data.role = this.validateStaffRole(data.role);
+      data.role = validateStaffRole(data.role);
     }
 
     if (Object.hasOwn(data, "password")) {
@@ -550,6 +428,13 @@ class StaffService extends BaseService {
         ? data.warehouseId
         : currentStaff.warehouseId;
 
+    validateManagerUpdateRestrictions({
+      currentStaff,
+      nextRole,
+      nextBranchId,
+      nextWarehouseId,
+    });
+
     if (validateRoleHierarchy(userRole, nextRole) === false)
       throw new Error(
         `Your role (${userRole}) do not have permission to update staff with role ${nextRole}`,
@@ -570,7 +455,7 @@ class StaffService extends BaseService {
     });
 
     const updatedStaff = await User.findOneAndUpdate(
-      this.getStaffFilter(tenantId, userId, { _id: staffId }),
+      getStaffFilter(tenantId, userId, { _id: staffId }),
       updateStaffDTO(data),
       { new: true, runValidators: true },
     )
@@ -591,13 +476,13 @@ class StaffService extends BaseService {
   }
 
   async createStaffAccount({ tenantId, userId, staffId, data }) {
-    this.checktenantId(tenantId);
+    checktenantId(tenantId);
     await this.checkStaffId(staffId, tenantId);
 
-    const passwordCombo = this.validatePasswordCombo(data);
+    const passwordCombo = validatePasswordCombo(data);
 
     const staff = await User.findOne(
-      this.getStaffFilter(tenantId, userId, { _id: staffId }),
+      getStaffFilter(tenantId, userId, { _id: staffId }),
     );
 
     if (!staff) {
@@ -621,13 +506,13 @@ class StaffService extends BaseService {
   }
 
   async updateStaffAccountPassword({ tenantId, userId, staffId, data }) {
-    this.checktenantId(tenantId);
+    checktenantId(tenantId);
     await this.checkStaffId(staffId, tenantId);
 
-    const passwordCombo = this.validatePasswordCombo(data);
+    const passwordCombo = validatePasswordCombo(data);
 
     const staff = await User.findOne(
-      this.getStaffFilter(tenantId, userId, { _id: staffId }),
+      getStaffFilter(tenantId, userId, { _id: staffId }),
     );
 
     if (!staff) {
@@ -649,71 +534,154 @@ class StaffService extends BaseService {
     };
   }
 
-  async deactivateStaffAccount({ tenantId, userId, staffId }) {
-    this.checktenantId(tenantId);
-    await this.checkStaffId(staffId, tenantId);
+  async deactivateStaffAccount({
+    tenantId,
+    userId,
+    userRole,
+    staffId,
+    replacementManagerId,
+  }) {
+    const session = await User.startSession();
+    try {
+      checktenantId(tenantId);
+      await this.checkStaffId(staffId, tenantId);
 
-    const staff = await User.findOne(
-      this.getStaffFilter(tenantId, userId, { _id: staffId }),
-    );
+      const result = await session.withTransaction(async () => {
+        const staff = await User.findOne(
+          getStaffFilter(tenantId, userId, { _id: staffId }),
+        ).session(session);
 
-    if (!staff) {
-      throw new Error("Staff not found");
+        if (!staff) {
+          throw new Error("Staff not found");
+        }
+        if (
+          ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(staff.role) &&
+          userRole !== "TENANT_OWNER"
+        ) {
+          const error = new Error("Only tenant owner can replace managers");
+          error.statusCode = 403;
+          throw error;
+        }
+        if (staff.role === "BRANCH_MANAGER") {
+          await replaceBranchManagerBeforeRemove({
+            tenantId,
+            targetManager: staff,
+            replacementManagerId,
+            session,
+          });
+        }
+        if (staff.role === "WAREHOUSE_MANAGER") {
+          await replaceWarehouseManagerBeforeRemove({
+            tenantId,
+            targetManager: staff,
+            replacementManagerId,
+            session,
+          });
+        }
+
+        staff.password = undefined;
+        staff.status = "INACTIVE";
+        staff.role = ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(
+          staff.role,
+        )
+          ? "STAFF"
+          : staff.role;
+        await staff.save({ session });
+
+        const deactivatedAccount = await this.getStaffAccountResponse(
+          staff._id,
+          session,
+        );
+
+        return {
+          message: "Staff account deactivated successfully",
+          data: {
+            id: deactivatedAccount._id,
+            status: deactivatedAccount.status,
+          },
+        };
+      });
+
+      return result;
+    } finally {
+      session.endSession();
     }
-
-    staff.password = undefined;
-    staff.status = "INACTIVE";
-    await staff.save();
-
-    const deactivatedAccount = await this.getStaffAccountResponse(staff._id);
-
-    return {
-      message: "Staff account deactivated successfully",
-      data: {
-        id: deactivatedAccount._id,
-        status: deactivatedAccount.status,
-      },
-    };
   }
 
-  async deleteStaff({ tenantId, staffId }) {
-    this.checktenantId(tenantId);
-    await this.checkStaffId(staffId, tenantId);
+  async deleteStaff({
+    tenantId,
+    staffId,
+    replacementManagerId,
+    userId,
+    userRole,
+  }) {
+    const session = await User.startSession();
+    try {
+      checktenantId(tenantId);
+      await this.checkStaffId(staffId, tenantId);
 
-    const staff = await User.findOne(
-      this.getStaffFilter(tenantId, userId, { _id: staffId }),
-    );
+      const result = await session.withTransaction(async () => {
+        const staff = await User.findOne(
+          getStaffFilter(tenantId, userId, { _id: staffId }),
+        ).session(session);
 
-    if (!staff) {
-      throw new Error("Staff not found");
+        if (!staff) {
+          throw new Error("Staff not found");
+        }
+        if (
+          ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(staff.role) &&
+          userRole !== "TENANT_OWNER"
+        ) {
+          const error = new Error("Only tenant owner can replace managers");
+          error.statusCode = 403;
+          throw error;
+        }
+        if (staff.role === "BRANCH_MANAGER") {
+          await replaceBranchManagerBeforeRemove({
+            tenantId,
+            targetManager: staff,
+            replacementManagerId,
+            session,
+          });
+        }
+        if (staff.role === "WAREHOUSE_MANAGER") {
+          await replaceWarehouseManagerBeforeRemove({
+            tenantId,
+            targetManager: staff,
+            replacementManagerId,
+            session,
+          });
+        }
+        staff.password = undefined;
+        staff.status = "DELETED";
+        staff.role = ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(
+          staff.role,
+        )
+          ? "STAFF"
+          : staff.role;
+        await staff.save({ session });
+
+        const deletedAccount = await this.getStaffAccountResponse(
+          staff._id,
+          session,
+        );
+
+        return {
+          message: "Staff deleted successfully",
+          data: {
+            id: deletedAccount._id,
+            status: deletedAccount.status,
+          },
+        };
+      });
+      return result;
+    } finally {
+      session.endSession();
     }
-
-    staff.password = undefined;
-    staff.status = "DELETED";
-    await staff.save();
-
-    const deletedAccount = await this.getStaffAccountResponse(staff._id);
-
-    return {
-      message: "Staff deleted successfully",
-      data: {
-        id: deletedAccount._id,
-        status: deletedAccount.status,
-      },
-    };
   }
 
   getAvailableStaffRoles(userRole) {
-    return STAFF_ROLES.filter((role) =>
-      validateRoleHierarchy(userRole, role),
-    ).map((role) => ({
-      value: role,
-      label: role
-        .toLowerCase()
-        .split("_")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" "),
-    }));
+    return getAvailableStaffRoles(userRole);
   }
 }
 

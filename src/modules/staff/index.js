@@ -81,6 +81,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *               type: string
  *               enum: [BRANCH_MANAGER, WAREHOUSE_MANAGER, STAFF]
  *               example: STAFF
+ *               description: Manager role changes are not allowed through this endpoint. Use branch or warehouse manager assignment endpoints.
  *             hireDate:
  *               type: string
  *               format: date
@@ -109,6 +110,13 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *           format: password
  *           minLength: 6
  *           example: "123456"
+ *     StaffManagerReplacementRequest:
+ *       type: object
+ *       properties:
+ *         replacementManagerId:
+ *           type: string
+ *           description: Required when deleting or deactivating a branch manager or warehouse manager. For branch managers, replacement must be an active staff member in the same branch. For warehouse managers, replacement can be any active staff member in the tenant.
+ *           example: 665abc1234567890abcdef12
  *     StaffRoleOption:
  *       type: object
  *       properties:
@@ -315,7 +323,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *     tags:
  *       - Staff
  *     summary: Update staff
- *     description: Update staff details. Password and phone number should not be changed through this endpoint.
+ *     description: Update staff details. Password, phone number, and manager role/workplace changes should not be changed through this endpoint.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -344,8 +352,8 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *   delete:
  *     tags:
  *       - Staff
- *     summary: Deactivate staff
- *     description: Soft delete a staff user by setting status to INACTIVE.
+ *     summary: Delete staff
+ *     description: Soft delete a staff user by setting status to DELETED. If the staff is a branch manager or warehouse manager, replacementManagerId is required and the replacement staff is promoted before deletion.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -354,9 +362,15 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         required: true
  *         schema:
  *           type: string
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StaffManagerReplacementRequest'
  *     responses:
  *       200:
- *         description: Staff deactivated successfully
+ *         description: Staff deleted successfully
  *         content:
  *           application/json:
  *             schema:
@@ -468,7 +482,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *     tags:
  *       - Staff
  *     summary: Deactivate staff account
- *     description: Remove the staff password and set status to INACTIVE.
+ *     description: Remove the staff password and set status to INACTIVE. If the staff is a branch manager or warehouse manager, replacementManagerId is required and the replacement staff is promoted before deactivation.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -477,6 +491,12 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         required: true
  *         schema:
  *           type: string
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StaffManagerReplacementRequest'
  *     responses:
  *       200:
  *         description: Staff account deactivated successfully

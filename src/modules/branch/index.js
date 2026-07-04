@@ -115,6 +115,43 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *       200:
  *         description: Branch updated
  *
+ * /branches/{id}/manager:
+ *   patch:
+ *     tags:
+ *       - Branch
+ *     summary: Change branch manager
+ *     description: Tenant owner assigns an active staff member in this branch as branch manager. The current branch manager is demoted to staff.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - staffId
+ *             properties:
+ *               staffId:
+ *                 type: string
+ *                 example: 665abc1234567890abcdef12
+ *     responses:
+ *       200:
+ *         description: Branch manager updated successfully
+ *       400:
+ *         description: Validation failed
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only tenant owner can change branch manager
+ *       404:
+ *         description: Branch not found
+ *
  * /branches/{id}/delete:
  *   delete:
  *     tags:
@@ -163,6 +200,12 @@ const registerBranchModule = (app) => {
     "/branches/:id",
     verifyJwt,
     BranchController.update.bind(BranchController),
+  );
+
+  app.patch(
+    "/branches/:id/manager",
+    verifyJwt,
+    BranchController.assignManager.bind(BranchController),
   );
 
   app.delete(
