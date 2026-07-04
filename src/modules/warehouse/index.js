@@ -105,6 +105,43 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *       200:
  *         description: Warehouse updated
  *
+ * /warehouses/{id}/manager:
+ *   patch:
+ *     tags:
+ *       - Warehouse
+ *     summary: Change warehouse manager
+ *     description: Tenant owner assigns any active staff member in the tenant as warehouse manager. The current warehouse manager is demoted to staff.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - staffId
+ *             properties:
+ *               staffId:
+ *                 type: string
+ *                 example: 665abc1234567890abcdef12
+ *     responses:
+ *       200:
+ *         description: Warehouse manager updated successfully
+ *       400:
+ *         description: Validation failed
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only tenant owner can change warehouse manager
+ *       404:
+ *         description: Warehouse not found
+ *
  * /warehouses/{id}/delete:
  *   delete:
  *     tags:
@@ -152,6 +189,12 @@ const registerWarehouseModule = (app) => {
     "/warehouses/:id",
     verifyJwt,
     WarehouseController.update.bind(WarehouseController),
+  );
+
+  app.patch(
+    "/warehouses/:id/manager",
+    verifyJwt,
+    WarehouseController.assignManager.bind(WarehouseController),
   );
 
   app.delete(

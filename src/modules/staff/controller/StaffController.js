@@ -91,18 +91,20 @@ class StaffController {
       const tenantId = req.user.tenantId;
       const staffId = req.params.staffId;
       const userId = req.user.userId;
+      const userRole = req.user.role;
       const data = this.getRequestData(req);
 
       const result = await StaffService.deleteStaff({
         tenantId,
         userId,
+        userRole,
         staffId,
         replacementManagerId: data.replacementManagerId,
       });
 
       res.status(200).json({ message: result.message, staff: result.data });
     } catch (error) {
-      return res.status(400).json({ error: error.message });
+      return res.status(error.statusCode || 400).json({ error: error.message });
     }
   }
 
@@ -153,18 +155,20 @@ class StaffController {
       const tenantId = req.user.tenantId;
       const staffId = req.params.staffId;
       const userId = req.user.userId;
+      const userRole = req.user.role;
       const data = this.getRequestData(req);
 
       const result = await StaffService.deactivateStaffAccount({
         tenantId,
         userId,
+        userRole,
         staffId,
         replacementManagerId: data.replacementManagerId,
       });
 
       res.status(200).json({ message: result.message, staff: result.data });
     } catch (error) {
-      return res.status(400).json({ error: error.message });
+      return res.status(error.statusCode || 400).json({ error: error.message });
     }
   }
 

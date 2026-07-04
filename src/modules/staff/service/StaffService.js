@@ -11,9 +11,11 @@ const {
   getStaffFilter,
   normalizeWorkplaceUpdateData,
   validatePasswordCombo,
+  validateManagerUpdateRestrictions,
   validateSingleWorkplaceAssignment,
   validateStaffRole,
-  replaceManagerBeforeRemove,
+  replaceBranchManagerBeforeRemove,
+  replaceWarehouseManagerBeforeRemove,
 } = require("./StaffHelperFunctions");
 
 class StaffService extends BaseService {
@@ -426,6 +428,13 @@ class StaffService extends BaseService {
         ? data.warehouseId
         : currentStaff.warehouseId;
 
+    validateManagerUpdateRestrictions({
+      currentStaff,
+      nextRole,
+      nextBranchId,
+      nextWarehouseId,
+    });
+
     if (validateRoleHierarchy(userRole, nextRole) === false)
       throw new Error(
         `Your role (${userRole}) do not have permission to update staff with role ${nextRole}`,
@@ -528,6 +537,7 @@ class StaffService extends BaseService {
   async deactivateStaffAccount({
     tenantId,
     userId,
+    userRole,
     staffId,
     replacementManagerId,
   }) {
@@ -544,8 +554,24 @@ class StaffService extends BaseService {
         if (!staff) {
           throw new Error("Staff not found");
         }
+        if (
+          ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(staff.role) &&
+          userRole !== "TENANT_OWNER"
+        ) {
+          const error = new Error("Only tenant owner can replace managers");
+          error.statusCode = 403;
+          throw error;
+        }
         if (staff.role === "BRANCH_MANAGER") {
-          await replaceManagerBeforeRemove({
+          await replaceBranchManagerBeforeRemove({
+            tenantId,
+            targetManager: staff,
+            replacementManagerId,
+            session,
+          });
+        }
+        if (staff.role === "WAREHOUSE_MANAGER") {
+          await replaceWarehouseManagerBeforeRemove({
             tenantId,
             targetManager: staff,
             replacementManagerId,
@@ -555,7 +581,11 @@ class StaffService extends BaseService {
 
         staff.password = undefined;
         staff.status = "INACTIVE";
-        staff.role = staff.role === "BRANCH_MANAGER" ? "STAFF" : staff.role;
+        staff.role = ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(
+          staff.role,
+        )
+          ? "STAFF"
+          : staff.role;
         await staff.save({ session });
 
         const deactivatedAccount = await this.getStaffAccountResponse(
@@ -578,7 +608,13 @@ class StaffService extends BaseService {
     }
   }
 
-  async deleteStaff({ tenantId, staffId, replacementManagerId, userId }) {
+  async deleteStaff({
+    tenantId,
+    staffId,
+    replacementManagerId,
+    userId,
+    userRole,
+  }) {
     const session = await User.startSession();
     try {
       checktenantId(tenantId);
@@ -592,8 +628,24 @@ class StaffService extends BaseService {
         if (!staff) {
           throw new Error("Staff not found");
         }
+        if (
+          ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(staff.role) &&
+          userRole !== "TENANT_OWNER"
+        ) {
+          const error = new Error("Only tenant owner can replace managers");
+          error.statusCode = 403;
+          throw error;
+        }
         if (staff.role === "BRANCH_MANAGER") {
-          await replaceManagerBeforeRemove({
+          await replaceBranchManagerBeforeRemove({
+            tenantId,
+            targetManager: staff,
+            replacementManagerId,
+            session,
+          });
+        }
+        if (staff.role === "WAREHOUSE_MANAGER") {
+          await replaceWarehouseManagerBeforeRemove({
             tenantId,
             targetManager: staff,
             replacementManagerId,
@@ -602,7 +654,11 @@ class StaffService extends BaseService {
         }
         staff.password = undefined;
         staff.status = "DELETED";
-        staff.role = staff.role === "BRANCH_MANAGER" ? "STAFF" : staff.role;
+        staff.role = ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(
+          staff.role,
+        )
+          ? "STAFF"
+          : staff.role;
         await staff.save({ session });
 
         const deletedAccount = await this.getStaffAccountResponse(

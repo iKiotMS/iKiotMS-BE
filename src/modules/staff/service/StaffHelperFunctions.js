@@ -150,11 +150,90 @@ function getAvailableStaffRoles(userRole) {
   }));
 }
 
+
+/**
+ * Kiểm tra xem hàm update có đang đc sử dụng để 
+ * update ROLE hoặc WarehouseId/BranchId
+ * của Manager hay không. Nếu có thì ném lỗi
+ * vì việc thay đổi ROLE hoặc nơi làm việc của Manager 
+ * phải thông qua API phân công quản lý
+ * 
+*/
+
+function validateManagerUpdateRestrictions({
+  currentStaff,
+  nextRole,
+  nextBranchId,
+  nextWarehouseId,
+}) {
+  const managerRoles = ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"];
+  const currentRole = currentStaff.role;
+  const currentBranchId = currentStaff.branchId?.toString() || null;
+  const currentWarehouseId = currentStaff.warehouseId?.toString() || null;
+  const targetBranchId = nextBranchId?.toString() || null; // BranchId để chuyển sang
+  const targetWarehouseId = nextWarehouseId?.toString() || null; // WarehouseId để chuyển sang
+
+  //Check xem có đang đụng đến Manager hay k
+  const touchesManagerRole =
+    managerRoles.includes(currentRole) || managerRoles.includes(nextRole);
+
+    // Nếu không đụng đến Manager(đang update STAFF) thì return luôn
+  if (!touchesManagerRole) {
+    return;
+  }
+ 
+  /**
+   * Nếu đang update Manager thì check xem 
+   * có đang update ROLE hoặc nơi làm việc hay không
+   */
+  const unchangedBranchManager =
+    currentRole === "BRANCH_MANAGER" &&
+    nextRole === "BRANCH_MANAGER" &&
+    currentBranchId === targetBranchId &&
+    !targetWarehouseId;
+
+  const unchangedWarehouseManager =
+    currentRole === "WAREHOUSE_MANAGER" &&
+    nextRole === "WAREHOUSE_MANAGER" &&
+    currentWarehouseId === targetWarehouseId &&
+    !targetBranchId;
+
+  // Nếu đang update Manager nhưng không đụng đến ROLE hoặc nơi làm việc thì return luôn
+  if (unchangedBranchManager || unchangedWarehouseManager) {
+    return;
+  }
+
+  // Nếu đang update Manager và đụng đến ROLE hoặc nơi làm việc thì ném lỗi
+  const error = new Error(
+    "Vui lòng dùng API phân công quản lý để thay đổi vai trò hoặc nơi làm việc của quản lý",
+  );
+  error.statusCode = 400;
+  throw error;
+}
+
 const isActiveBranchManager = (staff) => {
   return staff.role === "BRANCH_MANAGER" && staff.branchId;
 };
 
-const replaceManagerBeforeRemove = async ({
+const isActiveWarehouseManager = (staff) => {
+  return staff.role === "WAREHOUSE_MANAGER" && staff.warehouseId;
+};
+
+const validateReplacementManagerId = (targetManager, replacementManagerId) => {
+  if (!replacementManagerId) {
+    const error = new Error("Thiếu thông tin nhân viên thay thế");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (String(replacementManagerId) === String(targetManager._id)) {
+    const error = new Error("Quản lý thay thế phải là một nhân viên khác");
+    error.statusCode = 400;
+    throw error;
+  }
+};
+
+const replaceBranchManagerBeforeRemove = async ({
   tenantId,
   targetManager,
   replacementManagerId,
@@ -168,17 +247,7 @@ const replaceManagerBeforeRemove = async ({
     throw error;
   }
 
-  if (!replacementManagerId) {
-    const error = new Error("Thiếu thông tin nhân viên thay thế");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (String(replacementManagerId) === String(targetManager._id)) {
-    const error = new Error("Quản lý thay thế phải là một nhân viên khác");
-    error.statusCode = 400;
-    throw error;
-  }
+  validateReplacementManagerId(targetManager, replacementManagerId);
 
   const replacementStaff = await User.findOne({
     _id: replacementManagerId,
@@ -200,6 +269,43 @@ const replaceManagerBeforeRemove = async ({
   await replacementStaff.save({ session });
 };
 
+const replaceWarehouseManagerBeforeRemove = async ({
+  tenantId,
+  targetManager,
+  replacementManagerId,
+  session,
+}) => {
+  if (!isActiveWarehouseManager(targetManager)) {
+    const error = new Error(
+      "Không phải là Warehouse Manager đang hoạt động, không cần thay thế",
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  validateReplacementManagerId(targetManager, replacementManagerId);
+
+  const replacementStaff = await User.findOne({
+    _id: replacementManagerId,
+    tenantId,
+    role: "STAFF",
+    status: "ACTIVE",
+  }).session(session);
+
+  if (!replacementStaff) {
+    const error = new Error(
+      "Nhân viên thay thế không tồn tại hoặc không phải là nhân viên đang hoạt động trong tenant hiện tại",
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  replacementStaff.role = "WAREHOUSE_MANAGER";
+  replacementStaff.warehouseId = targetManager.warehouseId;
+  replacementStaff.branchId = null;
+  await replacementStaff.save({ session });
+};
+
 module.exports = {
   buildKeywordFilter,
   buildStatusFilter,
@@ -209,7 +315,9 @@ module.exports = {
   normalizeStaffRole,
   normalizeWorkplaceUpdateData,
   validatePasswordCombo,
+  validateManagerUpdateRestrictions,
   validateSingleWorkplaceAssignment,
   validateStaffRole,
-  replaceManagerBeforeRemove,
+  replaceBranchManagerBeforeRemove,
+  replaceWarehouseManagerBeforeRemove,
 };
