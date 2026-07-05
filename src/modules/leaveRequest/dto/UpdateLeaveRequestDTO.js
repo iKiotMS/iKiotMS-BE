@@ -10,45 +10,46 @@ class UpdateLeaveRequestDTO {
   }
 
   validate() {
-    const errors = [];
+    const errors = {};
 
     if (
       this.leaveType !== undefined &&
       !["ANNUAL", "UNPAID", "SICK", "OTHER"].includes(this.leaveType)
     ) {
-      errors.push("Invalid leaveType");
+      errors.leaveType = "Invalid leaveType";
     }
 
     if (
       this.status !== undefined &&
       !["PENDING", "APPROVED", "REJECTED", "CANCELLED", "EXPIRED", "DELETED"].includes(this.status)
     ) {
-      errors.push("Invalid status");
+      errors.status = "Invalid status";
     }
 
     if (
       this.startDate !== undefined &&
       Number.isNaN(new Date(this.startDate).getTime())
     ) {
-      errors.push("startDate must be a valid date");
+      errors.startDate = "startDate must be a valid date";
     }
 
     if (
       this.endDate !== undefined &&
       Number.isNaN(new Date(this.endDate).getTime())
     ) {
-      errors.push("endDate must be a valid date");
+      errors.endDate = "endDate must be a valid date";
     }
 
     if (
       this.reason !== undefined &&
       (typeof this.reason !== "string" || this.reason.trim() === "")
     ) {
-      errors.push("reason must be a non-empty string");
+      errors.reason = "reason must be a non-empty string";
     }
 
     return {
-      isValid: errors.length === 0,
+      isValid: Object.keys(errors).length === 0,
+      statusCode: Object.keys(errors).length === 0 ? 200 : 400,
       errors,
     };
   }

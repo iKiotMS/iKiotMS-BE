@@ -30,6 +30,20 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Leave request created successfully
  *       400:
  *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: false }
+ *                 message: { type: string, example: Validation failed }
+ *                 errors:
+ *                   type: object
+ *                   additionalProperties: { type: string }
+ *                   example:
+ *                     startDate: Start date cannot be before the current time
+ *                     endDate: End date cannot be before the current time
+ *                     handoverToUserId: handoverToUserId must be a valid user id
  *       401:
  *         description: Unauthorized
  *   get:
@@ -121,6 +135,20 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Schedule handover preview retrieved successfully
  *       400:
  *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: false }
+ *                 message: { type: string, example: Validation failed }
+ *                 errors:
+ *                   type: object
+ *                   additionalProperties: { type: string }
+ *                   example:
+ *                     startDate: Start date cannot be before the current time
+ *                     endDate: End date cannot be before the current time
+ *                     handoverToUserId: handoverToUserId must be a valid user id
  *       401:
  *         description: Unauthorized
  *

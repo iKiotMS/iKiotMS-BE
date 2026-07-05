@@ -8,6 +8,7 @@ class LeaveRequestController {
     return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || fallbackMessage,
+      ...(error.errors && { errors: error.errors }),
     });
   }
 
@@ -68,7 +69,9 @@ class LeaveRequestController {
       req.user.role === "BRANCH_MANAGER" &&
       !this.sameId(targetUser?.branchId, req.user.branchId)
     ) {
-      const error = new Error("You can only review leave requests for staff in your branch");
+      const error = new Error(
+        "You can only review leave requests for staff in your branch",
+      );
       error.statusCode = 403;
       throw error;
     }
@@ -77,7 +80,9 @@ class LeaveRequestController {
       req.user.role === "WAREHOUSE_MANAGER" &&
       !this.sameId(targetUser?.warehouseId, req.user.warehouseId)
     ) {
-      const error = new Error("You can only review leave requests for staff in your warehouse");
+      const error = new Error(
+        "You can only review leave requests for staff in your warehouse",
+      );
       error.statusCode = 403;
       throw error;
     }
@@ -143,7 +148,8 @@ class LeaveRequestController {
       ) {
         return res.status(403).json({
           success: false,
-          message: "You can only create leave requests for staff in your branch",
+          message:
+            "You can only create leave requests for staff in your branch",
         });
       }
 
@@ -153,7 +159,8 @@ class LeaveRequestController {
       ) {
         return res.status(403).json({
           success: false,
-          message: "You can only create leave requests for staff in your warehouse",
+          message:
+            "You can only create leave requests for staff in your warehouse",
         });
       }
 
@@ -169,7 +176,11 @@ class LeaveRequestController {
         data: leaveRequest,
       });
     } catch (error) {
-      return this.handleError(res, error, "Failed to create emergency leave request");
+      return this.handleError(
+        res,
+        error,
+        "Failed to create emergency leave request",
+      );
     }
   }
 
@@ -188,7 +199,11 @@ class LeaveRequestController {
         data: result,
       });
     } catch (error) {
-      return this.handleError(res, error, "Failed to preview schedule handover");
+      return this.handleError(
+        res,
+        error,
+        "Failed to preview schedule handover",
+      );
     }
   }
 
@@ -214,7 +229,11 @@ class LeaveRequestController {
         pagination: leaveRequests.pagination,
       });
     } catch (error) {
-      return this.handleError(res, error, "Failed to get personal leave request history");
+      return this.handleError(
+        res,
+        error,
+        "Failed to get personal leave request history",
+      );
     }
   }
 
@@ -270,7 +289,11 @@ class LeaveRequestController {
         pagination: leaveRequests.pagination,
       });
     } catch (error) {
-      return this.handleError(res, error, "Failed to get leave requests by branch");
+      return this.handleError(
+        res,
+        error,
+        "Failed to get leave requests by branch",
+      );
     }
   }
 
@@ -303,7 +326,11 @@ class LeaveRequestController {
         pagination: leaveRequests.pagination,
       });
     } catch (error) {
-      return this.handleError(res, error, "Failed to get leave requests by warehouse");
+      return this.handleError(
+        res,
+        error,
+        "Failed to get leave requests by warehouse",
+      );
     }
   }
 
@@ -368,7 +395,6 @@ class LeaveRequestController {
       return this.handleError(res, error, "Failed to approve leave request");
     }
   }
-
   async reject(req, res) {
     try {
       await this.getLeaveRequestForReview(req);

@@ -240,7 +240,7 @@ class LeaveRequestService extends BaseService {
 
     const startWorkDate = this.buildWorkDate(startDate);
     const endWorkDateExclusive = this.buildWorkDate(endDate);
-    endWorkDateExclusive.setUTCDate(endWorkDateExclusive.getUTCDate() + 1); // append one day to enddate to... 2026-07-1T00:00:00.000Z <= date < 2026-07-2T00:00:00.000Z 
+    endWorkDateExclusive.setUTCDate(endWorkDateExclusive.getUTCDate() + 1); // append one day to enddate to... 2026-07-1T00:00:00.000Z <= date < 2026-07-2T00:00:00.000Z
 
     if (startWorkDate >= endWorkDateExclusive) {
       const error = new Error("End date cannot be before start date");
@@ -331,7 +331,9 @@ class LeaveRequestService extends BaseService {
     }
 
     if (this.sameId(manager.userId, handoverToUserId)) {
-      const error = new Error("Manager cannot hand over schedules to themselves");
+      const error = new Error(
+        "Manager cannot hand over schedules to themselves",
+      );
       error.statusCode = 400;
       throw error;
     }
@@ -380,10 +382,9 @@ class LeaveRequestService extends BaseService {
     );
     const validation = leaveRequest.validate();
     if (!validation.isValid) {
-      let error = new Error(
-        `Validation failed: ${validation.errors.join(", ")}`,
-      );
+      const error = new Error("Validation failed");
       error.statusCode = validation.statusCode || 400;
+      error.errors = validation.errors;
       throw error;
     }
 
@@ -422,7 +423,9 @@ class LeaveRequestService extends BaseService {
             .session(session)
             .lean();
 
-          affectedScheduleIds = affectedSchedules.map((schedule) => schedule._id);
+          affectedScheduleIds = affectedSchedules.map(
+            (schedule) => schedule._id,
+          );
           handover.required = affectedScheduleIds.length > 0;
 
           if (handover.required) {
@@ -490,10 +493,9 @@ class LeaveRequestService extends BaseService {
     const updateDTO = new UpdateLeaveRequestDTO(leaveRequestData);
     const validation = updateDTO.validate();
     if (!validation.isValid) {
-      let error = new Error(
-        `Validation failed: ${validation.errors.join(", ")}`,
-      );
+      const error = new Error("Validation failed");
       error.statusCode = validation.statusCode || 400;
+      error.errors = validation.errors;
       throw error;
     }
 
