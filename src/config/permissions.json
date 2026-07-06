@@ -38,7 +38,7 @@
   },
   "BRANCH_MANAGER": {
     "users": ["read", "create_staff"],
-    "staff": ["create", "read", "update", "inactive", "suspend"],
+    "staff": ["create", "read", "update", "inactive", "suspend","delete"],
     "products": ["read"],
     "branches": ["read", "update"],
     "orders": ["create", "read", "update"],
