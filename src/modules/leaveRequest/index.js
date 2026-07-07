@@ -16,9 +16,8 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         application/json:
  *           schema:
  *             type: object
- *             required: [leaveType, startDate, endDate, reason]
+ *             required: [startDate, endDate, reason]
  *             properties:
- *               leaveType: { type: string, enum: [ANNUAL, UNPAID, SICK, OTHER] }
  *               startDate: { type: string, format: date-time }
  *               endDate: { type: string, format: date-time }
  *               reason: { type: string }
@@ -74,9 +73,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       - name: status
  *         in: query
  *         schema: { type: string, enum: [PENDING, APPROVED, REJECTED, CANCELLED, EXPIRED, DELETED] }
- *       - name: leaveType
- *         in: query
- *         schema: { type: string, enum: [ANNUAL, UNPAID, SICK, OTHER] }
  *       - name: keyword
  *         in: query
  *         description: Search by employee first name, last name, or leave reason.
@@ -168,9 +164,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       - name: status
  *         in: query
  *         schema: { type: string, enum: [PENDING, APPROVED, REJECTED, CANCELLED, EXPIRED, DELETED] }
- *       - name: leaveType
- *         in: query
- *         schema: { type: string, enum: [ANNUAL, UNPAID, SICK, OTHER] }
  *       - name: keyword
  *         in: query
  *         schema: { type: string }
@@ -185,6 +178,35 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Personal leave request history retrieved successfully
  *       401:
  *         description: Unauthorized
+ *
+ * /leave-requests/balance:
+ *   get:
+ *     summary: Get current user's annual leave balance
+ *     tags: [Leave Requests]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Leave balance retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Leave balance retrieved successfully }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     annualLeaveDays: { type: number, example: 12 }
+ *                     remainingDays: { type: number, example: 8 }
+ *                     usedDays: { type: number, example: 4 }
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: User not found
  *
  * /leave-requests/{id}:
  *   get:
@@ -259,9 +281,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       - name: status
  *         in: query
  *         schema: { type: string, enum: [PENDING, APPROVED, REJECTED, CANCELLED, EXPIRED, DELETED] }
- *       - name: leaveType
- *         in: query
- *         schema: { type: string, enum: [ANNUAL, UNPAID, SICK, OTHER] }
  *       - name: keyword
  *         in: query
  *         schema: { type: string }
@@ -296,9 +315,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       - name: status
  *         in: query
  *         schema: { type: string, enum: [PENDING, APPROVED, REJECTED, CANCELLED, EXPIRED, DELETED] }
- *       - name: leaveType
- *         in: query
- *         schema: { type: string, enum: [ANNUAL, UNPAID, SICK, OTHER] }
  *       - name: keyword
  *         in: query
  *         schema: { type: string }
@@ -328,12 +344,21 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         required: true
  *         schema: { type: string }
  *     requestBody:
- *       required: false
+ *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             required: [paidLeaveDays, unpaidLeaveDays]
  *             properties:
+ *               paidLeaveDays:
+ *                 type: number
+ *                 minimum: 0
+ *                 example: 1
+ *               unpaidLeaveDays:
+ *                 type: number
+ *                 minimum: 0
+ *                 example: 0
  *               reviewNote: { type: string }
  *     responses:
  *       200:
@@ -391,10 +416,9 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         application/json:
  *           schema:
  *             type: object
- *             required: [userId, leaveType, startDate, endDate, reason]
+ *             required: [userId, startDate, endDate, reason]
  *             properties:
  *               userId: { type: string }
- *               leaveType: { type: string, enum: [ANNUAL, UNPAID, SICK, OTHER] }
  *               startDate: { type: string, format: date-time }
  *               endDate: { type: string, format: date-time }
  *               reason: { type: string }
@@ -428,6 +452,13 @@ function registerLeaveRequestModule(app) {
     verifyJwt,
     authorize("leaveRequests", "read_mine"),
     LeaveRequestController.getPersonalHistory.bind(LeaveRequestController),
+  );
+
+  app.get(
+    "/leave-requests/balance",
+    verifyJwt,
+    authorize("leaveRequests", "read_mine"),
+    LeaveRequestController.getBalance.bind(LeaveRequestController),
   );
 
   app.post(
