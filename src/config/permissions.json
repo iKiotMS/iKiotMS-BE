@@ -33,6 +33,7 @@
     "reports": ["read", "export"],
     "paysheets": ["create", "read", "update", "delete"],
     "schedules": ["create", "read", "read_all", "update", "delete", "readBR", "readWH"],
+    "stock_movement": ["create", "read", "update", "approve", "receive", "cancel"],
     "attendances": ["read"],
     "leaveRequests": ["read", "update", "delete", "read_all","approve","reject", "create_emergency","readBR","readWH"]
   },
@@ -46,6 +47,7 @@
     "promotions": ["read"],
     "reports": ["read"],
     "paysheets": ["create", "read", "update", "delete"],
+    "stock_movement": ["create", "read", "update", "approve", "receive", "cancel"],
     "schedules": ["create", "read", "readBR", "update", "delete"],
     "attendances": ["read"],
     "leaveRequests": ["create", "readBR", "update", "read_mine", "cancel","approve","reject", "create_emergency"]
@@ -54,7 +56,7 @@
     "products": ["read"],
     "warehouses": ["read", "update"],
     "inventory": ["read", "update", "manage"],
-    "stock_movement": ["create", "read", "update"],
+    "stock_movement": ["create", "read", "update", "approve", "receive", "cancel"],
     "reports": ["read"],
     "attendances": ["read"],
     "schedules": ["read", "readWH"],

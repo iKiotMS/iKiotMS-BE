@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { StockMovementRequest, Supplier } = require("../../../models");
+const { StockMovementRequest, Supplier, Branch, Warehouse } = require("../../../models");
 const InventoryService = require("../../inventory/service/InventoryService");
 
 class StockMovementService {
@@ -75,8 +75,8 @@ class StockMovementService {
       const request = await StockMovementRequest.findOne({ _id: movementId, tenantId }).session(session);
       if (!request) throw new Error("Stock movement request not found");
 
-      if (request.status !== "IN_TRANSIT" && request.status !== "PENDING") {
-        throw new Error("Cannot receive this request");
+      if (request.status !== "IN_TRANSIT") {
+        throw new Error("Only IN_TRANSIT requests can be received");
       }
 
       let totalImportCost = 0;
@@ -186,6 +186,8 @@ class StockMovementService {
       StockMovementRequest.countDocuments(filter),
     ]);
 
+    await this._attachLocationNamesToMultiple(data);
+
     return {
       data,
       pagination: {
@@ -206,7 +208,40 @@ class StockMovementService {
       .lean();
       
     if (!request) throw new Error("Stock movement request not found");
+
+    await this._attachLocationNamesToMultiple([request]);
+
     return request;
+  }
+
+  async _attachLocationNamesToMultiple(requests) {
+    const branchIds = new Set();
+    const warehouseIds = new Set();
+
+    requests.forEach(r => {
+      if (r.fromLocationId) {
+        if (r.fromLocationType === 'branch') branchIds.add(r.fromLocationId.toString());
+        else if (r.fromLocationType === 'warehouse') warehouseIds.add(r.fromLocationId.toString());
+      }
+      if (r.toLocationId) {
+        if (r.toLocationType === 'branch') branchIds.add(r.toLocationId.toString());
+        else if (r.toLocationType === 'warehouse') warehouseIds.add(r.toLocationId.toString());
+      }
+    });
+
+    const [branches, warehouses] = await Promise.all([
+      Branch.find({ _id: { $in: Array.from(branchIds) } }).select("name").lean(),
+      Warehouse.find({ _id: { $in: Array.from(warehouseIds) } }).select("name").lean()
+    ]);
+
+    const locationMap = {};
+    branches.forEach(b => locationMap[b._id.toString()] = b.name);
+    warehouses.forEach(w => locationMap[w._id.toString()] = w.name);
+
+    requests.forEach(r => {
+      if (r.fromLocationId) r.fromLocationName = locationMap[r.fromLocationId.toString()] || null;
+      if (r.toLocationId) r.toLocationName = locationMap[r.toLocationId.toString()] || null;
+    });
   }
 }
 
