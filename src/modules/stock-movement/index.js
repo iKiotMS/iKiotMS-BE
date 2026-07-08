@@ -1,5 +1,6 @@
 const StockMovementController = require("./controller/StockMovementController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
+const { authorize } = require("../../middlewares/authorizationMiddleware");
 
 /**
  * @openapi
@@ -129,12 +130,12 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Cancelled
  */
 const registerStockMovementModule = (app) => {
-  app.post("/stock-movements", verifyJwt, StockMovementController.create.bind(StockMovementController));
-  app.get("/stock-movements", verifyJwt, StockMovementController.getList.bind(StockMovementController));
-  app.get("/stock-movements/:id", verifyJwt, StockMovementController.getDetail.bind(StockMovementController));
-  app.patch("/stock-movements/:id/approve", verifyJwt, StockMovementController.approve.bind(StockMovementController));
-  app.patch("/stock-movements/:id/receive", verifyJwt, StockMovementController.receive.bind(StockMovementController));
-  app.patch("/stock-movements/:id/cancel", verifyJwt, StockMovementController.cancel.bind(StockMovementController));
+  app.post("/stock-movements", verifyJwt, authorize("stock_movement", "create"), StockMovementController.create.bind(StockMovementController));
+  app.get("/stock-movements", verifyJwt, authorize("stock_movement", "read"), StockMovementController.getList.bind(StockMovementController));
+  app.get("/stock-movements/:id", verifyJwt, authorize("stock_movement", "read"), StockMovementController.getDetail.bind(StockMovementController));
+  app.patch("/stock-movements/:id/approve", verifyJwt, authorize("stock_movement", "approve"), StockMovementController.approve.bind(StockMovementController));
+  app.patch("/stock-movements/:id/receive", verifyJwt, authorize("stock_movement", "receive"), StockMovementController.receive.bind(StockMovementController));
+  app.patch("/stock-movements/:id/cancel", verifyJwt, authorize("stock_movement", "cancel"), StockMovementController.cancel.bind(StockMovementController));
 
   console.log("✓ Stock Movement module registered");
 };

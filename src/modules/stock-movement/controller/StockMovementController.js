@@ -3,7 +3,7 @@ const StockMovementService = require("../service/StockMovementService");
 class StockMovementController {
   async create(req, res) {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, userId } = req.user;
       const request = await StockMovementService.create(tenantId, userId, req.body);
       res.status(201).json({
         success: true,
@@ -20,7 +20,7 @@ class StockMovementController {
 
   async approve(req, res) {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, userId } = req.user;
       const request = await StockMovementService.approve(tenantId, req.params.id, userId);
       res.status(200).json({
         success: true,
@@ -37,7 +37,7 @@ class StockMovementController {
 
   async receive(req, res) {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, userId } = req.user;
       const request = await StockMovementService.receive(tenantId, req.params.id, req.body, userId);
       res.status(200).json({
         success: true,
@@ -54,7 +54,7 @@ class StockMovementController {
 
   async cancel(req, res) {
     try {
-      const { tenantId, id: userId } = req.user;
+      const { tenantId, userId } = req.user;
       const request = await StockMovementService.cancel(tenantId, req.params.id, userId);
       res.status(200).json({
         success: true,
