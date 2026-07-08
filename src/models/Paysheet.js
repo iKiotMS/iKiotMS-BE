@@ -25,7 +25,7 @@ const PaysheetSchema = new mongoose.Schema(
     basicPay: {
       payType: {
         type: String,
-        enum: ["PAY_BY_SHIFT", "PAY_BY_HOUR", "STANDARD_WORKING_DAY", "FIXED"],
+        enum: ["PAY_BY_SHIFT", "STANDARD_WORKING_DAY", "FIXED"],
         required: true,
       },
       amountPerShift: Number,

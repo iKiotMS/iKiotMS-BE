@@ -75,6 +75,10 @@ const userSchema = new mongoose.Schema(
         enum: ["MALE", "FEMALE", "OTHER"],
       },
     },
+    leaveBalance: {
+      annualLeaveDays: { type: Number, default: 12, min: 0 },
+      remainingDays: { type: Number, default: 12, min: 0 },
+    },
   },
   { timestamps: true },
 );

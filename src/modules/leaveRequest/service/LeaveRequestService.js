@@ -31,7 +31,6 @@ class LeaveRequestService extends BaseService {
     if (query.branchId) userFilter.branchId = query.branchId;
     if (query.warehouseId) userFilter.warehouseId = query.warehouseId;
 
-    if (query.leaveType) filter.leaveType = query.leaveType;
     if (query.status) filter.status = query.status;
     if (query.role) userFilter.role = query.role;
 
@@ -102,7 +101,8 @@ class LeaveRequestService extends BaseService {
   }
 
   async getLeaveRequests({ tenantId, filter, page, recordPerPage }) {
-    const selectedFields = "userId leaveType startDate endDate status reason";
+    const selectedFields =
+      "userId paidLeaveDays unpaidLeaveDays startDate endDate status reason";
     const populatedFields = {
       path: "userId",
       select: "branchId warehouseId profile email",
@@ -166,7 +166,7 @@ class LeaveRequestService extends BaseService {
     }
 
     const error = new Error(
-      "You do not have permission to read this leave request",
+      "Bạn không có quyền xem yêu cầu nghỉ phép này",
     );
     error.statusCode = 403;
     throw error;
@@ -174,7 +174,7 @@ class LeaveRequestService extends BaseService {
 
   async getLeaveRequestById({ tenantId, user, leaveRequestId }) {
     if (!mongoose.Types.ObjectId.isValid(leaveRequestId)) {
-      const error = new Error("Invalid leave request id");
+      const error = new Error("Mã yêu cầu nghỉ phép không hợp lệ");
       error.statusCode = 400;
       throw error;
     }
@@ -200,7 +200,7 @@ class LeaveRequestService extends BaseService {
       .lean();
 
     if (!leaveRequest) {
-      let error = new Error("Leave request not found");
+      let error = new Error("Không tìm thấy yêu cầu nghỉ phép");
       error.statusCode = 404;
       throw error;
     }
@@ -222,9 +222,91 @@ class LeaveRequestService extends BaseService {
     return new Date(`${this.getLocalDateText(dateValue)}T00:00:00.000Z`);
   }
 
+  calculateLeaveDays(startDate, endDate) {
+    const startWorkDate = this.buildWorkDate(startDate);
+    const endWorkDate = this.buildWorkDate(endDate);
+
+    if (startWorkDate > endWorkDate) {
+      const error = new Error("Ngày kết thúc không được trước ngày bắt đầu");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const millisecondsPerDay = 24 * 60 * 60 * 1000;
+    return Math.floor((endWorkDate - startWorkDate) / millisecondsPerDay) + 1;
+  }
+
+  async getLeaveBalance({ tenantId, userId }) {
+    const user = await User.findOne({
+      _id: userId,
+      tenantId,
+      status: { $ne: "DELETED" },
+    })
+      .select("leaveBalance")
+      .lean();
+
+    if (!user) {
+      const error = new Error("Không tìm thấy nhân viên");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const annualLeaveDays = user.leaveBalance?.annualLeaveDays ?? 12;
+    const remainingDays = user.leaveBalance?.remainingDays ?? annualLeaveDays;
+
+    return {
+      annualLeaveDays,
+      remainingDays,
+      usedDays: annualLeaveDays - remainingDays,
+    };
+  }
+
+  async assertAnnualLeaveBalance({ tenantId, userId, requestedDays, session }) {
+    const user = await User.findOne({
+      _id: userId,
+      tenantId,
+      status: { $ne: "DELETED" },
+    })
+      .select("leaveBalance")
+      .session(session);
+
+    if (!user) {
+      const error = new Error("Không tìm thấy nhân viên");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const annualLeaveDays = user.leaveBalance?.annualLeaveDays ?? 12;
+    const remainingDays = user.leaveBalance?.remainingDays ?? annualLeaveDays;
+
+    if (
+      user.leaveBalance?.annualLeaveDays === undefined ||
+      user.leaveBalance?.remainingDays === undefined
+    ) {
+      await User.updateOne(
+        { _id: userId, tenantId },
+        {
+          $set: {
+            "leaveBalance.annualLeaveDays": annualLeaveDays,
+            "leaveBalance.remainingDays": remainingDays,
+          },
+        },
+        { session },
+      );
+    }
+
+    if (remainingDays < requestedDays) {
+      const error = new Error("Số ngày nghỉ phép có lương còn lại không đủ");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return { annualLeaveDays, remainingDays };
+  }
+
   getPreviewDateRange(startDate, endDate) {
     if (!startDate || !endDate) {
-      const error = new Error("startDate and endDate are required");
+      const error = new Error("Ngày bắt đầu và ngày kết thúc là bắt buộc");
       error.statusCode = 400;
       throw error;
     }
@@ -233,7 +315,7 @@ class LeaveRequestService extends BaseService {
     const end = new Date(endDate);
 
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      const error = new Error("Invalid leave date range");
+      const error = new Error("Khoảng thời gian nghỉ phép không hợp lệ");
       error.statusCode = 400;
       throw error;
     }
@@ -243,7 +325,7 @@ class LeaveRequestService extends BaseService {
     endWorkDateExclusive.setUTCDate(endWorkDateExclusive.getUTCDate() + 1); // append one day to enddate to... 2026-07-1T00:00:00.000Z <= date < 2026-07-2T00:00:00.000Z
 
     if (startWorkDate >= endWorkDateExclusive) {
-      const error = new Error("End date cannot be before start date");
+      const error = new Error("Ngày kết thúc không được trước ngày bắt đầu");
       error.statusCode = 400;
       throw error;
     }
@@ -263,7 +345,7 @@ class LeaveRequestService extends BaseService {
         requiresHandover: false,
         count: 0,
         affectedSchedules: [],
-        message: "Current user does not need schedule handover",
+        message: "Người dùng hiện tại không cần bàn giao lịch làm việc",
       };
     }
 
@@ -324,7 +406,7 @@ class LeaveRequestService extends BaseService {
   }) {
     if (!handoverToUserId) {
       const error = new Error(
-        "handoverToUserId is required because this manager has schedules during the leave date range",
+        "Cần chọn nhân viên nhận bàn giao vì quản lý có lịch làm việc trong thời gian nghỉ",
       );
       error.statusCode = 400;
       throw error;
@@ -332,7 +414,7 @@ class LeaveRequestService extends BaseService {
 
     if (this.sameId(manager.userId, handoverToUserId)) {
       const error = new Error(
-        "Manager cannot hand over schedules to themselves",
+        "Quản lý không thể bàn giao lịch cho chính mình",
       );
       error.statusCode = 400;
       throw error;
@@ -348,7 +430,7 @@ class LeaveRequestService extends BaseService {
       .lean();
 
     if (!handoverUser) {
-      const error = new Error("Handover user not found or inactive");
+      const error = new Error("Không tìm thấy nhân viên nhận bàn giao hoặc tài khoản không hoạt động");
       error.statusCode = 404;
       throw error;
     }
@@ -357,7 +439,7 @@ class LeaveRequestService extends BaseService {
       manager.role === "BRANCH_MANAGER" &&
       !this.sameId(handoverUser.branchId, manager.branchId)
     ) {
-      const error = new Error("Handover user must be in the same branch");
+      const error = new Error("Nhân viên nhận bàn giao phải thuộc cùng chi nhánh");
       error.statusCode = 400;
       throw error;
     }
@@ -366,13 +448,50 @@ class LeaveRequestService extends BaseService {
       manager.role === "WAREHOUSE_MANAGER" &&
       !this.sameId(handoverUser.warehouseId, manager.warehouseId)
     ) {
-      const error = new Error("Handover user must be in the same warehouse");
+      const error = new Error("Nhân viên nhận bàn giao phải thuộc cùng kho");
       error.statusCode = 400;
       throw error;
     }
 
     return handoverUser;
   }
+
+  async checkOverlappingLeaveRequest({
+    tenantId,
+    userId,
+    startDate,
+    endDate,
+    excludeLeaveRequestId = null,
+  }) {
+    const filter = {
+      tenantId,
+      userId,
+      status: { $in: ["PENDING", "APPROVED"] },
+      startDate: { $lte: new Date(endDate) },
+      endDate: { $gte: new Date(startDate) },
+    };
+
+    if (excludeLeaveRequestId) {
+      filter._id = { $ne: excludeLeaveRequestId };
+    }
+
+    const overlap = await LeaveRequest.findOne(filter)
+      .select("_id startDate endDate status paidLeaveDays unpaidLeaveDays")
+      .lean();
+
+    if (overlap) {
+      const error = new Error(
+        "Tìm thấy yêu cầu nghỉ phép trùng lặp với khoảng thời gian đã chọn",
+      );
+      error.statusCode = 409;
+      error.data = overlap;
+      throw error;
+    }
+  }
+
+  //=============================================================================================
+  //===========================Main Services ========================================================
+  //=============================================================================================
 
   async createLeaveRequest({ tenantId, userId, leaveRequestData, user }) {
     const leaveRequest = new CreateLeaveRequestDTO(
@@ -382,7 +501,7 @@ class LeaveRequestService extends BaseService {
     );
     const validation = leaveRequest.validate();
     if (!validation.isValid) {
-      const error = new Error("Validation failed");
+      const error = new Error("Dữ liệu không hợp lệ");
       error.statusCode = validation.statusCode || 400;
       error.errors = validation.errors;
       throw error;
@@ -392,11 +511,18 @@ class LeaveRequestService extends BaseService {
 
     if (!isManagerLeave && leaveRequest.handoverToUserId) {
       let error = new Error(
-        "handoverToUserId is only allowed for your own manager leave request",
+        "Chỉ quản lý mới được chọn nhân viên nhận bàn giao cho đơn nghỉ của chính mình",
       );
       error.statusCode = 400;
       throw error;
     }
+
+    await this.checkOverlappingLeaveRequest({
+      tenantId,
+      userId,
+      startDate: leaveRequest.startDate,
+      endDate: leaveRequest.endDate,
+    });
 
     const session = await mongoose.startSession();
     let createdLeaveRequest;
@@ -474,7 +600,7 @@ class LeaveRequestService extends BaseService {
     return {
       statusCode: validation.statusCode,
       success: true,
-      message: "Leave request created successfully",
+      message: "Tạo yêu cầu nghỉ phép thành công",
       leaveRequest: createdLeaveRequest,
       handover,
     };
@@ -486,14 +612,14 @@ class LeaveRequestService extends BaseService {
       tenantId,
     });
     if (!leaveRequest) {
-      let error = new Error("Leave request not found");
+      let error = new Error("Không tìm thấy yêu cầu nghỉ phép");
       error.statusCode = 404;
       throw error;
     }
     const updateDTO = new UpdateLeaveRequestDTO(leaveRequestData);
     const validation = updateDTO.validate();
     if (!validation.isValid) {
-      const error = new Error("Validation failed");
+      const error = new Error("Dữ liệu không hợp lệ");
       error.statusCode = validation.statusCode || 400;
       error.errors = validation.errors;
       throw error;
@@ -505,10 +631,18 @@ class LeaveRequestService extends BaseService {
     const endDate = updateData.endDate || leaveRequest.endDate;
 
     if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
-      const error = new Error("End date cannot be before start date");
+      const error = new Error("Ngày kết thúc không được trước ngày bắt đầu");
       error.statusCode = 400;
       throw error;
     }
+
+    await this.checkOverlappingLeaveRequest({
+      tenantId,
+      userId: leaveRequest.userId,
+      startDate,
+      endDate,
+      excludeLeaveRequestId: leaveRequestId,
+    });
 
     const result = await LeaveRequest.findOneAndUpdate(
       { _id: leaveRequestId, tenantId },
@@ -522,7 +656,7 @@ class LeaveRequestService extends BaseService {
 
   async reviewLeaveRequest({ tenantId, leaveRequestId, data }) {
     if (!data.approvedBy || !mongoose.Types.ObjectId.isValid(data.approvedBy)) {
-      let error = new Error("Approver is required");
+      let error = new Error("Người duyệt không hợp lệ");
       error.statusCode = 400;
       throw error;
     }
@@ -533,42 +667,126 @@ class LeaveRequestService extends BaseService {
         typeof data.reviewNote !== "string" ||
         data.reviewNote.trim() === "")
     ) {
-      let error = new Error(
-        "Review note is required when rejecting a leave request",
-      );
+      let error = new Error("Cần nhập ghi chú khi từ chối yêu cầu nghỉ phép");
       error.statusCode = 400;
       throw error;
     }
+
     if (!data.status || !["APPROVED", "REJECTED"].includes(data.status)) {
-      let error = new Error(
-        "Status is required and must be either APPROVED or REJECTED",
-      );
+      let error = new Error("Trạng thái duyệt phải là APPROVED hoặc REJECTED");
       error.statusCode = 400;
       throw error;
     }
 
-    const currentLeaveRequest = await LeaveRequest.findOne({
-      _id: leaveRequestId,
-      tenantId,
-    });
-
-    if (!currentLeaveRequest) {
-      let error = new Error("Leave request not found");
-      error.statusCode = 404;
+    const updateDTO = new UpdateLeaveRequestDTO(data);
+    const validation = updateDTO.validate();
+    if (!validation.isValid) {
+      const error = new Error("Dữ liệu không hợp lệ");
+      error.statusCode = validation.statusCode || 400;
+      error.errors = validation.errors;
       throw error;
     }
 
-    if (currentLeaveRequest.status !== "PENDING") {
-      let error = new Error("Only pending leave requests can be reviewed");
-      error.statusCode = 400;
-      throw error;
+    const session = await mongoose.startSession();
+    let leaveRequest;
+
+    try {
+      await session.withTransaction(async () => {
+        const currentLeaveRequest = await LeaveRequest.findOne({
+          _id: leaveRequestId,
+          tenantId,
+        }).session(session);
+
+        if (!currentLeaveRequest) {
+          let error = new Error("Không tìm thấy yêu cầu nghỉ phép");
+          error.statusCode = 404;
+          throw error;
+        }
+
+        if (currentLeaveRequest.status !== "PENDING") {
+          let error = new Error("Chỉ có thể duyệt yêu cầu đang chờ xử lý");
+          error.statusCode = 400;
+          throw error;
+        }
+
+        if (data.status === "APPROVED") {
+          if (
+            updateDTO.paidLeaveDays === undefined ||
+            updateDTO.unpaidLeaveDays === undefined
+          ) {
+            const error = new Error(
+              "Cần nhập số ngày nghỉ có lương và không lương khi duyệt",
+            );
+            error.statusCode = 400;
+            throw error;
+          }
+
+          const totalApprovedDays = updateDTO.paidLeaveDays + updateDTO.unpaidLeaveDays;
+          const totalLeaveDays = this.calculateLeaveDays(
+            currentLeaveRequest.startDate,
+            currentLeaveRequest.endDate,
+          );
+
+          if (totalApprovedDays <= 0) {
+            const error = new Error(
+              "Tổng số ngày nghỉ được duyệt phải lớn hơn 0",
+            );
+            error.statusCode = 400;
+            throw error;
+          }
+
+          if (totalApprovedDays > totalLeaveDays) {
+            const error = new Error(
+              "Tổng số ngày nghỉ có lương và không lương không được vượt quá số ngày xin nghỉ",
+            );
+            error.statusCode = 400;
+            throw error;
+          }
+
+          if (updateDTO.paidLeaveDays > 0) {
+            await this.assertAnnualLeaveBalance({
+              tenantId,
+              userId: currentLeaveRequest.userId,
+              requestedDays: updateDTO.paidLeaveDays,
+              session,
+            });
+
+            const updatedUser = await User.findOneAndUpdate(
+              {
+                _id: currentLeaveRequest.userId,
+                tenantId,
+                "leaveBalance.remainingDays": { $gte: updateDTO.paidLeaveDays },
+              },
+              {
+                $inc: {
+                  "leaveBalance.remainingDays": -updateDTO.paidLeaveDays,
+                },
+              },
+              { new: true, session },
+            );
+
+            if (!updatedUser) {
+              const error = new Error(
+                "Số ngày nghỉ phép có lương còn lại không đủ",
+              );
+              error.statusCode = 400;
+              throw error;
+            }
+          }
+        }
+
+        leaveRequest = await LeaveRequest.findOneAndUpdate(
+          { _id: leaveRequestId, tenantId },
+          { $set: updateDTO.toUpdateData() },
+          { new: true, runValidators: true, session },
+        )
+          .select("-__v")
+          .lean();
+      });
+    } finally {
+      await session.endSession();
     }
 
-    const leaveRequest = await this.updateLeaveRequest({
-      tenantId,
-      leaveRequestId,
-      leaveRequestData: data,
-    });
     return leaveRequest;
   }
 
@@ -597,20 +815,20 @@ class LeaveRequestService extends BaseService {
     });
 
     if (!leaveRequest) {
-      let error = new Error("Leave request not found");
+      let error = new Error("Không tìm thấy yêu cầu nghỉ phép");
       error.statusCode = 404;
       throw error;
     }
 
     if (userId && leaveRequest.userId.toString() !== userId.toString()) {
-      let error = new Error("You can only cancel your own leave request");
+      let error = new Error("Bạn chỉ có thể hủy yêu cầu nghỉ phép của chính mình");
       error.statusCode = 403;
       throw error;
     }
 
     if (!["PENDING", "APPROVED"].includes(leaveRequest.status)) {
       let error = new Error(
-        "Only pending or approved leave requests can be cancelled",
+        "Chỉ có thể hủy yêu cầu đang chờ xử lý hoặc đã được duyệt",
       );
       error.statusCode = 400;
       throw error;
@@ -624,18 +842,44 @@ class LeaveRequestService extends BaseService {
 
     if (startDate <= today) {
       let error = new Error(
-        "Leave request cannot be cancelled after the leave date has arrived",
+        "Không thể hủy yêu cầu nghỉ phép khi ngày nghỉ đã bắt đầu",
       );
       error.statusCode = 400;
       throw error;
     }
 
     data.status = "CANCELLED";
-    const result = await this.updateLeaveRequest({
-      tenantId,
-      leaveRequestId,
-      leaveRequestData: data,
-    });
+    const session = await mongoose.startSession();
+    let result;
+
+    try {
+      await session.withTransaction(async () => {
+        if (
+          leaveRequest.status === "APPROVED" && leaveRequest.paidLeaveDays > 0
+        ) {
+          await User.updateOne(
+            { _id: leaveRequest.userId, tenantId },
+            {
+              $inc: {
+                "leaveBalance.remainingDays": leaveRequest.paidLeaveDays,
+              },
+            },
+            { session },
+          );
+        }
+
+        result = await LeaveRequest.findOneAndUpdate(
+          { _id: leaveRequestId, tenantId },
+          { $set: data },
+          { new: true, runValidators: true, session },
+        )
+          .select("-__v")
+          .lean();
+      });
+    } finally {
+      await session.endSession();
+    }
+
     return result;
   }
 
@@ -647,7 +891,7 @@ class LeaveRequestService extends BaseService {
     return {
       statusCode: 200,
       success: true,
-      message: "Leave request deleted successfully",
+      message: "Xóa yêu cầu nghỉ phép thành công",
       result,
     };
   }

@@ -12,6 +12,7 @@ const connectDB = require("./config/connectDB");
 const { setupSwagger } = require("./config/setupSwagger");
 const { initSocket } = require("./services/socketService");
 const { startSubscriptionJob } = require("./jobs/subscriptionJob");
+const { startLeaveRequestJob } = require("./jobs/leaveRequestJob");
 
 const createApp = () => {
   const app = express();
@@ -21,7 +22,7 @@ const createApp = () => {
   app.use(
     cors({
       origin: ["http://localhost:3000", process.env.FRONTEND_URL],
-      credentials: true
+      credentials: true,
     }),
   );
 
@@ -67,6 +68,7 @@ const startServer = async () => {
 
   if (config.nodeEnv !== "test") {
     startSubscriptionJob();
+    startLeaveRequestJob();
   }
 };
 
