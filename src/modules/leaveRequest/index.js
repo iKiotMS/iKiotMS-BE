@@ -18,12 +18,35 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *             type: object
  *             required: [startDate, endDate, reason]
  *             properties:
- *               startDate: { type: string, format: date-time }
- *               endDate: { type: string, format: date-time }
- *               reason: { type: string }
+ *               startDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: ISO datetime with timezone. Vietnam time should include +07:00; MongoDB stores it as UTC.
+ *                 example: "2026-07-10T08:00:00+07:00"
+ *               endDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: ISO datetime with timezone. Example Vietnam time 17:00 is stored as 10:00Z.
+ *                 example: "2026-07-10T17:00:00+07:00"
+ *               reason:
+ *                 type: string
+ *                 example: "Xin nghỉ phép cá nhân"
  *               handoverToUserId:
  *                 type: string
  *                 description: Required only when a branch or warehouse manager has schedules to hand over during the leave date range.
+ *           examples:
+ *             vietnamTimezone:
+ *               summary: Vietnam timezone input
+ *               value:
+ *                 startDate: "2026-07-10T08:00:00+07:00"
+ *                 endDate: "2026-07-10T17:00:00+07:00"
+ *                 reason: "Xin nghỉ phép cá nhân"
+ *             utcEquivalent:
+ *               summary: Same period in UTC
+ *               value:
+ *                 startDate: "2026-07-10T01:00:00.000Z"
+ *                 endDate: "2026-07-10T10:00:00.000Z"
+ *                 reason: "Xin nghỉ phép cá nhân"
  *     responses:
  *       201:
  *         description: Leave request created successfully
@@ -419,9 +442,34 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *             required: [userId, startDate, endDate, reason]
  *             properties:
  *               userId: { type: string }
- *               startDate: { type: string, format: date-time }
- *               endDate: { type: string, format: date-time }
- *               reason: { type: string }
+ *               startDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: ISO datetime with timezone. Vietnam time should include +07:00; MongoDB stores it as UTC.
+ *                 example: "2026-07-10T08:00:00+07:00"
+ *               endDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: ISO datetime with timezone. Example Vietnam time 17:00 is stored as 10:00Z.
+ *                 example: "2026-07-10T17:00:00+07:00"
+ *               reason:
+ *                 type: string
+ *                 example: "Tạo đơn nghỉ khẩn cấp"
+ *           examples:
+ *             vietnamTimezone:
+ *               summary: Vietnam timezone input
+ *               value:
+ *                 userId: "665ccc1234567890abcdef12"
+ *                 startDate: "2026-07-10T08:00:00+07:00"
+ *                 endDate: "2026-07-10T17:00:00+07:00"
+ *                 reason: "Tạo đơn nghỉ khẩn cấp"
+ *             utcEquivalent:
+ *               summary: Same period in UTC
+ *               value:
+ *                 userId: "665ccc1234567890abcdef12"
+ *                 startDate: "2026-07-10T01:00:00.000Z"
+ *                 endDate: "2026-07-10T10:00:00.000Z"
+ *                 reason: "Tạo đơn nghỉ khẩn cấp"
  *     responses:
  *       201:
  *         description: Emergency leave request created successfully

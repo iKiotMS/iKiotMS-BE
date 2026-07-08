@@ -45,4 +45,4 @@ const setupSwagger = (app) => {
   );
 };
 
-module.exports = { setupSwagger };
+module.exports = { setupSwagger, specs };
