@@ -22,7 +22,7 @@ class WarehouseController {
 
       const warehouse = await WarehouseService.createWarehouse(tenantId, dto);
 
-      deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
+      await deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
 
       res.status(201).json({
         success: true,
@@ -106,8 +106,8 @@ class WarehouseController {
 
       const warehouse = await WarehouseService.updateWarehouse(tenantId, id, dto);
 
-      deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
-      deleteKeys(cacheKeys.warehouseDetail(tenantId, id)).catch(() => {});
+      await deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
+      await deleteKeys(cacheKeys.warehouseDetail(tenantId, id)).catch(() => {});
 
       res.status(200).json({
         success: true,
@@ -130,8 +130,8 @@ class WarehouseController {
 
       const warehouse = await WarehouseService.softDeleteWarehouse(tenantId, id);
 
-      deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
-      deleteKeys(cacheKeys.warehouseDetail(tenantId, id)).catch(() => {});
+      await deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
+      await deleteKeys(cacheKeys.warehouseDetail(tenantId, id)).catch(() => {});
 
       res.status(200).json({
         success: true,
@@ -175,8 +175,8 @@ class WarehouseController {
         staffId: dto.staffId,
       });
 
-      deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
-      deleteKeys(cacheKeys.warehouseDetail(tenantId, id)).catch(() => {});
+      await deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
+      await deleteKeys(cacheKeys.warehouseDetail(tenantId, id)).catch(() => {});
 
       res.status(200).json({
         success: true,

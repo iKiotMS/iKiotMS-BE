@@ -49,11 +49,15 @@ const deleteByPattern = async (pattern) => {
   if (!redisClient.isReady) return;
   try {
     const keys = [];
-    for await (const key of redisClient.scanIterator({
+    for await (const chunk of redisClient.scanIterator({
       MATCH: pattern,
       COUNT: 100,
     })) {
-      keys.push(key);
+      if (Array.isArray(chunk)) {
+        keys.push(...chunk);
+      } else {
+        keys.push(chunk);
+      }
     }
     if (keys.length > 0) {
       await redisClient.unlink(keys);
