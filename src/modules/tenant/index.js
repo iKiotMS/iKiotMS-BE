@@ -86,6 +86,12 @@ const { authorize } = require('../../middlewares/authorizationMiddleware');
  */
 const registerTenantModule = (app) => {
   app.get('/tenant/me', verifyJwt, TenantController.getMyTenant.bind(TenantController));
+  app.put(
+    '/tenant/me',
+    verifyJwt,
+    authorize('tenants', 'update'),
+    TenantController.updateMyTenant.bind(TenantController),
+  );
 
   app.put(
     '/tenant/banking',

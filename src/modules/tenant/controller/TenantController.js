@@ -51,6 +51,20 @@ class TenantController {
       res.status(400).json({ success: false, message: error.message });
     }
   }
+
+  async updateMyTenant(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      const tenant = await TenantService.updateTenant(tenantId, req.body);
+      res.status(200).json({ success: true, data: tenant });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
 }
 
 module.exports = new TenantController();

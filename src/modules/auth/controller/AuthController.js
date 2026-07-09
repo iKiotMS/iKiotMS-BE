@@ -207,9 +207,9 @@ class AuthController {
         });
       }
 
-      const { user, subscription } = await AuthService.getUserProfile(userId);
+      const { user, subscription, tenant } = await AuthService.getUserProfile(userId);
 
-      const response = new UserProfileResponseDTO(user, subscription);
+      const response = new UserProfileResponseDTO(user, subscription, tenant);
 
       res.status(200).json({
         success: true,

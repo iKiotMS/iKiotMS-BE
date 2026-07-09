@@ -27,7 +27,7 @@ class BranchController {
         subscription,
       );
 
-      deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
+      await deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
 
       res.status(201).json({
         success: true,
@@ -111,8 +111,8 @@ class BranchController {
 
       const branch = await BranchService.updateBranch(tenantId, id, dto);
 
-      deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
-      deleteKeys(cacheKeys.branchDetail(tenantId, id)).catch(() => {});
+      await deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
+      await deleteKeys(cacheKeys.branchDetail(tenantId, id)).catch(() => {});
 
       res.status(200).json({
         success: true,
@@ -135,8 +135,8 @@ class BranchController {
 
       const branch = await BranchService.softDeleteBranch(tenantId, id);
 
-      deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
-      deleteKeys(cacheKeys.branchDetail(tenantId, id)).catch(() => {});
+      await deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
+      await deleteKeys(cacheKeys.branchDetail(tenantId, id)).catch(() => {});
 
       res.status(200).json({
         success: true,
@@ -180,8 +180,8 @@ class BranchController {
         staffId: dto.staffId,
       });
 
-      deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
-      deleteKeys(cacheKeys.branchDetail(tenantId, id)).catch(() => {});
+      await deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
+      await deleteKeys(cacheKeys.branchDetail(tenantId, id)).catch(() => {});
 
       res.status(200).json({
         success: true,
