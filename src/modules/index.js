@@ -18,6 +18,7 @@ const { registerOrderModule } = require("./order");
 const { registerAttendanceModule } = require("./attendances");
 const { registerLeaveRequestModule } = require("./leaveRequest");
 const { registerAIModule } = require("./ai");
+const { registerStatsModule } = require("./stats");
 
 function registerModules(app) {
   registerAuthModule(app);
@@ -40,6 +41,7 @@ function registerModules(app) {
   registerAttendanceModule(app);
   registerLeaveRequestModule(app);
   registerAIModule(app);
+  registerStatsModule(app);
 }
 
 module.exports = { registerModules };

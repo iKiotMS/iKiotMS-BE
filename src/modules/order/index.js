@@ -158,6 +158,50 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Invalid status transition
  *       404:
  *         description: Order not found
+ * /orders/{id}/pay-offline:
+ *   post:
+ *     tags:
+ *       - Orders
+ *     summary: Record an offline payment for a pending SEPAY order
+ *     description: |
+ *       The customer abandoned the SePay QR and paid at the counter. Converts the
+ *       PENDING SEPAY order to COMPLETED with the given offline method and books an
+ *       INCOME CashFlow under that method, so SEPAY CashFlow rows always correspond
+ *       to a real bank transaction.
+ *
+ *       The original `paymentReference` (ORDxxxxxx) is retained as an audit trail. A
+ *       SePay webhook arriving afterwards no longer matches a PENDING SEPAY order, so
+ *       the transfer is ignored (and logged) rather than double-booked.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: [CASH, BANK_TRANSFER, MOMO, VNPAY]
+ *                 default: CASH
+ *               customerPay:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Amount handed over. Defaults to grandTotal; must not be less.
+ *               note:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Offline payment recorded; order COMPLETED and CashFlow created
+ *       400:
+ *         description: Underpaid, validation error, or order already paid/cancelled
+ *       404:
+ *         description: Order not found or no longer awaiting SePay payment
  * /webhook/sepay/order:
  *   post:
  *     tags:
@@ -347,6 +391,7 @@ const registerOrderModule = (app) => {
   app.get("/orders", verifyJwt, authorize("orders", "read"), OrderController.getList.bind(OrderController));
   app.get("/orders/:id", verifyJwt, authorize("orders", "read"), OrderController.getDetail.bind(OrderController));
   app.patch("/orders/:id/status", verifyJwt, authorize("orders", "update"), OrderController.updateStatus.bind(OrderController));
+  app.post("/orders/:id/pay-offline", verifyJwt, authorize("orders", ["update", "pay_offline"]), OrderController.payOffline.bind(OrderController));
 
   // SePay order webhook (no auth — called by SePay)
   app.post("/webhook/sepay/order", OrderController.handleSepayOrderWebhook.bind(OrderController));

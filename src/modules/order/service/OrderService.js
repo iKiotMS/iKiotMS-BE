@@ -10,6 +10,7 @@ const {
 } = require("../../../models");
 const sepayService = require("../../../services/sepayService");
 const { emitToRoom } = require("../../../services/socketService");
+const { attachUserName, USER_NAME_SELECT } = require("../../../utils/userName");
 
 const INSTANT_COMPLETE_METHODS = ["CASH", "BANK_TRANSFER", "MOMO", "VNPAY"];
 
@@ -24,7 +25,6 @@ class OrderService {
   async createOrder(tenantId, userId, dto) {
     const { customerId, branchId, paymentMethod, items, grandTotal, customerPay, note } = dto;
 
-    // Pre-flight checks (outside transaction for read performance)
     let customer;
     if (customerId) {
       customer = await Customer.findOne({ _id: customerId, tenantId }).lean();
@@ -72,8 +72,9 @@ class OrderService {
 
     const isSepay = paymentMethod === "SEPAY";
     const status = INSTANT_COMPLETE_METHODS.includes(paymentMethod) ? "COMPLETED" : "PENDING";
-    // SEPAY ref generated before insert (needed for QR URL); CASH ref derived from _id after insert
-    const sepayRef = isSepay ? sepayService.generateOrderRef() : undefined;
+    // Every order gets an ORD ref regardless of payment method, so an ORD prefix on a
+    // CashFlow row always means "sales revenue". Only SEPAY puts it in the QR.
+    const orderRef = sepayService.generateOrderRef();
 
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -86,7 +87,7 @@ class OrderService {
             customerId: customer._id,
             userId,
             paymentMethod,
-            paymentReference: sepayRef,
+            paymentReference: orderRef,
             grandTotal,
             customerPay,
             change: customerPay != null ? Math.max(0, customerPay - grandTotal) : undefined,
@@ -104,13 +105,6 @@ class OrderService {
         { session },
       );
 
-      // CASH: assign ref from ObjectId — guaranteed unique, no collision possible
-      if (!isSepay) {
-        order.paymentReference = `CASH${order._id.toString().slice(-8).toUpperCase()}`;
-        await order.save({ session });
-      }
-
-      // Deduct inventory for all payment methods (reserve stock immediately)
       for (const item of items) {
         await Inventory.findOneAndUpdate(
           { productItemId: item.productItemId, locationId: branchId, locationType: "branch" },
@@ -126,9 +120,11 @@ class OrderService {
               tenantId,
               branchId,
               orderId: order._id,
+              createdBy: userId,
               flowType: "INCOME",
               amount: grandTotal,
               paymentMethod,
+              paymentReference: order.paymentReference,
               description: `Order ${order._id}`,
             },
           ],
@@ -140,7 +136,7 @@ class OrderService {
 
       let qrUrl;
       if (isSepay && tenant?.banking) {
-        qrUrl = sepayService.buildTenantQrUrl(tenant.banking, grandTotal, sepayRef);
+        qrUrl = sepayService.buildTenantQrUrl(tenant.banking, grandTotal, orderRef);
       }
 
       return { order, qrUrl };
@@ -189,10 +185,12 @@ class OrderService {
         .skip(skip)
         .limit(limit)
         .populate("customerId", "name phone")
-        .populate("userId", "name")
+        .populate("userId", USER_NAME_SELECT)
         .lean(),
       Order.countDocuments(filter),
     ]);
+
+    data.forEach((o) => attachUserName(o.userId));
 
     return {
       data,
@@ -203,10 +201,11 @@ class OrderService {
   async getOrderById(tenantId, orderId) {
     const order = await Order.findOne({ _id: orderId, tenantId })
       .populate("customerId", "name phone")
-      .populate("userId", "name")
+      .populate("userId", USER_NAME_SELECT)
       .populate("items.productItemId", "sku productName")
       .lean();
     if (!order) throw new Error("Order not found");
+    attachUserName(order.userId);
     return order;
   }
 
@@ -221,8 +220,14 @@ class OrderService {
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
-      order.status = newStatus;
-      await order.save({ session });
+      const updated = await Order.findOneAndUpdate(
+        { _id: order._id, status: order.status },
+        { $set: { status: newStatus } },
+        { new: true, session },
+      );
+      if (!updated) {
+        throw new Error("Order status changed concurrently, please retry");
+      }
 
       if (newStatus === "CANCELLED" || newStatus === "RETURNED") {
         for (const item of order.items) {
@@ -245,9 +250,11 @@ class OrderService {
               tenantId,
               branchId: order.branchId,
               orderId: order._id,
+              createdBy: order.userId,
               flowType: "INCOME",
               amount: order.grandTotal,
               paymentMethod: order.paymentMethod,
+              paymentReference: order.paymentReference,
               description: `Order ${order._id}`,
             },
           ],
@@ -256,15 +263,24 @@ class OrderService {
       }
 
       if (newStatus === "RETURNED") {
+        const income = await CashFlow.findOne({
+          orderId: order._id,
+          flowType: "INCOME",
+        })
+          .session(session)
+          .lean();
+
         await CashFlow.create(
           [
             {
               tenantId,
               branchId: order.branchId,
               orderId: order._id,
+              createdBy: order.userId,
               flowType: "EXPENSE",
-              amount: order.grandTotal,
+              amount: income?.amount ?? order.grandTotal,
               paymentMethod: order.paymentMethod,
+              paymentReference: order.paymentReference,
               description: `Return order ${order._id}`,
             },
           ],
@@ -273,6 +289,77 @@ class OrderService {
       }
 
       await session.commitTransaction();
+      return updated;
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  async payOfflineForSepayOrder(tenantId, orderId, userId, dto) {
+    const pending = await Order.findOne({
+      _id: orderId,
+      tenantId,
+      status: "PENDING",
+      paymentMethod: "SEPAY",
+    }).lean();
+    if (!pending) throw new Error("Order not found or no longer awaiting SePay payment");
+
+    const customerPay = dto.customerPay ?? pending.grandTotal;
+    if (customerPay < pending.grandTotal) {
+      throw new Error(
+        `Underpaid: expected ${pending.grandTotal}, received ${customerPay}`,
+      );
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      const order = await Order.findOneAndUpdate(
+        { _id: pending._id, status: "PENDING", paymentMethod: "SEPAY" },
+        {
+          $set: {
+            status: "COMPLETED",
+            paymentMethod: dto.paymentMethod,
+            customerPay,
+            change: Math.max(0, customerPay - pending.grandTotal),
+            ...(dto.note ? { note: dto.note } : {}),
+          },
+        },
+        { new: true, session },
+      );
+      if (!order) {
+        throw new Error("Order was already paid or cancelled, please refresh");
+      }
+
+      await CashFlow.create(
+        [
+          {
+            tenantId: order.tenantId,
+            branchId: order.branchId,
+            orderId: order._id,
+            createdBy: userId,
+            flowType: "INCOME",
+            amount: order.grandTotal,
+            paymentMethod: dto.paymentMethod,
+            paymentReference: order.paymentReference,
+            description: `Offline payment (${dto.paymentMethod}) for SePay order ${order.paymentReference}`,
+          },
+        ],
+        { session },
+      );
+
+      await session.commitTransaction();
+
+      emitToRoom(`order:${order._id}`, "order:paid", {
+        orderId: order._id,
+        status: order.status,
+        paidAmount: order.grandTotal,
+        paymentMethod: order.paymentMethod,
+      });
+
       return order;
     } catch (err) {
       await session.abortTransaction();
@@ -283,26 +370,43 @@ class OrderService {
   }
 
   async completeSepayOrder(tenantId, paymentReference, sepayTransactionId, transferAmount) {
-    const order = await Order.findOne({
+    const pending = await Order.findOne({
       paymentReference,
       status: "PENDING",
       paymentMethod: "SEPAY",
       tenantId,
-    });
-    if (!order) return null;
+    }).lean();
+    if (!pending) {
+      const settled = await Order.findOne({ paymentReference, tenantId })
+        .select("_id status paymentMethod grandTotal")
+        .lean();
+      if (settled) {
+        console.warn(
+          `[SePay] Transfer ${sepayTransactionId} (${transferAmount}) for ${paymentReference} ignored — ` +
+            `order ${settled._id} is already ${settled.status} via ${settled.paymentMethod}. Manual refund may be required.`,
+        );
+      }
+      return null;
+    }
 
-    if (transferAmount < order.grandTotal) {
+    if (transferAmount < pending.grandTotal) {
       throw new Error(
-        `Underpaid: expected ${order.grandTotal}, received ${transferAmount}`,
+        `Underpaid: expected ${pending.grandTotal}, received ${transferAmount}`,
       );
     }
 
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
-      order.status = "COMPLETED";
-      order.sepayTransactionId = sepayTransactionId;
-      await order.save({ session });
+      const order = await Order.findOneAndUpdate(
+        { _id: pending._id, status: "PENDING" },
+        { $set: { status: "COMPLETED", sepayTransactionId } },
+        { new: true, session },
+      );
+      if (!order) {
+        await session.abortTransaction();
+        return null;
+      }
 
       await CashFlow.create(
         [
@@ -310,9 +414,12 @@ class OrderService {
             tenantId: order.tenantId,
             branchId: order.branchId,
             orderId: order._id,
+            createdBy: order.userId,
             flowType: "INCOME",
             amount: transferAmount,
             paymentMethod: "SEPAY",
+            paymentReference: order.paymentReference,
+            sepayTransactionId,
             description: `SePay - ${order.paymentReference}`,
           },
         ],
@@ -325,6 +432,7 @@ class OrderService {
         orderId: order._id,
         status: order.status,
         paidAmount: transferAmount,
+        paymentMethod: "SEPAY",
       });
 
       return order;
