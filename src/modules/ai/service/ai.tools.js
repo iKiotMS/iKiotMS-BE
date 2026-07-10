@@ -20,6 +20,7 @@ const LeaveRequestService = require("../../leaveRequest/service/LeaveRequestServ
 const WorkingScheduleService = require("../../schedule/service/WorkingScheduleService");
 const PaySheetService = require("../../payroll/service/PaySheetService");
 const InventoryService = require("../../inventory/service/InventoryService");
+const { attachUserName, USER_NAME_SELECT } = require("../../../utils/userName");
 
 const manageAttendanceService = new ManageAttendanceService();
 
@@ -240,13 +241,14 @@ async function getOrderDetailsByCode(tenantId, { orderCode }) {
     ]
   })
     .populate("customerId", "name phone")
-    .populate("userId", "name")
+    .populate("userId", USER_NAME_SELECT)
     .populate("items.productItemId", "sku productName")
     .lean();
 
   if (!order) {
     throw new Error(`Order not found for code: ${orderCode}`);
   }
+  attachUserName(order.userId);
   return order;
 }
 

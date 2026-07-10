@@ -64,7 +64,7 @@
   },
   "STAFF": {
     "products": ["read"],
-    "orders": ["create", "read"],
+    "orders": ["create", "read", "pay_offline"],
     "inventory": ["read"],
     "branches": ["read"],
     "schedules": ["read_own"],

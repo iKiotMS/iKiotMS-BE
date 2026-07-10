@@ -1,6 +1,7 @@
 const OrderService = require("../service/OrderService");
 const CreateOrderDTO = require("../dto/CreateOrderDTO");
 const UpdateOrderStatusDTO = require("../dto/UpdateOrderStatusDTO");
+const PayOfflineOrderDTO = require("../dto/PayOfflineOrderDTO");
 const OrderQueryDTO = require("../dto/OrderQueryDTO");
 const sepayService = require("../../../services/sepayService");
 
@@ -65,6 +66,28 @@ class OrderController {
       res.status(200).json({ success: true, message: "Order status updated", data: order });
     } catch (error) {
       const status = error.message === "Order not found" ? 404 : 400;
+      res.status(status).json({ success: false, message: error.message });
+    }
+  }
+
+  async payOffline(req, res) {
+    try {
+      const { tenantId, userId } = req.user;
+      const dto = new PayOfflineOrderDTO(req.body);
+      const { isValid, errors } = dto.validate();
+      if (!isValid) {
+        return res.status(400).json({ success: false, message: "Validation failed", errors });
+      }
+
+      const order = await OrderService.payOfflineForSepayOrder(
+        tenantId,
+        req.params.id,
+        userId,
+        dto,
+      );
+      res.status(200).json({ success: true, message: "Offline payment recorded", data: order });
+    } catch (error) {
+      const status = error.message.startsWith("Order not found") ? 404 : 400;
       res.status(status).json({ success: false, message: error.message });
     }
   }

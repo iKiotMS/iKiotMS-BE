@@ -1,4 +1,5 @@
 const { Customer, Order } = require("../../../models");
+const { attachUserName, USER_NAME_SELECT } = require("../../../utils/userName");
 
 class CustomerService {
   async createCustomer(tenantId, data) {
@@ -36,11 +37,12 @@ class CustomerService {
 
     const orders = await Order.find(orderFilter)
       .populate("branchId", "name")
-      .populate("userId", "name")
+      .populate("userId", USER_NAME_SELECT)
       .lean();
 
     const customerOrdersMap = {};
     orders.forEach((o) => {
+      attachUserName(o.userId);
       if (!customerOrdersMap[o.customerId]) {
         customerOrdersMap[o.customerId] = [];
       }

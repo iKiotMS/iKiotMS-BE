@@ -250,7 +250,7 @@ const functionDeclarations = [
   },
   {
     name: "getOrderDetailsByCode",
-    description: "Tra cứu thông tin chi tiết của một đơn hàng cụ thể theo mã đơn (paymentReference ví dụ: CASHxxxx, ORDxxxx) hoặc ID đơn hàng.",
+    description: "Tra cứu thông tin chi tiết của một đơn hàng cụ thể theo mã đơn (paymentReference, ví dụ: ORDxxxxxxxxxx) hoặc ID đơn hàng.",
     parameters: {
       type: "OBJECT",
       properties: {
