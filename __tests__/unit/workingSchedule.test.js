@@ -23,6 +23,11 @@ const ShiftTemplate = require("../../src/models/ShiftTemplate");
 const WorkingSchedule = require("../../src/models/WorkingSchedule");
 const Attendance = require("../../src/models/Attendance");
 const WorkingScheduleService = require("../../src/modules/schedule/service/WorkingScheduleService");
+const {
+  attachAttendancesToUsers,
+  getAttendanceKey,
+  getLateMinutes,
+} = require("../../src/modules/schedule/service/WorkingScheduleAttendanceMapper");
 
 const sameDate = (left, right) => {
   return new Date(left).getTime() === new Date(right).getTime();
@@ -367,6 +372,88 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
     expect(WorkingSchedule.findOneAndUpdate).not.toHaveBeenCalled();
     expect(WorkingSchedule.create).not.toHaveBeenCalled();
     expect(schedules).toHaveLength(1);
+  });
+});
+
+describe("WorkingScheduleAttendanceMapper", () => {
+  test("uses one attendance session to derive normal and overtime schedule status", () => {
+    const user = { _id: "staffA", profile: { firstName: "A" } };
+    const schedules = [
+      {
+        _id: "normalSchedule",
+        userId: [user],
+        workDate: new Date("2026-07-01T00:00:00.000Z"),
+        startAt: new Date("2026-07-01T01:00:00.000Z"),
+        endAt: new Date("2026-07-01T10:00:00.000Z"),
+        scheduleType: "NORMAL",
+      },
+      {
+        _id: "overtimeSchedule",
+        userId: [user],
+        workDate: new Date("2026-07-01T00:00:00.000Z"),
+        startAt: new Date("2026-07-01T10:00:00.000Z"),
+        endAt: new Date("2026-07-01T12:00:00.000Z"),
+        scheduleType: "OVERTIME",
+      },
+    ];
+    const attendance = {
+      _id: "attendance1",
+      userId: "staffA",
+      workDate: new Date("2026-07-01T00:00:00.000Z"),
+      status: "CHECKED_OUT",
+      actualCheckinAt: new Date("2026-07-01T01:00:00.000Z"),
+      actualCheckoutAt: new Date("2026-07-01T12:00:00.000Z"),
+      workedMinutes: 660,
+    };
+    const attendanceByUserAndWorkDate = {
+      [getAttendanceKey(attendance.workDate, attendance.userId)]: [attendance],
+    };
+
+    const result = attachAttendancesToUsers(
+      schedules,
+      attendanceByUserAndWorkDate,
+      true,
+    );
+
+    expect(result[0].userId[0].attendance).toMatchObject({
+      status: "CHECKED_OUT",
+      workedMinutes: 660,
+      workedMinutesInThisSchedule: 540,
+    });
+    expect(result[1].userId[0].attendance).toMatchObject({
+      status: "CHECKED_OUT",
+      workedMinutes: 660,
+      workedMinutesInThisSchedule: 120,
+      lateMinutes: 0,
+    });
+  });
+
+  test("calculates late minutes with a 15 minute grace period", () => {
+    const schedule = {
+      startAt: new Date("2026-07-01T01:00:00.000Z"),
+      endAt: new Date("2026-07-01T05:00:00.000Z"),
+      scheduleType: "NORMAL",
+    };
+
+    expect(
+      getLateMinutes(
+        {
+          actualCheckinAt: new Date("2026-07-01T01:15:00.000Z"),
+          actualCheckoutAt: new Date("2026-07-01T05:00:00.000Z"),
+        },
+        schedule,
+      ),
+    ).toBe(0);
+
+    expect(
+      getLateMinutes(
+        {
+          actualCheckinAt: new Date("2026-07-01T01:16:00.000Z"),
+          actualCheckoutAt: new Date("2026-07-01T05:00:00.000Z"),
+        },
+        schedule,
+      ),
+    ).toBe(16);
   });
 });
 

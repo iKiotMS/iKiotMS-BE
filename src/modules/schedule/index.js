@@ -52,6 +52,28 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *                 enum: [NORMAL, OVERTIME]
  *                 default: NORMAL
  *                 example: NORMAL
+ *     WorkingScheduleDayInfo:
+ *       type: object
+ *       properties:
+ *         dayType:
+ *           type: string
+ *           enum: [NORMAL, SUNDAY, HOLIDAY, SUNDAY_HOLIDAY]
+ *           example: HOLIDAY
+ *         isSunday:
+ *           type: boolean
+ *           example: false
+ *         isHoliday:
+ *           type: boolean
+ *           example: true
+ *         holidayName:
+ *           type: string
+ *           nullable: true
+ *           example: Quốc khánh
+ *         holidayType:
+ *           type: string
+ *           nullable: true
+ *           enum: [PUBLIC_HOLIDAY, COMPANY_HOLIDAY]
+ *           example: PUBLIC_HOLIDAY
  *
  * /shift-templates:
  *   post:
@@ -161,7 +183,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *   get:
  *     tags: [Schedule]
  *     summary: Get working schedules with attendance summary
- *     description: Returns working schedules with each assigned user's lightweight attendance field. If no attendance exists for a user, attendance.status is NOT_CHECKED_IN.
+ *     description: Returns working schedules with each assigned user's lightweight attendance field and dayInfo for normal, Sunday, holiday, or Sunday holiday dates. If no attendance exists for a user, attendance.status is NOT_CHECKED_IN.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -210,7 +232,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *   get:
  *     tags: [Schedule]
  *     summary: Get current user's working schedules
- *     description: Returns schedules assigned to the authenticated user with lightweight attendance summary.
+ *     description: Returns schedules assigned to the authenticated user with lightweight attendance summary and dayInfo.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -357,7 +379,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *   get:
  *     tags: [Schedule]
  *     summary: Get working schedule by id with attendance detail
- *     description: Returns one working schedule with each assigned user's attendance detail when available. If no attendance exists for a user, attendance.status is NOT_CHECKED_IN.
+ *     description: Returns one working schedule with dayInfo and each assigned user's attendance detail when available. If no attendance exists for a user, attendance.status is NOT_CHECKED_IN.
  *     security:
  *       - bearerAuth: []
  *     parameters:

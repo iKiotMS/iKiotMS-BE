@@ -20,7 +20,7 @@ describe("Attendance UTC handling", () => {
     });
   });
 
-  test("checkDate compares check-in against schedule UTC startAt and endAt", () => {
+  test("checkDate allows check-in up to 30 minutes before schedule start", () => {
     const service = new TakeAttendanceService();
     const schedule = {
       startAt: new Date("2026-07-02T01:00:00.000Z"),
@@ -28,11 +28,17 @@ describe("Attendance UTC handling", () => {
     };
 
     expect(() => {
+      service.checkDate(new Date("2026-07-02T00:30:00.000Z"), schedule);
+    }).not.toThrow();
+
+    expect(() => {
       service.checkDate(new Date("2026-07-02T02:00:00.000Z"), schedule);
     }).not.toThrow();
 
     expect(() => {
-      service.checkDate(new Date("2026-07-02T00:59:00.000Z"), schedule);
-    }).toThrow("Nhân viên chỉ được check-in trong khoảng thời gian của ca làm");
+      service.checkDate(new Date("2026-07-02T00:29:00.000Z"), schedule);
+    }).toThrow(
+      "Nhân viên chỉ được check-in trong khoảng thời gian của ca làm và trước ca làm 30 phút",
+    );
   });
 });
