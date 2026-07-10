@@ -107,6 +107,18 @@ const registerTenantModule = (app) => {
     TenantController.setSepayKey.bind(TenantController),
   );
 
+  app.get(
+    '/tenant',
+    verifyJwt,
+    TenantController.listTenants.bind(TenantController),
+  );
+
+  app.put(
+    '/tenant/:tenantId',
+    verifyJwt,
+    TenantController.updateTenantAdmin.bind(TenantController),
+  );
+
   console.log('✓ Tenant module registered');
 };
 

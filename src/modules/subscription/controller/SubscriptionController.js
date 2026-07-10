@@ -187,6 +187,24 @@ class SubscriptionController {
     }
   }
 
+  async listAllInvoices(req, res) {
+    try {
+      if (req.user.role !== 'SUPER_ADMIN') {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+      }
+      const invoices = await SubscriptionInvoice.find()
+        .populate("planId", "planName planCode")
+        .populate("tenantId", "name phoneNumber")
+        .sort({ createdAt: -1 })
+        .lean();
+
+      res.status(200).json({ success: true, data: invoices });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+
   async getInvoiceStatus(req, res) {
     try {
       const { invoiceId } = req.params;

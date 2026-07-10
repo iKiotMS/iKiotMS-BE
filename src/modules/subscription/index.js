@@ -325,6 +325,14 @@ const registerSubscriptionModule = (app) => {
       ),
       protected: true,
     },
+    {
+      method: "get",
+      path: "/subscription/admin/invoices",
+      handler: SubscriptionController.listAllInvoices.bind(
+        SubscriptionController,
+      ),
+      protected: true,
+    },
   ];
 
   subscriptionRoutes.forEach((route) => {
