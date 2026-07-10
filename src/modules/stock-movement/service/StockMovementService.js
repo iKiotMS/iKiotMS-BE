@@ -142,8 +142,14 @@ class StockMovementService {
       const request = await StockMovementRequest.findOne({ _id: movementId, tenantId }).session(session);
       if (!request) throw new Error("Stock movement request not found");
 
-      if (request.status !== "IN_TRANSIT") {
-        throw new Error("Only IN_TRANSIT requests can be received");
+      if (request.movementType === "IMPORT") {
+        if (request.status !== "IN_TRANSIT" && request.status !== "PENDING") {
+          throw new Error("IMPORT requests must be PENDING or IN_TRANSIT to be received");
+        }
+      } else {
+        if (request.status !== "IN_TRANSIT") {
+          throw new Error("Only IN_TRANSIT requests can be received for EXPORT/RETURN");
+        }
       }
 
       let totalImportCost = 0;
