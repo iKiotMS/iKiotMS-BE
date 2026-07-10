@@ -4,7 +4,10 @@ const ShiftTemplate = require("../../../models/ShiftTemplate");
 const User = require("../../../models/User");
 const WorkingSchedule = require("../../../models/WorkingSchedule");
 const { validateRoleHierarchy } = require("../../../utils/permissionChecker");
-const { BulkWorkingScheduleDTO } = require("../dto/WorkingScheduleDTO");
+const {
+  BulkWorkingScheduleDTO,
+  SCHEDULE_TYPES,
+} = require("../dto/WorkingScheduleDTO");
 const {
   attachAttendancesToUsers,
   getAttendanceKey,
@@ -236,6 +239,18 @@ class WorkingScheduleService {
       filter.status = status;
     }
 
+    if (query.scheduleType) {
+      const scheduleType = String(query.scheduleType).trim().toUpperCase();
+
+      if (!SCHEDULE_TYPES.includes(scheduleType)) {
+        const error = new Error("Loại lịch làm việc không hợp lệ");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      filter.scheduleType = scheduleType;
+    }
+
     if (query.startDate || query.endDate) {
       filter.workDate = {};
 
@@ -360,6 +375,7 @@ class WorkingScheduleService {
           workDate: "2026-07-01",
           startAt: "2026-07-01T01:00:00.000Z",
           endAt: "2026-07-01T05:00:00.000Z",
+          scheduleType: "NORMAL",
           status: "SCHEDULED"
         }
         */
@@ -371,6 +387,7 @@ class WorkingScheduleService {
         workDate,
         startAt,
         endAt,
+        scheduleType: schedule.scheduleType,
         status: "SCHEDULED",
       };
     });
@@ -378,6 +395,7 @@ class WorkingScheduleService {
 
     for (const schedule of schedules) {
       const key = [
+        schedule.scheduleType,
         schedule.shiftTemplateId,
         schedule.workDate.toISOString(),
         schedule.startAt.toISOString(),
@@ -403,9 +421,10 @@ class WorkingScheduleService {
     const schedulesToSave = [];
 
     for (const schedule of mergedSchedules) {
-      //check for already existing schedule with same shiftTemplateId, workDate, startAt, endAt and status not in ["CANCELLED", "DELETED"]
+      //check for already existing schedule with same scheduleType, shiftTemplateId, workDate, startAt, endAt and status not in ["CANCELLED", "DELETED"]
       const existingSchedule = await WorkingSchedule.findOne({
         tenantId,
+        scheduleType: schedule.scheduleType,
         shiftTemplateId: schedule.shiftTemplateId,
         workDate: schedule.workDate,
         startAt: schedule.startAt,
@@ -459,6 +478,7 @@ class WorkingScheduleService {
       startDate,
       endDate,
       status,
+      scheduleType,
     } = {},
   ) {
     if (!tenantId) {
@@ -468,7 +488,7 @@ class WorkingScheduleService {
     }
 
     const selectedFields =
-      "userId shiftTemplateId workDate startAt endAt status managedBy";
+      "userId shiftTemplateId workDate startAt endAt scheduleType status managedBy";
     const populatedFields = [
       {
         path: "userId",
@@ -481,7 +501,15 @@ class WorkingScheduleService {
 
     const result = await this.fetchWorkingSchedules({
       tenantId,
-      query: { userId, branchId, warehouseId, startDate, endDate, status },
+      query: {
+        userId,
+        branchId,
+        warehouseId,
+        startDate,
+        endDate,
+        status,
+        scheduleType,
+      },
       selectedFields,
       populatedFields,
       page,
@@ -549,7 +577,7 @@ class WorkingScheduleService {
   async getMyWorkingSchedules(
     tenantId,
     userId,
-    { page, recordPerPage, startDate, endDate, status } = {},
+    { page, recordPerPage, startDate, endDate, status, scheduleType } = {},
   ) {
     const result = await this.getWorkingScheduleList(tenantId, {
       page,
@@ -558,6 +586,7 @@ class WorkingScheduleService {
       startDate,
       endDate,
       status,
+      scheduleType,
     });
 
     return {
@@ -574,7 +603,7 @@ class WorkingScheduleService {
   async getBranchWorkingSchedules(
     tenantId,
     branchId,
-    { page, recordPerPage, startDate, endDate, status } = {},
+    { page, recordPerPage, startDate, endDate, status, scheduleType } = {},
   ) {
     if (!branchId) {
       const error = new Error("Thiếu thông tin chi nhánh");
@@ -589,13 +618,14 @@ class WorkingScheduleService {
       startDate,
       endDate,
       status,
+      scheduleType,
     });
   }
 
   async getWarehouseWorkingSchedules(
     tenantId,
     warehouseId,
-    { page, recordPerPage, startDate, endDate, status } = {},
+    { page, recordPerPage, startDate, endDate, status, scheduleType } = {},
   ) {
     if (!warehouseId) {
       const error = new Error("Thiếu thông tin kho");
@@ -610,6 +640,7 @@ class WorkingScheduleService {
       startDate,
       endDate,
       status,
+      scheduleType,
     });
   }
 

@@ -126,6 +126,7 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
         schedules.find((schedule) => {
           return (
             schedule.tenantId === filter.tenantId &&
+            schedule.scheduleType === filter.scheduleType &&
             schedule.shiftTemplateId === filter.shiftTemplateId &&
             sameDate(schedule.workDate, filter.workDate) &&
             sameDate(schedule.startAt, filter.startAt) &&
@@ -172,6 +173,7 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
       managedBy: "manager1",
       userId: ["staffA"],
       shiftTemplateId: "morningShift",
+      scheduleType: "NORMAL",
       workDate: new Date("2026-07-01T00:00:00.000Z"),
       startAt: new Date("2026-07-01T01:00:00.000Z"),
       endAt: new Date("2026-07-01T05:00:00.000Z"),
@@ -237,6 +239,7 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
       managedBy: "manager1",
       userId: ["staffA"],
       shiftTemplateId: "morningShift",
+      scheduleType: "NORMAL",
       workDate: new Date("2026-07-01T00:00:00.000Z"),
       startAt: new Date("2026-07-01T01:00:00.000Z"),
       endAt: new Date("2026-07-01T05:00:00.000Z"),
@@ -276,11 +279,54 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
       managedBy: "manager1",
       userId: ["staffA", "staffB"],
       shiftTemplateId: "morningShift",
+      scheduleType: "NORMAL",
       workDate: new Date("2026-07-01T00:00:00.000Z"),
       startAt: new Date("2026-07-01T01:00:00.000Z"),
       endAt: new Date("2026-07-01T05:00:00.000Z"),
       status: "SCHEDULED",
     });
+  });
+
+  test("does not merge normal and overtime schedules from the same request", async () => {
+    const result = await WorkingScheduleService.createBulkWorkingSchedules(
+      "tenant1",
+      "manager1",
+      {
+        schedules: [
+          {
+            userId: "staffA",
+            shiftTemplateId: "morningShift",
+            workDate: "2026-07-01",
+            scheduleType: "NORMAL",
+          },
+          {
+            userId: "staffB",
+            shiftTemplateId: "morningShift",
+            workDate: "2026-07-01",
+            scheduleType: "OVERTIME",
+          },
+        ],
+      },
+      "TENANT_OWNER",
+    );
+
+    expect(result.message).toBe("Phân ca thành công");
+    expect(result.data).toHaveLength(2);
+    expect(WorkingSchedule.create).toHaveBeenCalledTimes(2);
+    expect(WorkingSchedule.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        userId: ["staffA"],
+        scheduleType: "NORMAL",
+      }),
+    );
+    expect(WorkingSchedule.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        userId: ["staffB"],
+        scheduleType: "OVERTIME",
+      }),
+    );
   });
 
   test("rejects a schedule when the staff member already has an overlapping schedule", async () => {
@@ -291,6 +337,7 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
       managedBy: "manager1",
       userId: ["staffA"],
       shiftTemplateId: "morningShift",
+      scheduleType: "NORMAL",
       workDate: new Date("2026-07-01T00:00:00.000Z"),
       startAt: new Date("2026-07-01T01:00:00.000Z"),
       endAt: new Date("2026-07-01T05:00:00.000Z"),
@@ -355,6 +402,18 @@ describe("WorkingScheduleService date filters", () => {
         $gte: new Date("2026-07-02T00:00:00.000Z"),
         $lt: new Date("2026-07-05T00:00:00.000Z"),
       },
+    });
+  });
+
+  test("adds scheduleType to working schedule filters", async () => {
+    await WorkingScheduleService.getWorkingScheduleList("tenant1", {
+      scheduleType: "overtime",
+    });
+
+    expect(WorkingSchedule.find).toHaveBeenCalledWith({
+      tenantId: "tenant1",
+      status: { $ne: "DELETED" },
+      scheduleType: "OVERTIME",
     });
   });
 });

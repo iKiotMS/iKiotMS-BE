@@ -47,6 +47,11 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *                 type: string
  *                 format: date
  *                 example: "2026-06-20"
+ *               scheduleType:
+ *                 type: string
+ *                 enum: [NORMAL, OVERTIME]
+ *                 default: NORMAL
+ *                 example: NORMAL
  *
  * /shift-templates:
  *   post:
@@ -190,6 +195,11 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         schema:
  *           type: string
  *           enum: [SCHEDULED, COMPLETED, CANCELLED]
+ *       - in: query
+ *         name: scheduleType
+ *         schema:
+ *           type: string
+ *           enum: [NORMAL, OVERTIME]
  *     responses:
  *       200:
  *         description: Working schedule list with attendance summary
@@ -219,6 +229,11 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         schema:
  *           type: string
  *           enum: [SCHEDULED, COMPLETED, CANCELLED]
+ *       - in: query
+ *         name: scheduleType
+ *         schema:
+ *           type: string
+ *           enum: [NORMAL, OVERTIME]
  *     responses:
  *       200:
  *         description: Current user's schedule list
@@ -248,6 +263,11 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         schema:
  *           type: string
  *           enum: [SCHEDULED, COMPLETED, CANCELLED]
+ *       - in: query
+ *         name: scheduleType
+ *         schema:
+ *           type: string
+ *           enum: [NORMAL, OVERTIME]
  *     responses:
  *       200:
  *         description: Branch working schedule list
@@ -279,6 +299,11 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         schema:
  *           type: string
  *           enum: [SCHEDULED, COMPLETED, CANCELLED]
+ *       - in: query
+ *         name: scheduleType
+ *         schema:
+ *           type: string
+ *           enum: [NORMAL, OVERTIME]
  *     responses:
  *       200:
  *         description: Warehouse working schedule list

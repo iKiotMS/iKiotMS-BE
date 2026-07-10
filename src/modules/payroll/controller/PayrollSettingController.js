@@ -4,7 +4,7 @@ class PayrollSettingController {
   async getPayrollSetting(req, res) {
     try {
       const tenantId = req.user.tenantId;
-      const result = PayrollSettingService.getPayrollSetting(tenantId);
+      const result = await PayrollSettingService.getPayrollSetting(tenantId);
       res.status(result.statusCode).json(result.data);
     } catch (error) {
       res.status(error.statusCode || 500).json({
@@ -55,4 +55,4 @@ class PayrollSettingController {
     }
   }
 }
-module.exports = PayrollSettingController;
+module.exports = new PayrollSettingController();

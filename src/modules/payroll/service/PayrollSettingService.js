@@ -34,7 +34,7 @@ class PayrollSettingService {
     const newSetting = await PayrollSetting.create(createDTO.toObject());
     return {
       message: "Cấu hình lương đã được tạo thành công",
-      statsusCode: 201,
+      statusCode: 201,
       data: newSetting,
     };
   }
@@ -73,4 +73,4 @@ class PayrollSettingService {
   }
 }
 
-module.exports = PayrollSettingService;
+module.exports = new PayrollSettingService();
