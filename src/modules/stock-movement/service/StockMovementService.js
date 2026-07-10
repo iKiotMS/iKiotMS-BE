@@ -11,6 +11,20 @@ class StockMovementService {
       status = "PENDING";
     }
 
+    if (movementType === "ADJUST" && payload.details && payload.details.length > 0) {
+      for (const item of payload.details) {
+        if (item.quantity === undefined || item.quantity === null) {
+          const inv = await mongoose.model("Inventory").findOne({
+            tenantId,
+            locationId: payload.fromLocationId,
+            locationType: payload.fromLocationType,
+            productItemId: item.productItemId
+          });
+          item.quantity = inv ? inv.stock : 0;
+        }
+      }
+    }
+
     const request = new StockMovementRequest({
       ...payload,
       tenantId,
@@ -54,6 +68,22 @@ class StockMovementService {
         // IMPORT and ADJUST
         if (request.status !== "PENDING") {
           throw new Error("Can only update details when request is PENDING");
+        }
+        if (request.movementType === "ADJUST") {
+          for (const item of details) {
+            if (item.receivedQuantity === undefined || item.receivedQuantity === null) {
+              throw new Error("receivedQuantity is required for ADJUST details");
+            }
+            if (item.quantity === undefined || item.quantity === null) {
+              const inv = await mongoose.model("Inventory").findOne({
+                tenantId,
+                locationId: request.fromLocationId,
+                locationType: request.fromLocationType,
+                productItemId: item.productItemId
+              }).session(session);
+              item.quantity = inv ? inv.stock : 0;
+            }
+          }
         }
       }
 
@@ -213,14 +243,20 @@ class StockMovementService {
       if (request.status !== "PENDING") throw new Error("Can only approve PENDING adjust requests");
 
       for (const item of request.details) {
-        await InventoryService.adjustStock(
-          tenantId,
-          request.fromLocationId,
-          request.fromLocationType,
-          item.productItemId,
-          item.quantity,
-          session
-        );
+        if (item.receivedQuantity === undefined || item.receivedQuantity === null) {
+          throw new Error(`Missing receivedQuantity for product ${item.productItemId}`);
+        }
+        const difference = item.receivedQuantity - item.quantity;
+        if (difference !== 0) {
+          await InventoryService.adjustStock(
+            tenantId,
+            request.fromLocationId,
+            request.fromLocationType,
+            item.productItemId,
+            difference,
+            session
+          );
+        }
       }
 
       request.status = "COMPLETED";
