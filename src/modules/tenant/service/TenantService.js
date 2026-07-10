@@ -36,6 +36,27 @@ class TenantService {
     if (!tenant) throw new Error('Tenant not found');
     return tenant;
   }
+
+  async updateTenant(tenantId, data) {
+    const tenant = await Tenant.findByIdAndUpdate(
+      tenantId,
+      {
+        $set: {
+          name: data.name,
+          phoneNumber: data.phoneNumber,
+          mainAddress: data.mainAddress,
+          taxNumber: data.taxNumber,
+          'banking.accountNumber': data.banking?.accountNumber,
+          'banking.bankName': data.banking?.bankName,
+          'banking.accountName': data.banking?.accountName,
+        },
+      },
+      { new: true, runValidators: true },
+    ).lean();
+
+    if (!tenant) throw new Error('Tenant not found');
+    return tenant;
+  }
 }
 
 module.exports = new TenantService();

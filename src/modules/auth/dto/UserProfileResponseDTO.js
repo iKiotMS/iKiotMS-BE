@@ -1,5 +1,5 @@
 class UserProfileResponseDTO {
-  constructor(user, subscription = null) {
+  constructor(user, subscription = null, tenant = null) {
     this.id = user._id;
     this.phoneNumber = user.phoneNumber;
     this.email = user.email;
@@ -25,6 +25,19 @@ class UserProfileResponseDTO {
         trialEndDate: subscription.trialEndDate,
         autoRenew: subscription.autoRenew,
         currentQuotaSnapshot: subscription.currentQuotaSnapshot,
+      };
+    }
+
+    // Add tenant info
+    if (tenant) {
+      this.tenant = {
+        id: tenant._id,
+        name: tenant.name,
+        phoneNumber: tenant.phoneNumber,
+        mainAddress: tenant.mainAddress,
+        taxNumber: tenant.taxNumber,
+        banking: tenant.banking,
+        status: tenant.status,
       };
     }
   }

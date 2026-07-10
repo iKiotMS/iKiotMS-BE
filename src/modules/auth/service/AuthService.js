@@ -197,6 +197,7 @@ class AuthService {
     }
 
     let subscription = null;
+    let tenant = null;
 
     // If user is TENANT_OWNER, fetch subscription with plan details
     if (user.role === "TENANT_OWNER") {
@@ -207,7 +208,11 @@ class AuthService {
         .lean();
     }
 
-    return { user, subscription };
+    if (user.tenantId) {
+      tenant = await Tenant.findById(user.tenantId).lean();
+    }
+
+    return { user, subscription, tenant };
   }
 
   async updateProfile(userId, tenantId, data) {
