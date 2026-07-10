@@ -1,6 +1,7 @@
 const PaySheetController = require("./controller/PaySheetController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
 const { authorize } = require("../../middlewares/authorizationMiddleware");
+const PayrollSettingController = require("./controller/PayrollSettingController");
 
 /**
  * @openapi
@@ -353,6 +354,31 @@ function registerPayrollModule(app) {
     verifyJwt,
     authorize("paysheets", ["update"]),
     PaySheetController.updatePaySheet.bind(PaySheetController),
+  );
+
+  app.get(
+    "/payroll/settings",
+    verifyJwt,
+    authorize("payrollSettings", ["read"]),
+    PayrollSettingController.getPayrollSetting.bind(PayrollSettingController),
+  );
+
+  app.post(
+    "/payroll/settings",
+    verifyJwt,
+    authorize("payrollSettings", ["create"]),
+    PayrollSettingController.createPayrollSetting.bind(
+      PayrollSettingController,
+    ),
+  );
+
+  app.put(
+    "/payroll/settings",
+    verifyJwt,
+    authorize("payrollSettings", ["update"]),
+    PayrollSettingController.updatePayrollSetting.bind(
+      PayrollSettingController,
+    ),
   );
 
   console.log(" Payroll module registered");

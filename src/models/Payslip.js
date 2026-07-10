@@ -12,6 +12,10 @@ const payslipSchema = new mongoose.Schema(
       ref: "User",
       required: [true, "User is required"],
     },
+    payrollPeriodId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PayrollPeriod",
+    },
     manageBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
