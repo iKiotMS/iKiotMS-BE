@@ -18,6 +18,7 @@ const stockMovementRequestSchema = new mongoose.Schema(
       type: String,
       enum: [
         "DRAFT",
+        "PENDING",
         "OPENING",
         "CLOSED",
         "IN_TRANSIT",

@@ -30,27 +30,30 @@ class StockMovementService {
       const request = await StockMovementRequest.findOne({ _id: movementId, tenantId }).session(session);
       if (!request) throw new Error("Stock movement request not found");
 
-      if (request.status !== "OPENING") {
-        throw new Error("Can only update details when request is OPENING");
-      }
-      if (request.movementType !== "EXPORT" && request.movementType !== "RETURN") {
-        throw new Error("Details update only applies to EXPORT or RETURN");
-      }
+      if (request.movementType === "EXPORT" || request.movementType === "RETURN") {
+        if (request.status !== "OPENING") {
+          throw new Error("Can only update details when request is OPENING");
+        }
+        // Check stock limits against fromLocation
+        for (const item of details) {
+          if (!item.productItemId || !item.quantity) throw new Error("Invalid details payload");
+          
+          const inventory = await mongoose.model("Inventory").findOne({
+            tenantId,
+            locationId: request.fromLocationId,
+            locationType: request.fromLocationType,
+            productItemId: item.productItemId
+          }).session(session);
 
-      // Check stock limits against fromLocation
-      for (const item of details) {
-        if (!item.productItemId || !item.quantity) throw new Error("Invalid details payload");
-        
-        const inventory = await mongoose.model("Inventory").findOne({
-          tenantId,
-          locationId: request.fromLocationId,
-          locationType: request.fromLocationType,
-          productItemId: item.productItemId
-        }).session(session);
-
-        const currentStock = inventory ? inventory.stock : 0;
-        if (item.quantity > currentStock) {
-          throw new Error(`Quantity ${item.quantity} exceeds available stock ${currentStock} at source location`);
+          const currentStock = inventory ? inventory.stock : 0;
+          if (item.quantity > currentStock) {
+            throw new Error(`Quantity ${item.quantity} exceeds available stock ${currentStock} at source location`);
+          }
+        }
+      } else {
+        // IMPORT and ADJUST
+        if (request.status !== "PENDING") {
+          throw new Error("Can only update details when request is PENDING");
         }
       }
 
@@ -147,11 +150,14 @@ class StockMovementService {
 
       for (const reqItem of request.details) {
         const payloadItem = details.find(d => d.productItemId.toString() === reqItem.productItemId.toString());
-        if (payloadItem) {
-          reqItem.receivedQuantity = payloadItem.receivedQuantity;
+        if (payloadItem && payloadItem.receivedQuantity !== undefined && payloadItem.receivedQuantity !== null) {
+          const rQ = Number(payloadItem.receivedQuantity);
+          if (rQ < 0) throw new Error("Received quantity cannot be negative");
+
+          reqItem.receivedQuantity = rQ;
           
           if (request.movementType === "IMPORT" && reqItem.importPrice) {
-            totalImportCost += (reqItem.receivedQuantity * reqItem.importPrice);
+            totalImportCost += (rQ * reqItem.importPrice);
           }
 
           await InventoryService.adjustStock(
@@ -159,9 +165,11 @@ class StockMovementService {
             request.toLocationId,
             request.toLocationType,
             reqItem.productItemId,
-            reqItem.receivedQuantity,
+            rQ,
             session
           );
+        } else {
+          throw new Error(`Missing receivedQuantity for product item ${reqItem.productItemId}`);
         }
       }
 
