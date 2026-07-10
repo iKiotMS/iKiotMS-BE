@@ -11,27 +11,63 @@ class StockMovementController {
         data: request,
       });
     } catch (error) {
-      res.status(400).json({
-        success: false,
-        message: error.message,
-      });
+      res.status(400).json({ success: false, message: error.message });
     }
   }
 
-  async approve(req, res) {
+  async updateDetails(req, res) {
     try {
       const { tenantId, userId } = req.user;
-      const request = await StockMovementService.approve(tenantId, req.params.id, userId);
+      const request = await StockMovementService.updateDetails(tenantId, req.params.id, req.body.details, userId);
       res.status(200).json({
         success: true,
-        message: "Request approved successfully",
+        message: "Details updated successfully",
         data: request,
       });
     } catch (error) {
-      res.status(400).json({
-        success: false,
-        message: error.message,
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  async open(req, res) {
+    try {
+      const { tenantId, userId } = req.user;
+      const request = await StockMovementService.open(tenantId, req.params.id, userId);
+      res.status(200).json({
+        success: true,
+        message: "Request marked as OPENING",
+        data: request,
       });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  async close(req, res) {
+    try {
+      const { tenantId, userId } = req.user;
+      const request = await StockMovementService.close(tenantId, req.params.id, userId);
+      res.status(200).json({
+        success: true,
+        message: "Request marked as CLOSED",
+        data: request,
+      });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  async ship(req, res) {
+    try {
+      const { tenantId, userId } = req.user;
+      const request = await StockMovementService.ship(tenantId, req.params.id, userId);
+      res.status(200).json({
+        success: true,
+        message: "Request marked as IN_TRANSIT",
+        data: request,
+      });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
     }
   }
 
@@ -41,14 +77,25 @@ class StockMovementController {
       const request = await StockMovementService.receive(tenantId, req.params.id, req.body, userId);
       res.status(200).json({
         success: true,
-        message: "Inventory updated and request marked as received",
+        message: "Inventory updated and request marked as RECEIVED",
         data: request,
       });
     } catch (error) {
-      res.status(400).json({
-        success: false,
-        message: error.message,
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  async approveAdjust(req, res) {
+    try {
+      const { tenantId, userId } = req.user;
+      const request = await StockMovementService.approveAdjust(tenantId, req.params.id, userId);
+      res.status(200).json({
+        success: true,
+        message: "Adjustment approved and inventory updated",
+        data: request,
       });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
     }
   }
 
@@ -62,10 +109,7 @@ class StockMovementController {
         data: request,
       });
     } catch (error) {
-      res.status(400).json({
-        success: false,
-        message: error.message,
-      });
+      res.status(400).json({ success: false, message: error.message });
     }
   }
 
@@ -78,10 +122,7 @@ class StockMovementController {
         ...result,
       });
     } catch (error) {
-      res.status(400).json({
-        success: false,
-        message: error.message,
-      });
+      res.status(400).json({ success: false, message: error.message });
     }
   }
 
@@ -94,10 +135,7 @@ class StockMovementController {
         data: request,
       });
     } catch (error) {
-      res.status(404).json({
-        success: false,
-        message: error.message,
-      });
+      res.status(404).json({ success: false, message: error.message });
     }
   }
 }

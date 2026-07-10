@@ -23,13 +23,14 @@ const stockMovementRequestSchema = new mongoose.Schema(
         "IN_TRANSIT",
         "RECEIVED",
         "CANCELLED",
+        "COMPLETED",
       ],
-      // Thằng tạo:  chuyển trạng thái từ DRAFT sang OPENING.
+      // Người tạo:  chuyển trạng thái từ DRAFT sang OPENING.
       //             chuyển trạng thái từ OPENING sang CLOSED.
       //             chuyển từ CLOSED sang IN_TRANSIT.
       //             chuyển trạng thái từ IN_TRANSIT sang CANCELLED.
 
-      // Thằng nhận: chuyển trạng thái từ IN_TRANSIT sang RECEIVED
+      // Người nhận: chuyển trạng thái từ IN_TRANSIT sang RECEIVED
       //             chuyển trạng thái từ IN_TRANSIT sang CANCELLED.
 
       default: "DRAFT",
@@ -54,15 +55,11 @@ const stockMovementRequestSchema = new mongoose.Schema(
       enum: ["branch", "warehouse"],
       required: [true, "To location type is required"],
     },
-    // requestedBy: {
-    //   type: mongoose.Schema.Types.ObjectId,
-    //   ref: "User",
-    //   required: [true, "User is required"],
-    // },
-    // approvedBy: {
-    //   type: mongoose.Schema.Types.ObjectId,
-    //   ref: "User",
-    // },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: [true, "User is required"],
+    },
     note: {
       type: String,
       trim: true,
