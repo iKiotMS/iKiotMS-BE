@@ -46,7 +46,7 @@ class PayrollSettingService {
       throw error;
     }
 
-    const updateData = updateDTO.toUpdateData();
+    const updateData = updateDTO.toObject();
     if (Object.keys(updateData).length === 0) {
       const error = new Error("Không có dữ liệu cập nhật");
       error.statusCode = 400;

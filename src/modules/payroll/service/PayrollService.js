@@ -66,6 +66,8 @@ class PayrollService {
   }
 
   getSchedulePayableMinutes(schedule, attendances) {
+    // Chỉ tính phần thời gian attendance nằm bên trong khung giờ của ca.
+    // Ví dụ check-in 07:30 cho ca 08:00-17:00 thì thời gian trước 08:00 bị bỏ.
     return attendances.reduce((total, attendance) => {
       return (
         total +
@@ -80,6 +82,8 @@ class PayrollService {
   }
 
   attachPayableMinutesToSchedules(schedules, attendances) {
+    // payableMinutes là field tính tạm cho payroll, không được lưu trong
+    // WorkingSchedule. Ca không có phút công thực tế sẽ không tạo payroll line.
     return schedules
       .map((schedule) => {
         return {
@@ -93,7 +97,13 @@ class PayrollService {
       .filter((schedule) => schedule.payableMinutes > 0);
   }
 
-  calculatePayslipPreview({ context, periodStart, periodEnd, holidayByDate }) {
+  calculatePayslipPreview({
+    context,
+    periodStart,
+    periodEnd,
+    holidayByDate,
+    payrollSetting = { standardWorkingDays: 26 },
+  }) {
     const payableSchedules = this.attachPayableMinutesToSchedules(
       context.workingSchedules,
       context.attendances,
@@ -103,15 +113,155 @@ class PayrollService {
       schedules: payableSchedules,
       paySheet: context.paySheet,
       holidayByDate,
+      payrollSetting,
     });
 
     const totalWorkedMinutes = payroll.lines.reduce((total, line) => {
       return total + (line.payableMinutes || 0);
     }, 0);
+    // Một ngày có thể có nhiều ca, nhưng chỉ đếm một ngày công. Ca OT không
+    // tự tạo thêm ngày công vì nó đã được cộng riêng vào overtimePay.
+    const totalWorkedDays = new Set(
+      payableSchedules
+        .filter((schedule) => schedule.scheduleType !== "OVERTIME")
+        .map((schedule) =>
+          new Date(schedule.workDate).toISOString().slice(0, 10),
+        ),
+    ).size;
     const grossSalary = payroll.grossPay;
-    const deduction = 0;
     const bonus = 0;
-    const allowance = 0;
+    const calculationWarnings = [];
+
+    // Allowance chỉ tính các rule đang bật. Với PERCENTAGE, phần trăm được lấy
+    // trên salaryPerPeriod; FIXED_AMOUNT được cộng nguyên giá trị cấu hình.
+    const allowanceLines = (context.paySheet.allowances || [])
+      .filter((item) => item.enable)
+      .reduce((lines, item) => {
+        const amountValue = item.amountValue || 0;
+        const basicPay = context.paySheet.basicPay || {};
+        const monthlySalary = basicPay.salaryPerPeriod || 0;
+        const amount =
+          item.amountType === "PERCENTAGE"
+            ? (monthlySalary * amountValue) / 100
+            : amountValue;
+
+        lines.push({
+          name: item.name,
+          amountType: item.amountType,
+          amountValue: item.amountValue,
+          amount,
+        });
+        return lines;
+      }, []);
+    const allowance = allowanceLines.reduce(
+      (total, item) => total + item.amount,
+      0,
+    );
+    // lateMinutes đã được attendance module tính sẵn sau khi áp dụng grace time.
+    // Mỗi phần tử dương tương ứng một lần vi phạm để dùng cho BY_OCCURRENCE/BLOCK.
+    const lateViolationMinutes = context.attendances
+      .map((attendance) => Number(attendance.lateMinutes || 0))
+      .filter((minutes) => minutes > 0);
+    // Về sớm chưa có field lưu sẵn nên được suy ra từ schedule.endAt và checkout.
+    // Ưu tiên ghép bằng scheduleId; dữ liệu cũ thiếu scheduleId sẽ ghép theo ngày.
+
+    const earlyLeaveViolationMinutes = context.workingSchedules
+      .filter((schedule) => schedule.scheduleType !== "OVERTIME")
+      .map((schedule) => {
+        const scheduleId = String(schedule._id || "");
+        const scheduleDate = new Date(schedule.workDate)
+          .toISOString()
+          .slice(0, 10);
+        const matchingAttendances = context.attendances.filter((attendance) => {
+          if (!attendance.actualCheckoutAt) return false;
+          if (attendance.scheduleId && scheduleId) {
+            return String(attendance.scheduleId) === scheduleId;
+          }
+
+          const attendanceDate = new Date(
+            attendance.workDate || attendance.actualCheckinAt,
+          )
+            .toISOString()
+            .slice(0, 10);
+          return attendanceDate === scheduleDate;
+        });
+
+        if (matchingAttendances.length === 0) return 0;
+        // Nếu một ca có nhiều attendance, checkout muộn nhất đại diện thời điểm
+        // nhân viên thực sự rời ca, tránh tính về sớm hai lần.
+        const latestCheckout = Math.max(
+          ...matchingAttendances.map((attendance) =>
+            new Date(attendance.actualCheckoutAt).getTime(),
+          ),
+        );
+        return Math.max(
+          0,
+          Math.floor(
+            (new Date(schedule.endAt).getTime() - latestCheckout) / 60000,
+          ),
+        );
+      })
+      .filter((minutes) => minutes > 0);
+    const enabledDeductions = (context.paySheet.deductions || []).filter(
+      (item) => item.enable,
+    );
+    // Chỉ nhận deduction fixed amount theo schema mới. Rule percentage hoặc
+    // BY_SALARY_COEFFICIENT cũ bị bỏ qua và trả warning để không trừ nhầm tiền.
+    const supportedDeductions = enabledDeductions.filter(
+      (item) =>
+        (!item.amountType || item.amountType === "FIXED_AMOUNT") &&
+        (item.deductionType === "FIXED" ||
+          ["BY_OCCURRENCE", "BY_BLOCK"].includes(item.conditionType)),
+    );
+
+    if (supportedDeductions.length !== enabledDeductions.length) {
+      calculationWarnings.push("UNSUPPORTED_DEDUCTION_RULE");
+    }
+
+    const deductionLines = supportedDeductions
+      .map((item) => {
+        let violationMinutes = [];
+        let units = 1;
+
+        if (item.deductionType === "LATE") {
+          violationMinutes = lateViolationMinutes;
+        } else if (item.deductionType === "EARLY_LEAVE") {
+          violationMinutes = earlyLeaveViolationMinutes;
+        }
+
+        if (item.deductionType !== "FIXED") {
+          // BY_OCCURRENCE: mỗi lần vi phạm = 1 unit.
+          // BY_BLOCK: mỗi lần được làm tròn lên riêng, ví dụ 16 phút/15 = 2 block.
+          units =
+            item.conditionType === "BY_BLOCK"
+              ? violationMinutes.reduce(
+                  (total, minutes) =>
+                    total + Math.ceil(minutes / item.blockMinutes),
+                  0,
+                )
+              : violationMinutes.length;
+        }
+
+        return {
+          name: item.name,
+          deductionType: item.deductionType,
+          conditionType: item.conditionType || null,
+          blockMinutes:
+            item.conditionType === "BY_BLOCK" ? item.blockMinutes : null,
+          deductionValue: item.deductionValue,
+          violationMinutes: violationMinutes.reduce(
+            (total, minutes) => total + minutes,
+            0,
+          ),
+          units,
+          amount: units * (item.deductionValue || 0),
+        };
+      });
+    const deduction = deductionLines.reduce(
+      (total, item) => total + item.amount,
+      0,
+    );
+    // Manual adjustments sẽ được cộng/trừ ở phase edit draft sau này.
     const netSalary = grossSalary + bonus + allowance - deduction;
 
     return {
@@ -120,19 +270,18 @@ class PayrollService {
       paySheetId: context.paySheet._id,
       periodStart,
       periodEnd,
-      totalWorkedDays: new Set(
-        payableSchedules.map((schedule) =>
-          new Date(schedule.workDate).toISOString().slice(0, 10),
-        ),
-      ).size,
+      totalWorkedDays,
       totalWorkedHours: totalWorkedMinutes / 60,
       basePay: payroll.basePay,
       overtimePay: payroll.overtimePay,
       bonus,
       allowance,
+      allowanceLines,
       grossSalary,
       deduction,
+      deductionLines,
       netSalary,
+      calculationWarnings,
       lines: payroll.lines,
     };
   }
@@ -175,6 +324,7 @@ class PayrollService {
           tenantId,
           userId: { $in: targetUserIds },
           workDate: { $gte: periodStart, $lte: periodEnd },
+          status :{$nin:["CANCELLED","DELETED"]},
         }).lean(),
 
         LeaveRequest.find({
@@ -225,7 +375,9 @@ class PayrollService {
     const periodStart = this.buildPeriodDate(inputData.periodStartDate);
     const periodEnd = this.buildPeriodDate(inputData.periodEndDate, true);
 
-    await PayrollSettingService.getPayrollSetting(tenantId);
+    const payrollSettingResult =
+      await PayrollSettingService.getPayrollSetting(tenantId);
+    const payrollSetting = payrollSettingResult.data;
 
     const [employeePayrollInfo, holidayByDate] = await Promise.all([
       this.gatherEmployeePayrollInfo(
@@ -255,6 +407,7 @@ class PayrollService {
           periodStart,
           periodEnd,
           holidayByDate,
+          payrollSetting,
           currentUserId,
         }),
       );

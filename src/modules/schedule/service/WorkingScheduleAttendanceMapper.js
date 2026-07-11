@@ -1,5 +1,3 @@
-const { LATE_GRACE_MINUTES } = require("../../../constants/PayrollConstants");
-
 function getDateText(dateValue) {
   return new Date(dateValue).toISOString().slice(0, 10);
 }
@@ -51,7 +49,7 @@ function getWorkedMinutesInSchedule(attendance, schedule) {
   );
 }
 
-function getLateMinutes(attendance, schedule) {
+function getLateMinutes(attendance, schedule, lateGraceMinutes = 15) {
   if (schedule.scheduleType !== "NORMAL") {
     return 0;
   }
@@ -69,7 +67,9 @@ function getLateMinutes(attendance, schedule) {
     ),
   );
 
-  return rawLateMinutes <= LATE_GRACE_MINUTES ? 0 : rawLateMinutes;
+  // IGNORE_WITHIN_GRACE: bỏ qua nếu nằm trong grace; khi vượt grace thì tính
+  // toàn bộ số phút đi muộn. Ví dụ grace 15, đi muộn 20 => tính đủ 20 phút.
+  return rawLateMinutes <= lateGraceMinutes ? 0 : rawLateMinutes;
 }
 
 function getScheduleAttendanceStatus(attendance, schedule) {
@@ -80,7 +80,7 @@ function getScheduleAttendanceStatus(attendance, schedule) {
   return attendance.status || "NOT_CHECKED_IN";
 }
 
-function buildAttendanceSummary(attendance, schedule) {
+function buildAttendanceSummary(attendance, schedule, lateGraceMinutes) {
   if (!attendance || !attendanceOverlapsSchedule(attendance, schedule)) {
     return {
       status: "NOT_CHECKED_IN",
@@ -100,11 +100,11 @@ function buildAttendanceSummary(attendance, schedule) {
       attendance,
       schedule,
     ),
-    lateMinutes: getLateMinutes(attendance, schedule),
+    lateMinutes: getLateMinutes(attendance, schedule, lateGraceMinutes),
   };
 }
 
-function buildAttendanceDetail(attendance, schedule) {
+function buildAttendanceDetail(attendance, schedule, lateGraceMinutes) {
   if (!attendance || !attendanceOverlapsSchedule(attendance, schedule)) {
     return {
       status: "NOT_CHECKED_IN",
@@ -128,7 +128,7 @@ function buildAttendanceDetail(attendance, schedule) {
       schedule,
     ),
     overtimeMinute: attendance.overtimeMinute,
-    lateMinutes: getLateMinutes(attendance, schedule),
+    lateMinutes: getLateMinutes(attendance, schedule, lateGraceMinutes),
   };
 }
 
@@ -168,6 +168,7 @@ function attachAttendancesToUsers(
   schedules,
   attendanceByUserAndWorkDate,
   detail,
+  lateGraceMinutes = 15,
 ) {
   return schedules.map((schedule) => {
     const users = getScheduleUsers(schedule);
@@ -183,16 +184,16 @@ function attachAttendancesToUsers(
         return {
           ...user,
           attendance: detail
-            ? buildAttendanceDetail(attendance, schedule)
-            : buildAttendanceSummary(attendance, schedule),
+            ? buildAttendanceDetail(attendance, schedule, lateGraceMinutes)
+            : buildAttendanceSummary(attendance, schedule, lateGraceMinutes),
         };
       }
 
       return {
         _id: user,
         attendance: detail
-          ? buildAttendanceDetail(attendance, schedule)
-          : buildAttendanceSummary(attendance, schedule),
+          ? buildAttendanceDetail(attendance, schedule, lateGraceMinutes)
+          : buildAttendanceSummary(attendance, schedule, lateGraceMinutes),
       };
     });
 

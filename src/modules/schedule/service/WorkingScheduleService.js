@@ -1,6 +1,7 @@
 const { STAFF_ROLES } = require("../../../constants/role");
 const Attendance = require("../../../models/Attendance");
 const Holiday = require("../../../models/Holiday");
+const PayrollSetting = require("../../../models/PayrollSetting");
 const ShiftTemplate = require("../../../models/ShiftTemplate");
 const User = require("../../../models/User");
 const WorkingSchedule = require("../../../models/WorkingSchedule");
@@ -231,8 +232,16 @@ class WorkingScheduleService {
   }
 
   async attachAttendanceSummaries(tenantId, schedules, detail = false) {
+    const payrollSetting = await PayrollSetting.findOne({
+      tenantId,
+      status: "ACTIVE",
+    })
+      .select("lateGraceMinutes")
+      .lean();
+    const lateGraceMinutes = payrollSetting?.lateGraceMinutes ?? 15;
+
     if (!schedules.length) {
-      return attachAttendancesToUsers(schedules, {}, detail);
+      return attachAttendancesToUsers(schedules, {}, detail, lateGraceMinutes);
     }
 
     const userIds = [
@@ -248,7 +257,7 @@ class WorkingScheduleService {
       .map((workDate) => new Date(workDate));
 
     if (!userIds.length || !workDates.length) {
-      return attachAttendancesToUsers(schedules, {}, detail);
+      return attachAttendancesToUsers(schedules, {}, detail, lateGraceMinutes);
     }
 
     const startWorkDate = new Date(
@@ -286,6 +295,7 @@ class WorkingScheduleService {
       schedules,
       attendanceByUserAndWorkDate,
       detail,
+      lateGraceMinutes,
     );
   }
 

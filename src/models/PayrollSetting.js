@@ -12,11 +12,12 @@ const payrollSetting = new mongoose.Schema(
       type: String,
       enum: PayrollCycle,
     },
-    periodStartDay: { //ngày bắt đầu của chu kỳ trả lương
+    periodStartDay: {
+      //ngày bắt đầu của chu kỳ trả lương
       type: Number,
       default: 1,
     },
-    approveAfterPeriodEndDays: { 
+    approveAfterPeriodEndDays: {
       type: Number,
       default: 1,
     },
@@ -28,6 +29,35 @@ const payrollSetting = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    standardWorkingDays: {
+      type: Number,
+      min: 1,
+      max: 31,
+      default: 26,
+    },
+    standardWorkingHoursPerDay: {
+      type: Number,
+      min: 1,
+      max: 24,
+      default: 8,
+    },
+
+    weekendDays: {
+      type: [Number],
+      default: [0],
+      validate: {
+        validator: (days) =>
+          days.length > 0 && days.every((day) => Number.isInteger(day) && day >= 0 && day <= 6),
+        message: "Ngày cuối tuần phải nằm trong khoảng 0-6",
+      },
+    },
+
+    lateGraceMinutes: {
+      type: Number,
+      min: 0,
+      default: 15,
+    },
+
     status: {
       type: String,
       enum: ["ACTIVE", "INACTIVE"],

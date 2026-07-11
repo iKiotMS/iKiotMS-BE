@@ -16,8 +16,8 @@ describe("PayrollDayRateCalculator", () => {
       },
       paySheet: {
         basicPay: {
-          payType: "PAY_BY_HOUR",
-          amountPerHour: 50000,
+          payType: "PAY_BY_SHIFT",
+          amountPerShift: 200000,
           rates: {
             weekend: 2,
             publicHoliday: 3,
@@ -62,8 +62,8 @@ describe("PayrollDayRateCalculator", () => {
       ],
       paySheet: {
         basicPay: {
-          payType: "PAY_BY_HOUR",
-          amountPerHour: 50000,
+          payType: "PAY_BY_SHIFT",
+          amountPerShift: 200000,
           rates: {
             weekend: 2,
             publicHoliday: 3,
@@ -79,8 +79,8 @@ describe("PayrollDayRateCalculator", () => {
     });
 
     expect(result.basePay).toBe(200000);
-    expect(result.overtimePay).toBe(75000);
-    expect(result.grossPay).toBe(275000);
+    expect(result.overtimePay).toBe(150000);
+    expect(result.grossPay).toBe(350000);
   });
 
   test("does not apply a built-in rate for a company holiday", () => {
@@ -95,8 +95,8 @@ describe("PayrollDayRateCalculator", () => {
       },
       paySheet: {
         basicPay: {
-          payType: "PAY_BY_HOUR",
-          amountPerHour: 50000,
+          payType: "PAY_BY_SHIFT",
+          amountPerShift: 200000,
           rates: {
             weekend: 2,
             publicHoliday: 3,
@@ -129,8 +129,8 @@ describe("PayrollDayRateCalculator", () => {
       },
       paySheet: {
         basicPay: {
-          payType: "PAY_BY_HOUR",
-          amountPerHour: 50000,
+          payType: "PAY_BY_SHIFT",
+          amountPerShift: 200000,
           rates: { weekend: 2 },
         },
       },
@@ -156,8 +156,8 @@ describe("PayrollDayRateCalculator", () => {
       },
       paySheet: {
         basicPay: {
-          payType: "PAY_BY_HOUR",
-          amountPerHour: 50000,
+          payType: "PAY_BY_SHIFT",
+          amountPerShift: 200000,
           rates: { weekend: 2 },
         },
       },
@@ -219,7 +219,7 @@ describe("PayrollDayRateCalculator", () => {
     });
   });
 
-  test("adds fixed-salary overtime when amountPerHour is configured", () => {
+  test("derives fixed-salary overtime from standard days and an 8-hour day", () => {
     const result = calculatePayrollBySchedules({
       schedules: [
         {
@@ -235,15 +235,50 @@ describe("PayrollDayRateCalculator", () => {
         basicPay: {
           payType: "FIXED",
           salaryPerPeriod: 12000000,
-          amountPerHour: 50000,
+        },
+        overtime: { normalDay: 1.5 },
+      },
+      payrollSetting: { standardWorkingDays: 24 },
+      holidayByDate: {},
+    });
+
+    expect(result.basePay).toBe(12000000);
+    expect(result.overtimePay).toBe(187500);
+    expect(result.grossPay).toBe(12187500);
+  });
+
+  test("uses standardWorkingDaySalary directly for daily pay and overtime", () => {
+    const result = calculatePayrollBySchedules({
+      schedules: [
+        {
+          _id: "normalStandardDay",
+          scheduleType: "NORMAL",
+          workDate: new Date("2026-07-01T00:00:00.000Z"),
+          startAt: new Date("2026-07-01T01:00:00.000Z"),
+          endAt: new Date("2026-07-01T09:00:00.000Z"),
+          payableMinutes: 480,
+        },
+        {
+          _id: "standardDayOvertime",
+          scheduleType: "OVERTIME",
+          workDate: new Date("2026-07-01T00:00:00.000Z"),
+          startAt: new Date("2026-07-01T10:00:00.000Z"),
+          endAt: new Date("2026-07-01T12:00:00.000Z"),
+          payableMinutes: 120,
+        },
+      ],
+      paySheet: {
+        basicPay: {
+          payType: "STANDARD_WORKING_DAY",
+          standardWorkingDaySalary: 500000,
         },
         overtime: { normalDay: 1.5 },
       },
       holidayByDate: {},
     });
 
-    expect(result.basePay).toBe(12000000);
-    expect(result.overtimePay).toBe(150000);
-    expect(result.grossPay).toBe(12150000);
+    expect(result.basePay).toBe(500000);
+    expect(result.overtimePay).toBe(187500);
+    expect(result.grossPay).toBe(687500);
   });
 });

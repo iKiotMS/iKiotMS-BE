@@ -1,15 +1,38 @@
 const { updatePayrollSettingFields } = require("../../../constants/PayrollConstants");
 
 class updatePayrollSettingDTO {
-  constructor(data){
+  constructor(data) {
     this.cycle = data.cycle;
-    this.periodStartDay = Number(data.periodStartDay) ?? undefined;
-    this.approveAfterPeriodEndDays = Number(data.approveAfterPeriodEndDays);
-    this.payAfterPeriodEndDays = Number(data.payAfterPeriodEndDays);
-    this.autoGenerate = data.autoGenerate || false;
+    this.periodStartDay =
+      data.periodStartDay === undefined
+        ? undefined
+        : Number(data.periodStartDay);
+    this.approveAfterPeriodEndDays =
+      data.approveAfterPeriodEndDays === undefined
+        ? undefined
+        : Number(data.approveAfterPeriodEndDays);
+    this.payAfterPeriodEndDays =
+      data.payAfterPeriodEndDays === undefined
+        ? undefined
+        : Number(data.payAfterPeriodEndDays);
+    this.autoGenerate = data.autoGenerate;
+    this.standardWorkingDays =
+      data.standardWorkingDays === undefined
+        ? undefined
+        : Number(data.standardWorkingDays);
+    this.standardWorkingHoursPerDay =
+      data.standardWorkingHoursPerDay === undefined
+        ? undefined
+        : Number(data.standardWorkingHoursPerDay);
+    this.weekendDays = data.weekendDays;
+    this.lateGraceMinutes =
+      data.lateGraceMinutes === undefined
+        ? undefined
+        : Number(data.lateGraceMinutes);
     this.status = data.status;
   }
-   validate() {
+
+  validate() {
     const errors = {};
 
     if (this.cycle !== undefined && this.cycle !== "MONTHLY") {
@@ -57,6 +80,42 @@ class updatePayrollSettingDTO {
       errors.status = "Trạng thái cấu hình lương không hợp lệ";
     }
 
+    if (
+      this.standardWorkingDays !== undefined &&
+      (!Number.isInteger(this.standardWorkingDays) ||
+        this.standardWorkingDays < 1 ||
+        this.standardWorkingDays > 31)
+    ) {
+      errors.standardWorkingDays = "Số ngày công chuẩn phải từ 1 đến 31";
+    }
+
+    if (
+      this.standardWorkingHoursPerDay !== undefined &&
+      (!Number.isFinite(this.standardWorkingHoursPerDay) ||
+        this.standardWorkingHoursPerDay < 1 ||
+        this.standardWorkingHoursPerDay > 24)
+    ) {
+      errors.standardWorkingHoursPerDay = "Số giờ công chuẩn phải từ 1 đến 24";
+    }
+
+    if (
+      this.weekendDays !== undefined &&
+      (!Array.isArray(this.weekendDays) ||
+        this.weekendDays.length === 0 ||
+        this.weekendDays.some(
+          (day) => !Number.isInteger(day) || day < 0 || day > 6,
+        ))
+    ) {
+      errors.weekendDays = "Ngày cuối tuần phải là mảng số nguyên từ 0 đến 6";
+    }
+
+    if (
+      this.lateGraceMinutes !== undefined &&
+      (!Number.isInteger(this.lateGraceMinutes) || this.lateGraceMinutes < 0)
+    ) {
+      errors.lateGraceMinutes = "Số phút được phép đi muộn phải là số nguyên không âm";
+    }
+
     return {
       isValid: Object.keys(errors).length === 0,
       statusCode: Object.keys(errors).length === 0 ? 200 : 400,
@@ -65,12 +124,11 @@ class updatePayrollSettingDTO {
   }
 
   toObject() {
-    const updateData ={};
+    const updateData = {};
 
     updatePayrollSettingFields.forEach((field) => {
-      if(this[field] !== undefined)
-        updateData[field] = this[field];
-    })
+      if (this[field] !== undefined) updateData[field] = this[field];
+    });
 
     return updateData;
   }

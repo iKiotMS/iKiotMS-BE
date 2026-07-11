@@ -15,20 +15,19 @@ const PayrollController = require("./controller/PayrollController");
  *       properties:
  *         payType:
  *           type: string
- *           enum: [PAY_BY_SHIFT, PAY_BY_HOUR, STANDARD_WORKING_DAY, FIXED]
+ *           enum: [PAY_BY_SHIFT, STANDARD_WORKING_DAY, FIXED]
  *           example: PAY_BY_SHIFT
  *         amountPerShift:
  *           type: number
  *           example: 250000
- *         amountPerHour:
- *           type: number
- *           example: 30000
  *         salaryPerPeriod:
  *           type: number
  *           example: 8000000
- *         standardWorkingDays:
+ *           description: Salary of the whole payroll period, used by FIXED.
+ *         standardWorkingDaySalary:
  *           type: number
- *           example: 26
+ *           example: 500000
+ *           description: Salary of one complete standard working day, used by STANDARD_WORKING_DAY.
  *         rates:
  *           type: object
  *           properties:
@@ -92,7 +91,6 @@ const PayrollController = require("./controller/PayrollController");
  *       type: object
  *       required:
  *         - name
- *         - allowancesType
  *         - amountType
  *         - amountValue
  *       properties:
@@ -102,10 +100,6 @@ const PayrollController = require("./controller/PayrollController");
  *         enable:
  *           type: boolean
  *           example: true
- *         allowancesType:
- *           type: string
- *           enum: [FIXED_DAILY, FIXED_MONTHLY]
- *           example: FIXED_DAILY
  *         amountType:
  *           type: string
  *           enum: [FIXED_AMOUNT, PERCENTAGE]
@@ -118,7 +112,6 @@ const PayrollController = require("./controller/PayrollController");
  *       required:
  *         - name
  *         - deductionType
- *         - amountType
  *         - deductionValue
  *       properties:
  *         name:
@@ -133,17 +126,14 @@ const PayrollController = require("./controller/PayrollController");
  *           example: LATE
  *         conditionType:
  *           type: string
- *           enum: [BY_OCCURRENCE, BY_BLOCK, BY_SALARY_COEFFICIENT]
+ *           enum: [BY_OCCURRENCE, BY_BLOCK]
  *           example: BY_OCCURRENCE
  *         blockMinutes:
  *           type: number
  *           example: 15
- *         amountType:
- *           type: string
- *           enum: [FIXED_AMOUNT, PERCENTAGE]
- *           example: FIXED_AMOUNT
  *         deductionValue:
  *           type: number
+ *           description: Fixed deduction amount in VND per occurrence/block, or once for FIXED.
  *           example: 20000
  *     PaySheetRequest:
  *       type: object
@@ -205,6 +195,36 @@ const PayrollController = require("./controller/PayrollController");
  *         totalPages:
  *           type: integer
  *           example: 3
+ *     PayrollSetting:
+ *       type: object
+ *       properties:
+ *         cycle: { type: string, enum: [MONTHLY] }
+ *         periodStartDay: { type: integer, minimum: 1, maximum: 28 }
+ *         approveAfterPeriodEndDays: { type: integer, minimum: 0 }
+ *         payAfterPeriodEndDays: { type: integer, minimum: 0 }
+ *         autoGenerate: { type: boolean }
+ *         standardWorkingDays:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 31
+ *           default: 26
+ *           description: Tenant-wide number of standard working days in one payroll period.
+ *         standardWorkingHoursPerDay:
+ *           type: number
+ *           minimum: 1
+ *           maximum: 24
+ *           default: 8
+ *         weekendDays:
+ *           type: array
+ *           items: { type: integer, minimum: 0, maximum: 6 }
+ *           default: [0]
+ *           description: Days treated as weekends, where 0 is Sunday and 6 is Saturday.
+ *         lateGraceMinutes:
+ *           type: integer
+ *           minimum: 0
+ *           default: 15
+ *           description: IGNORE_WITHIN_GRACE; lateness within grace is ignored, otherwise all late minutes count.
+ *         status: { type: string, enum: [ACTIVE, INACTIVE] }
  *
  * /payroll/preview:
  *   post:
@@ -261,6 +281,26 @@ const PayrollController = require("./controller/PayrollController");
  *                       type: array
  *                       items:
  *                         type: object
+ *                         properties:
+ *                           allowance:
+ *                             type: number
+ *                             description: Total calculated fixed-amount and percentage allowances.
+ *                           allowanceLines:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                           deduction:
+ *                             type: number
+ *                             description: Total calculated fixed deductions.
+ *                           deductionLines:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                           calculationWarnings:
+ *                             type: array
+ *                             items:
+ *                               type: string
+ *                               enum: [UNSUPPORTED_DEDUCTION_RULE]
  *                     skipped:
  *                       type: array
  *                       items:
@@ -407,12 +447,53 @@ const PayrollController = require("./controller/PayrollController");
  *         description: Forbidden
  *       404:
  *         description: Pay sheet not found
+ *
+ * /payroll/settings:
+ *   get:
+ *     tags: [Payroll]
+ *     summary: Get tenant payroll settings
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Payroll settings returned }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll settings not found }
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Create tenant payroll settings
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/PayrollSetting' }
+ *     responses:
+ *       201: { description: Payroll settings created }
+ *       400: { description: Validation failed }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       409: { description: Payroll settings already exist }
+ *   put:
+ *     tags: [Payroll]
+ *     summary: Update tenant payroll settings
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/PayrollSetting' }
+ *     responses:
+ *       200: { description: Payroll settings updated }
+ *       400: { description: Validation failed }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll settings not found }
  */
 function registerPayrollModule(app) {
   app.post(
     "/payroll/preview",
     verifyJwt,
-    authorize("paysheets", ["read"]),
+    authorize("payroll", ["read"]),
     PayrollController.generatePreview.bind(PayrollController),
   );
 

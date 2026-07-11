@@ -18,6 +18,13 @@ jest.mock("../../src/models/Attendance", () => ({
   find: jest.fn(),
 }));
 
+jest.mock("../../src/models/PayrollSetting", () => ({
+  findOne: jest.fn(() => ({
+    select: jest.fn().mockReturnThis(),
+    lean: jest.fn().mockResolvedValue({ lateGraceMinutes: 15 }),
+  })),
+}));
+
 const User = require("../../src/models/User");
 const ShiftTemplate = require("../../src/models/ShiftTemplate");
 const WorkingSchedule = require("../../src/models/WorkingSchedule");
@@ -454,6 +461,18 @@ describe("WorkingScheduleAttendanceMapper", () => {
         schedule,
       ),
     ).toBe(16);
+
+    // IGNORE_WITHIN_GRACE does not subtract the grace period after it is exceeded.
+    expect(
+      getLateMinutes(
+        {
+          actualCheckinAt: new Date("2026-07-01T01:20:00.000Z"),
+          actualCheckoutAt: new Date("2026-07-01T05:00:00.000Z"),
+        },
+        schedule,
+        15,
+      ),
+    ).toBe(20);
   });
 });
 

@@ -35,7 +35,8 @@
     "schedules": ["create", "read", "read_all", "update", "delete", "readBR", "readWH"],
     "attendances": ["read"],
     "leaveRequests": ["read", "update", "delete", "read_all","approve","reject", "create_emergency","readBR","readWH"],
-    "payrollSettings": ["create", "read", "update"]
+    "payrollSettings": ["create", "read", "update"],
+    "payroll": ["read", "create", "update", "delete"]
   },
   "BRANCH_MANAGER": {
     "users": ["read", "create_staff"],
