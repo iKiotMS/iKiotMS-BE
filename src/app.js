@@ -33,6 +33,9 @@ const createApp = () => {
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
+  
+  const { auditLogger } = require("./middlewares/auditMiddleware");
+  app.use(auditLogger);
 
   // Serve uploaded files
   app.use(

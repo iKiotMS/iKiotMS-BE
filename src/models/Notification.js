@@ -2,11 +2,7 @@ const mongoose = require("mongoose");
 
 const notificationSchema = new mongoose.Schema(
   {
-    tenantId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Tenant",
-      required: [true, "Tenant is required"],
-    },
+    // Common fields
     title: {
       type: String,
       required: [true, "Title is required"],
@@ -17,11 +13,43 @@ const notificationSchema = new mongoose.Schema(
       required: [true, "Description is required"],
       trim: true,
     },
-    sendTo: {
+    type: {
+      type: String,
+      enum: ["ANNOUNCEMENT", "SYSTEM_TRANSACTION", "SYSTEM_TENANT_CREATED", "SYSTEM_TICKET_CREATED"],
+      required: true,
+    },
+
+    // Announcement fields (admin -> tenant email)
+    category: {
+      type: String,
+      enum: ["Maintenance", "New feature", "Promotion", "Security"],
+      required: function () {
+        return this.type === "ANNOUNCEMENT";
+      },
+    },
+    targetType: {
+      type: String,
+      enum: ["ALL", "SELECTION"],
+      required: function () {
+        return this.type === "ANNOUNCEMENT";
+      },
+    },
+    targetTenants: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Tenant",
+      },
+    ],
+    createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
-    isGlobal: {
+
+    // System Notification fields (triggered by events for admin UI)
+    referenceId: {
+      type: String,
+    },
+    isRead: {
       type: Boolean,
       default: false,
     },
