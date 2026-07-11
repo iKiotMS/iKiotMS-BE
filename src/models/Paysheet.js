@@ -34,14 +34,14 @@ const PaysheetSchema = new mongoose.Schema(
       standardWorkingDays: Number,
 
       rates: {
-        holiday: { type: Number, default: 1 },
-        specialHoliday: { type: Number, default: 1 },
+        weekend: { type: Number, default: 2 },
+        publicHoliday: { type: Number, default: 3 },
       },
     },
     overtime: {
-      normalDay: Number,
-      holiday: Number,
-      specialHoliday: Number,
+      normalDay: { type: Number, default: 1.5 },
+      weekend: { type: Number, default: 2 },
+      publicHoliday: { type: Number, default: 3 },
     },
     bonuses: [
       {

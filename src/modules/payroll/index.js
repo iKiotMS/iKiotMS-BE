@@ -2,6 +2,7 @@ const PaySheetController = require("./controller/PaySheetController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
 const { authorize } = require("../../middlewares/authorizationMiddleware");
 const PayrollSettingController = require("./controller/PayrollSettingController");
+const PayrollController = require("./controller/PayrollController");
 
 /**
  * @openapi
@@ -31,10 +32,10 @@ const PayrollSettingController = require("./controller/PayrollSettingController"
  *         rates:
  *           type: object
  *           properties:
- *             holiday:
+ *             weekend:
  *               type: number
- *               example: 1
- *             specialHoliday:
+ *               example: 2
+ *             publicHoliday:
  *               type: number
  *               example: 3
  *     PaySheetOvertime:
@@ -43,10 +44,10 @@ const PayrollSettingController = require("./controller/PayrollSettingController"
  *         normalDay:
  *           type: number
  *           example: 1.5
- *         holiday:
+ *         weekend:
  *           type: number
  *           example: 2
- *         specialHoliday:
+ *         publicHoliday:
  *           type: number
  *           example: 3
  *     PaySheetBonusTier:
@@ -205,6 +206,86 @@ const PayrollSettingController = require("./controller/PayrollSettingController"
  *           type: integer
  *           example: 3
  *
+ * /payroll/preview:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Generate a payroll preview
+ *     description: Calculates payroll without saving payroll periods or payslips.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [periodStartDate, periodEndDate]
+ *             properties:
+ *               periodStartDate:
+ *                 type: string
+ *                 format: date
+ *                 example: 2026-07-01
+ *               periodEndDate:
+ *                 type: string
+ *                 format: date
+ *                 example: 2026-07-31
+ *               userIds:
+ *                 type: array
+ *                 description: Omit or send an empty array to preview all eligible employees.
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Payroll preview generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Tính bảng lương nháp thành công
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     periodStart:
+ *                       type: string
+ *                       format: date-time
+ *                     periodEnd:
+ *                       type: string
+ *                       format: date-time
+ *                     payslips:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     skipped:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     summary:
+ *                       type: object
+ *                       properties:
+ *                         totalEmployees: { type: integer }
+ *                         generatedCount: { type: integer }
+ *                         skippedCount: { type: integer }
+ *                         totalBasePay: { type: number }
+ *                         totalOvertimePay: { type: number }
+ *                         totalGrossSalary: { type: number }
+ *                         totalNetSalary: { type: number }
+ *       400:
+ *         description: Invalid date range or user IDs
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Payroll settings not found
+ *       500:
+ *         description: Unexpected server error
+ *
  * /payroll/paysheets:
  *   post:
  *     tags:
@@ -328,6 +409,13 @@ const PayrollSettingController = require("./controller/PayrollSettingController"
  *         description: Pay sheet not found
  */
 function registerPayrollModule(app) {
+  app.post(
+    "/payroll/preview",
+    verifyJwt,
+    authorize("paysheets", ["read"]),
+    PayrollController.generatePreview.bind(PayrollController),
+  );
+
   app.post(
     "/payroll/paysheets",
     verifyJwt,

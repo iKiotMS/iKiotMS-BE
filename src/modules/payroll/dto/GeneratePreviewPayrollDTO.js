@@ -1,3 +1,5 @@
+const mongoose = require("mongoose");
+
 class GeneratePreviewPayrollDTO {
   constructor(tenantId, data) {
     this.tenantId = tenantId;
@@ -25,6 +27,12 @@ class GeneratePreviewPayrollDTO {
       errors.periodEndDate = "yêu cầu periodEndDate";
     } else if (isNaN(Date.parse(this.periodEndDate))) {
       errors.periodEndDate = "periodEndDate không hợp lệ";
+    } else if (
+      this.periodStartDate &&
+      !isNaN(Date.parse(this.periodStartDate)) &&
+      new Date(this.periodEndDate) < new Date(this.periodStartDate)
+    ) {
+      errors.periodEndDate = "periodEndDate phải từ periodStartDate trở đi";
     }
 
     if (this.userIds && !Array.isArray(this.userIds)) {

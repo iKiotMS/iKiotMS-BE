@@ -12,11 +12,11 @@ const payrollSetting = new mongoose.Schema(
       type: String,
       enum: PayrollCycle,
     },
-    periodStartDay: {
+    periodStartDay: { //ngày bắt đầu của chu kỳ trả lương
       type: Number,
       default: 1,
     },
-    approveAfterPeriodEndDays: {
+    approveAfterPeriodEndDays: { 
       type: Number,
       default: 1,
     },

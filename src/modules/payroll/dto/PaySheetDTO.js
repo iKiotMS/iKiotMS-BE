@@ -58,8 +58,15 @@ class PaySheetDTO {
       salaryPerPeriod: basicPay?.salaryPerPeriod,
       standardWorkingDays: basicPay?.standardWorkingDays,
       rates: {
-        holiday: basicPay?.rates?.holiday ?? 1,
-        specialHoliday: basicPay?.rates?.specialHoliday ?? 1,
+        weekend:
+          basicPay?.rates?.weekend ??
+          basicPay?.rates?.sunday ??
+          basicPay?.rates?.holiday ??
+          2,
+        publicHoliday:
+          basicPay?.rates?.publicHoliday ??
+          basicPay?.rates?.specialHoliday ??
+          3,
       },
     };
   }
@@ -67,8 +74,10 @@ class PaySheetDTO {
   mapOvertime(overtime = {}) {
     return {
       normalDay: overtime?.normalDay ?? 1.5,
-      holiday: overtime?.holiday ?? 2,
-      specialHoliday: overtime?.specialHoliday ?? 3,
+      weekend:
+        overtime?.weekend ?? overtime?.sunday ?? overtime?.holiday ?? 2,
+      publicHoliday:
+        overtime?.publicHoliday ?? overtime?.specialHoliday ?? 3,
     };
   }
 
@@ -196,13 +205,14 @@ class PaySheetDTO {
       errors.push("Lương mỗi kỳ phải lớn hơn 0");
     }
 
-    if (rates && !isPositiveNumber(rates.holiday)) {
-      errors.push("Hệ số ngày nghỉ phải lớn hơn 0");
+    if (rates && !isPositiveNumber(rates.weekend)) {
+      errors.push("Hệ số cuối tuần phải lớn hơn 0");
     }
 
-    if (rates && !isPositiveNumber(rates.specialHoliday)) {
-      errors.push("Hệ số ngày lễ tết phải lớn hơn 0");
+    if (rates && !isPositiveNumber(rates.publicHoliday)) {
+      errors.push("Hệ số ngày lễ quốc gia phải lớn hơn 0");
     }
+
   }
 
   validateOvertime(errors) {
@@ -210,13 +220,14 @@ class PaySheetDTO {
       errors.push("Hệ số làm thêm ngày thường phải lớn hơn 0");
     }
 
-    if (!isPositiveNumber(this.overtime.holiday)) {
-      errors.push("Hệ số làm thêm ngày nghỉ phải lớn hơn 0");
+    if (!isPositiveNumber(this.overtime.weekend)) {
+      errors.push("Hệ số làm thêm cuối tuần phải lớn hơn 0");
     }
 
-    if (!isPositiveNumber(this.overtime.specialHoliday)) {
-      errors.push("Hệ số làm thêm ngày lễ tết phải lớn hơn 0");
+    if (!isPositiveNumber(this.overtime.publicHoliday)) {
+      errors.push("Hệ số làm thêm ngày lễ quốc gia phải lớn hơn 0");
     }
+
   }
 
   validateBonuses(errors) {

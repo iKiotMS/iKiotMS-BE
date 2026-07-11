@@ -80,6 +80,42 @@ const payslipSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    manualAdjustments: [
+      {
+        category: {
+          type: String,
+          enum: ["SALARY_ADVANCE", "TET_BONUS", "OTHER"],
+          default: "OTHER",
+        },
+
+        name: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+
+        amount: {
+          type: Number,
+          required: true,
+        },
+
+        note: {
+          type: String,
+          trim: true,
+        },
+
+        createdBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   { timestamps: true },
 );
