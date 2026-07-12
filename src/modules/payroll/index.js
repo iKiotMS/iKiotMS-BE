@@ -511,6 +511,35 @@ const PayrollController = require("./controller/PayrollController");
  *       404: { description: Payroll period not found }
  *       409: { description: Invalid current status }
  *
+ * /payroll/my-payslips:
+ *   get:
+ *     tags: [Payroll]
+ *     summary: List the authenticated employee's published payslips
+ *     description: Only APPROVED and PAID payslips belonging to the authenticated user are returned.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: page, schema: { type: integer, default: 1 } }
+ *       - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }
+ *     responses:
+ *       200: { description: Employee payslip list returned }
+ *       400: { description: Invalid pagination }
+ *       401: { description: Unauthorized }
+ *       403: { description: User cannot read own payslips }
+ *
+ * /payroll/my-payslips/{payslipId}:
+ *   get:
+ *     tags: [Payroll]
+ *     summary: Get one published payslip belonging to the authenticated employee
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: payslipId, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: Employee payslip returned }
+ *       400: { description: Invalid payslip ID }
+ *       401: { description: Unauthorized }
+ *       403: { description: User cannot read own payslips }
+ *       404: { description: Published payslip not found or does not belong to the user }
+ *
  * /payroll/periods/{periodId}/mark-paid:
  *   post:
  *     tags: [Payroll]
@@ -790,6 +819,20 @@ function registerPayrollModule(app) {
         "MARK_PAID",
         "Đã ghi nhận thanh toán kỳ lương",
       ),
+  );
+
+  app.get(
+    "/payroll/my-payslips",
+    verifyJwt,
+    authorize("payslips", ["read_own"]),
+    PayrollController.listMyPayslips.bind(PayrollController),
+  );
+
+  app.get(
+    "/payroll/my-payslips/:payslipId",
+    verifyJwt,
+    authorize("payslips", ["read_own"]),
+    PayrollController.getMyPayslip.bind(PayrollController),
   );
 
   app.post(

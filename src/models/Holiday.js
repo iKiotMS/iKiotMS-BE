@@ -30,6 +30,15 @@ const holidaySchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    source: {
+      type: String,
+      enum: ["GOOGLE_CALENDAR", "MANUAL"],
+      default: "MANUAL",
+    },
+    isManuallyEdited: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );

@@ -6,6 +6,8 @@ jest.mock("../../src/modules/payroll/service/PayrollService", () => ({
   generatePayrollPeriod: jest.fn(),
   updateDraftPayslip: jest.fn(),
   changePayrollPeriodStatus: jest.fn(),
+  listMyPayslips: jest.fn(),
+  getMyPayslip: jest.fn(),
 }));
 
 jest.mock("../../src/utils/redisTest", () => {
@@ -26,6 +28,16 @@ describe("Payroll preview API", () => {
       tenantId,
       role: "TENANT_OWNER",
       phoneNumber: "0901000001",
+    },
+    process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET,
+    { expiresIn: "15m" },
+  );
+  const staffToken = jwt.sign(
+    {
+      userId,
+      tenantId,
+      role: "STAFF",
+      phoneNumber: "0901000002",
     },
     process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET,
     { expiresIn: "15m" },
@@ -180,5 +192,26 @@ describe("Payroll preview API", () => {
     expect(PayrollService.changePayrollPeriodStatus).toHaveBeenCalledWith(
       expect.objectContaining({ action: "SUBMIT" }),
     );
+  });
+
+  test("GET /payroll/my-payslips lets staff read only their own published payslips", async () => {
+    PayrollService.listMyPayslips.mockResolvedValue({
+      data: [{ _id: "payslip1", status: "APPROVED" }],
+      pagination: { total: 1, page: 1, limit: 20, totalPages: 1 },
+    });
+
+    const response = await request(app)
+      .get("/payroll/my-payslips")
+      .set("Authorization", `Bearer ${staffToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual([
+      { _id: "payslip1", status: "APPROVED" },
+    ]);
+    expect(PayrollService.listMyPayslips).toHaveBeenCalledWith({
+      tenantId,
+      userId,
+      query: {},
+    });
   });
 });
