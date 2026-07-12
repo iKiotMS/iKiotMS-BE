@@ -9,13 +9,32 @@ const stockMovementRequestSchema = new mongoose.Schema(
     },
     movementType: {
       type: String,
-      enum: ["TRANSFER", "RETURN", "ADJUST", "IMPORT"],
+      enum: ["EXPORT", "RETURN", "ADJUST", "IMPORT"],
+      // WH: EXPORT", "RETURN", "ADJUST", "IMPORT (nhập hàng từ Supplier)
+      // BRANCH MANA: EXPORT, RETURN, ADJUST
       required: [true, "Movement type is required"],
     },
     status: {
       type: String,
-      enum: ["PENDING", "IN_TRANSIT", "RECEIVED", "CANCELLED"],
-      default: "PENDING",
+      enum: [
+        "DRAFT",
+        "PENDING",
+        "OPENING",
+        "CLOSED",
+        "IN_TRANSIT",
+        "RECEIVED",
+        "CANCELLED",
+        "COMPLETED",
+      ],
+      // Người tạo:  chuyển trạng thái từ DRAFT sang OPENING.
+      //             chuyển trạng thái từ OPENING sang CLOSED.
+      //             chuyển từ CLOSED sang IN_TRANSIT.
+      //             chuyển trạng thái từ IN_TRANSIT sang CANCELLED.
+
+      // Người nhận: chuyển trạng thái từ IN_TRANSIT sang RECEIVED
+      //             chuyển trạng thái từ IN_TRANSIT sang CANCELLED.
+
+      default: "DRAFT",
     },
     fromSupplierId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -37,14 +56,10 @@ const stockMovementRequestSchema = new mongoose.Schema(
       enum: ["branch", "warehouse"],
       required: [true, "To location type is required"],
     },
-    requestedBy: {
+    createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: [true, "User is required"],
-    },
-    approvedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
     },
     note: {
       type: String,
@@ -60,7 +75,7 @@ const stockMovementRequestSchema = new mongoose.Schema(
         quantity: {
           type: Number,
           required: true,
-          min: [1, "Quantity must be at least 1"],
+          min: [0, "Quantity cannot be negative"],
         },
         importPrice: {
           type: Number,

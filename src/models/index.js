@@ -25,4 +25,5 @@ module.exports = {
   ShiftTemplate: require("./ShiftTemplate"),
   WorkingSchedule: require("./WorkingSchedule"),
   LeaveRequest: require("./LeaveRequest"),
+  AIChatHistory: require("./AIChatHistory"),
 };

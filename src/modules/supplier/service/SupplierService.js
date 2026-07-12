@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const { Supplier, CashFlow } = require("../../../models");
+const { REFERENCE_PREFIX } = require("../../../constants/referencePrefix");
+const { generateReference } = require("../../../utils/referenceGenerator");
 
 class SupplierService {
   async create(tenantId, data) {
@@ -118,6 +120,7 @@ class SupplierService {
         paymentMethod: paymentMethod || "CASH",
         branchId,
         supplierId,
+        paymentReference: generateReference(REFERENCE_PREFIX.SUPPLIER),
         description: note || `Thanh toán công nợ cho nhà cung cấp ${supplier.supplierName}`,
       });
       await cashFlow.save({ session });
