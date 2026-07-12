@@ -886,8 +886,39 @@ class PayrollService {
       PayrollPeriod.countDocuments(filter),
     ]);
 
+    // Aggregate on the server instead of summing a paginated payslip result.
+    // tenantId is kept in the match even though period IDs are globally unique,
+    // so this financial total remains explicitly tenant-scoped.
+    const periodIds = data.map((p) => p._id);
+    const costAgg = await Payslip.aggregate([
+      {
+        $match: {
+          tenantId,
+          payrollPeriodId: { $in: periodIds },
+        },
+      },
+      {
+        $group: {
+          _id: "$payrollPeriodId",
+          totalCost: { $sum: { $ifNull: ["$netSalary", 0] } },
+        },
+      },
+    ]);
+
+    const costMap = {};
+    costAgg.forEach((item) => {
+      if (item._id) {
+        costMap[item._id.toString()] = item.totalCost;
+      }
+    });
+
+    const dataWithCost = data.map((p) => ({
+      ...p,
+      totalCost: costMap[p._id.toString()] || 0,
+    }));
+
     return {
-      data,
+      data: dataWithCost,
       pagination: {
         total,
         page: dto.page,
@@ -923,9 +954,12 @@ class PayrollService {
       throw error;
     }
 
-    const payslipFilter = { tenantId, payrollPeriodId: periodId };
+    // Aggregation pipelines do not apply Mongoose's automatic string-to-ObjectId
+    // casting, so normalize the path ID before sharing this filter with aggregate.
+    const payrollPeriodId = new mongoose.Types.ObjectId(periodId.toString());
+    const payslipFilter = { tenantId, payrollPeriodId };
     const skip = (dto.page - 1) * dto.limit;
-    const [payslips, total] = await Promise.all([
+    const [payslips, total, costAgg] = await Promise.all([
       Payslip.find(payslipFilter)
         .populate("userId", "profile email")
         .sort({ createdAt: 1 })
@@ -933,10 +967,26 @@ class PayrollService {
         .limit(dto.limit)
         .lean(),
       Payslip.countDocuments(payslipFilter),
+      Payslip.aggregate([
+        { $match: payslipFilter },
+        {
+          $group: {
+            _id: "$payrollPeriodId",
+            totalCost: { $sum: { $ifNull: ["$netSalary", 0] } },
+          },
+        },
+      ]),
     ]);
 
+    // totalCost represents the whole period and must not change with page/limit.
+    const totalCost = costAgg[0]?.totalCost || 0;
+    const payrollPeriodWithCost = {
+      ...payrollPeriod,
+      totalCost,
+    };
+
     return {
-      payrollPeriod,
+      payrollPeriod: payrollPeriodWithCost,
       payslips,
       pagination: {
         total,
