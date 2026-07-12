@@ -3,15 +3,30 @@ const LeaveRequest = require("../../../models/LeaveRequest");
 const PaySheet = require("../../../models/Paysheet");
 const User = require("../../../models/User");
 const WorkingSchedule = require("../../../models/WorkingSchedule");
-const {
-  calculateOverlapMinutes,
-} = require("../../schedule/service/WorkingScheduleAttendanceMapper");
 const GeneratePreviewPayrollDTO = require("../dto/GeneratePreviewPayrollDTO");
 const {
   calculatePayrollBySchedules,
   getHolidayByDate,
 } = require("./PayrollDayRateCalculator");
 const PayrollSettingService = require("./PayrollSettingService");
+
+function mergeTimeRanges(ranges) {
+  const sortedRanges = ranges
+    .filter((range) => range.start < range.end)
+    .sort((left, right) => left.start - right.start);
+
+  return sortedRanges.reduce((merged, range) => {
+    const lastRange = merged[merged.length - 1];
+
+    if (!lastRange || range.start > lastRange.end) {
+      merged.push({ ...range });
+    } else {
+      lastRange.end = Math.max(lastRange.end, range.end);
+    }
+
+    return merged;
+  }, []);
+}
 
 class PayrollService {
   //===============================================================================
@@ -68,16 +83,27 @@ class PayrollService {
   getSchedulePayableMinutes(schedule, attendances) {
     // Chỉ tính phần thời gian attendance nằm bên trong khung giờ của ca.
     // Ví dụ check-in 07:30 cho ca 08:00-17:00 thì thời gian trước 08:00 bị bỏ.
-    return attendances.reduce((total, attendance) => {
-      return (
-        total +
-        calculateOverlapMinutes(
-          attendance.actualCheckinAt,
-          attendance.actualCheckoutAt,
-          schedule.startAt,
-          schedule.endAt,
-        )
-      );
+    const scheduleStart = new Date(schedule.startAt).getTime();
+    const scheduleEnd = new Date(schedule.endAt).getTime();
+    const attendanceRanges = attendances
+      .filter(
+        (attendance) =>
+          attendance.actualCheckinAt && attendance.actualCheckoutAt,
+      )
+      .map((attendance) => ({
+        start: Math.max(
+          new Date(attendance.actualCheckinAt).getTime(),
+          scheduleStart,
+        ),
+        end: Math.min(
+          new Date(attendance.actualCheckoutAt).getTime(),
+          scheduleEnd,
+        ),
+      }));
+
+    // Merge trước khi cộng để phần giao nhau giữa nhiều attendance chỉ tính một lần.
+    return mergeTimeRanges(attendanceRanges).reduce((total, range) => {
+      return total + Math.floor((range.end - range.start) / 60000);
     }, 0);
   }
 
@@ -397,6 +423,20 @@ class PayrollService {
         skipped.push({
           userId: context.user._id,
           reason: "Nhân viên chưa được gán bảng lương",
+        });
+        continue;
+      }
+
+      if (
+        context.paySheet.basicPay?.payType === "FIXED" &&
+        !(Number(context.paySheet.basicPay.salaryPerPeriod) > 0)
+      ) {
+        skipped.push({
+          userId: context.user._id,
+          paySheetId: context.paySheet._id,
+          scheduleIds: context.workingSchedules.map((schedule) => schedule._id),
+          reason:
+            "Cấu hình lương cố định thiếu mức lương theo kỳ (salaryPerPeriod), không thể tính lương và làm thêm giờ",
         });
         continue;
       }

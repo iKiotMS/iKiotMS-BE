@@ -305,6 +305,17 @@ const PayrollController = require("./controller/PayrollController");
  *                       type: array
  *                       items:
  *                         type: object
+ *                         properties:
+ *                           userId: { type: string }
+ *                           paySheetId:
+ *                             type: string
+ *                             nullable: true
+ *                           scheduleIds:
+ *                             type: array
+ *                             items: { type: string }
+ *                           reason:
+ *                             type: string
+ *                             example: Cấu hình lương cố định thiếu mức lương theo kỳ (salaryPerPeriod), không thể tính lương và làm thêm giờ
  *                     summary:
  *                       type: object
  *                       properties:

@@ -1,6 +1,85 @@
 const PayrollService = require("../../src/modules/payroll/service/PayrollService");
+const PayrollSettingService = require("../../src/modules/payroll/service/PayrollSettingService");
+const Holiday = require("../../src/models/Holiday");
 
 describe("Payroll preview with multiple schedules", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("merges overlapping attendance ranges before calculating payable minutes", () => {
+    const schedule = {
+      _id: "schedule1",
+      startAt: new Date("2026-07-06T01:00:00.000Z"),
+      endAt: new Date("2026-07-06T07:00:00.000Z"),
+    };
+    const attendances = [
+      {
+        actualCheckinAt: new Date("2026-07-06T01:00:00.000Z"),
+        actualCheckoutAt: new Date("2026-07-06T05:00:00.000Z"),
+      },
+      {
+        actualCheckinAt: new Date("2026-07-06T03:00:00.000Z"),
+        actualCheckoutAt: new Date("2026-07-06T07:00:00.000Z"),
+      },
+    ];
+
+    expect(
+      PayrollService.getSchedulePayableMinutes(schedule, attendances),
+    ).toBe(360);
+  });
+
+  test("skips a fixed-salary paysheet missing salaryPerPeriod", async () => {
+    const paySheetId = "64a000000000000000000011";
+    const userId = "64a000000000000000000012";
+    const scheduleIds = [
+      "64a000000000000000000013",
+      "64a000000000000000000014",
+    ];
+    jest.spyOn(PayrollSettingService, "getPayrollSetting").mockResolvedValue({
+      data: { standardWorkingDays: 26, standardWorkingHoursPerDay: 8 },
+    });
+    jest.spyOn(Holiday, "find").mockReturnValue({
+      lean: jest.fn().mockResolvedValue([]),
+    });
+    jest.spyOn(PayrollService, "gatherEmployeePayrollInfo").mockResolvedValue([
+      {
+        user: { _id: userId },
+        paySheet: {
+          _id: paySheetId,
+          basicPay: { payType: "FIXED" },
+        },
+        workingSchedules: scheduleIds.map((_id) => ({ _id })),
+        attendances: [],
+      },
+    ]);
+
+    const result = await PayrollService.generatePayRoll({
+      tenantId: "64a000000000000000000001",
+      currentUserId: "64a000000000000000000002",
+      payrollData: {
+        periodStartDate: "2026-07-01",
+        periodEndDate: "2026-07-31",
+      },
+    });
+
+    expect(result.data.payslips).toEqual([]);
+    expect(result.data.skipped).toEqual([
+      {
+        userId,
+        paySheetId,
+        scheduleIds,
+        reason:
+          "Cấu hình lương cố định thiếu mức lương theo kỳ (salaryPerPeriod), không thể tính lương và làm thêm giờ",
+      },
+    ]);
+    expect(result.data.summary).toMatchObject({
+      generatedCount: 0,
+      skippedCount: 1,
+    });
+
+  });
+
   test("calculates normal shifts, overtime, monthly allowance, and late deductions", () => {
     const normalSchedules = [6, 7, 8, 9, 10].map((day) => ({
       _id: `normalSchedule${day}`,
