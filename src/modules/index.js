@@ -17,6 +17,7 @@ const { registerStockMovementModule } = require("./stock-movement");
 const { registerOrderModule } = require("./order");
 const { registerAttendanceModule } = require("./attendances");
 const { registerLeaveRequestModule } = require("./leaveRequest");
+const { registerHolidayModule } = require("./holiday");
 const { registerAIModule } = require("./ai");
 const { registerStatsModule } = require("./stats");
 const { registerAuditModule } = require("./audit");
@@ -43,6 +44,7 @@ function registerModules(app) {
   registerOrderModule(app);
   registerAttendanceModule(app);
   registerLeaveRequestModule(app);
+  registerHolidayModule(app);
   registerAIModule(app);
   registerStatsModule(app);
   registerAuditModule(app);

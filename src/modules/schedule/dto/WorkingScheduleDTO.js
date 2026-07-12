@@ -4,6 +4,8 @@ const isValidDateString = (value) => {
   return !Number.isNaN(date.getTime());
 };
 
+const SCHEDULE_TYPES = ["NORMAL", "OVERTIME"];
+
 class BulkWorkingScheduleDTO {
   constructor(tenantId, createdBy, data = {}) {
     data = data || {};
@@ -15,6 +17,9 @@ class BulkWorkingScheduleDTO {
           userId: schedule.userId,
           shiftTemplateId: schedule.shiftTemplateId,
           workDate: schedule.workDate,
+          scheduleType: schedule.scheduleType
+            ? String(schedule.scheduleType).trim().toUpperCase()
+            : "NORMAL",
         }))
       : null;
   }
@@ -48,6 +53,10 @@ class BulkWorkingScheduleDTO {
         if (!isValidDateString(schedule.workDate)) {
           errors.push(`${prefix}: ngày làm việc không hợp lệ`);
         }
+
+        if (!SCHEDULE_TYPES.includes(schedule.scheduleType)) {
+          errors.push(`${prefix}: loại lịch làm việc không hợp lệ`);
+        }
       });
     }
 
@@ -61,4 +70,4 @@ class BulkWorkingScheduleDTO {
   }
 }
 
-module.exports = { BulkWorkingScheduleDTO };
+module.exports = { BulkWorkingScheduleDTO, SCHEDULE_TYPES };

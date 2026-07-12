@@ -1,6 +1,8 @@
 const PaySheetController = require("./controller/PaySheetController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
 const { authorize } = require("../../middlewares/authorizationMiddleware");
+const PayrollSettingController = require("./controller/PayrollSettingController");
+const PayrollController = require("./controller/PayrollController");
 
 /**
  * @openapi
@@ -13,27 +15,26 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       properties:
  *         payType:
  *           type: string
- *           enum: [PAY_BY_SHIFT, PAY_BY_HOUR, STANDARD_WORKING_DAY, FIXED]
+ *           enum: [PAY_BY_SHIFT, STANDARD_WORKING_DAY, FIXED]
  *           example: PAY_BY_SHIFT
  *         amountPerShift:
  *           type: number
  *           example: 250000
- *         amountPerHour:
- *           type: number
- *           example: 30000
  *         salaryPerPeriod:
  *           type: number
  *           example: 8000000
- *         standardWorkingDays:
+ *           description: Salary of the whole payroll period, used by FIXED.
+ *         standardWorkingDaySalary:
  *           type: number
- *           example: 26
+ *           example: 500000
+ *           description: Salary of one complete standard working day, used by STANDARD_WORKING_DAY.
  *         rates:
  *           type: object
  *           properties:
- *             holiday:
+ *             weekend:
  *               type: number
- *               example: 1
- *             specialHoliday:
+ *               example: 2
+ *             publicHoliday:
  *               type: number
  *               example: 3
  *     PaySheetOvertime:
@@ -42,10 +43,10 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         normalDay:
  *           type: number
  *           example: 1.5
- *         holiday:
+ *         weekend:
  *           type: number
  *           example: 2
- *         specialHoliday:
+ *         publicHoliday:
  *           type: number
  *           example: 3
  *     PaySheetBonusTier:
@@ -90,7 +91,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       type: object
  *       required:
  *         - name
- *         - allowancesType
  *         - amountType
  *         - amountValue
  *       properties:
@@ -100,10 +100,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         enable:
  *           type: boolean
  *           example: true
- *         allowancesType:
- *           type: string
- *           enum: [FIXED_DAILY, FIXED_MONTHLY]
- *           example: FIXED_DAILY
  *         amountType:
  *           type: string
  *           enum: [FIXED_AMOUNT, PERCENTAGE]
@@ -116,7 +112,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       required:
  *         - name
  *         - deductionType
- *         - amountType
  *         - deductionValue
  *       properties:
  *         name:
@@ -131,17 +126,14 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *           example: LATE
  *         conditionType:
  *           type: string
- *           enum: [BY_OCCURRENCE, BY_BLOCK, BY_SALARY_COEFFICIENT]
+ *           enum: [BY_OCCURRENCE, BY_BLOCK]
  *           example: BY_OCCURRENCE
  *         blockMinutes:
  *           type: number
  *           example: 15
- *         amountType:
- *           type: string
- *           enum: [FIXED_AMOUNT, PERCENTAGE]
- *           example: FIXED_AMOUNT
  *         deductionValue:
  *           type: number
+ *           description: Fixed deduction amount in VND per occurrence/block, or once for FIXED.
  *           example: 20000
  *     PaySheetRequest:
  *       type: object
@@ -203,6 +195,344 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         totalPages:
  *           type: integer
  *           example: 3
+ *     PayrollSetting:
+ *       type: object
+ *       properties:
+ *         cycle: { type: string, enum: [MONTHLY] }
+ *         periodStartDay: { type: integer, minimum: 1, maximum: 28 }
+ *         approveAfterPeriodEndDays: { type: integer, minimum: 0 }
+ *         payAfterPeriodEndDays: { type: integer, minimum: 0 }
+ *         autoGenerate: { type: boolean }
+ *         standardWorkingDays:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 31
+ *           default: 26
+ *           description: Tenant-wide number of standard working days in one payroll period.
+ *         standardWorkingHoursPerDay:
+ *           type: number
+ *           minimum: 1
+ *           maximum: 24
+ *           default: 8
+ *         weekendDays:
+ *           type: array
+ *           items: { type: integer, minimum: 0, maximum: 6 }
+ *           default: [0]
+ *           description: Days treated as weekends, where 0 is Sunday and 6 is Saturday.
+ *         lateGraceMinutes:
+ *           type: integer
+ *           minimum: 0
+ *           default: 15
+ *           description: IGNORE_WITHIN_GRACE; lateness within grace is ignored, otherwise all late minutes count.
+ *         status: { type: string, enum: [ACTIVE, INACTIVE] }
+ *
+ * /payroll/preview:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Generate a payroll preview
+ *     description: Calculates payroll without saving payroll periods or payslips.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [periodStartDate, periodEndDate]
+ *             properties:
+ *               periodStartDate:
+ *                 type: string
+ *                 format: date
+ *                 example: 2026-07-01
+ *               periodEndDate:
+ *                 type: string
+ *                 format: date
+ *                 example: 2026-07-31
+ *               userIds:
+ *                 type: array
+ *                 description: Omit or send an empty array to preview all eligible employees.
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Payroll preview generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Tính bảng lương nháp thành công
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     periodStart:
+ *                       type: string
+ *                       format: date-time
+ *                     periodEnd:
+ *                       type: string
+ *                       format: date-time
+ *                     payslips:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           allowance:
+ *                             type: number
+ *                             description: Total calculated fixed-amount and percentage allowances.
+ *                           allowanceLines:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                           deduction:
+ *                             type: number
+ *                             description: Total calculated fixed deductions.
+ *                           deductionLines:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                           calculationWarnings:
+ *                             type: array
+ *                             items:
+ *                               type: string
+ *                               enum: [UNSUPPORTED_DEDUCTION_RULE]
+ *                     skipped:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           userId: { type: string }
+ *                           paySheetId:
+ *                             type: string
+ *                             nullable: true
+ *                           scheduleIds:
+ *                             type: array
+ *                             items: { type: string }
+ *                           reason:
+ *                             type: string
+ *                             example: Cấu hình lương cố định thiếu mức lương theo kỳ (salaryPerPeriod), không thể tính lương và làm thêm giờ
+ *                     summary:
+ *                       type: object
+ *                       properties:
+ *                         totalEmployees: { type: integer }
+ *                         generatedCount: { type: integer }
+ *                         skippedCount: { type: integer }
+ *                         totalBasePay: { type: number }
+ *                         totalOvertimePay: { type: number }
+ *                         totalGrossSalary: { type: number }
+ *                         totalNetSalary: { type: number }
+ *       400:
+ *         description: Invalid date range or user IDs
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Payroll settings not found
+ *       500:
+ *         description: Unexpected server error
+ *
+ * /payroll/periods:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Generate and save a draft payroll period
+ *     description: payrollMonth is the month containing the period end date. Dates are derived from PayrollSetting.periodStartDay.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [payrollMonth]
+ *             properties:
+ *               payrollMonth:
+ *                 type: string
+ *                 pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+ *                 example: 2026-07
+ *                 description: Tháng chứa ngày kết thúc kỳ lương.
+ *               userIds:
+ *                 type: array
+ *                 description: Omit or send an empty array to generate payslips for all eligible employees.
+ *                 items: { type: string }
+ *     responses:
+ *       201:
+ *         description: Draft payroll period and payslips created successfully
+ *       400:
+ *         description: Invalid payroll month or user IDs
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Payroll settings not found
+ *       409:
+ *         description: Payroll period overlaps an existing period
+ *       422:
+ *         description: No valid payslips can be generated
+ *       500:
+ *         description: Unexpected server error
+ *   get:
+ *     tags: [Payroll]
+ *     summary: List payroll periods
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: page, schema: { type: integer, default: 1 } }
+ *       - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [DRAFT, REVIEW, APPROVED, PAID, CANCELLED] }
+ *     responses:
+ *       200: { description: Payroll period list returned }
+ *       400: { description: Invalid filters }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *
+ * /payroll/periods/{periodId}:
+ *   get:
+ *     tags: [Payroll]
+ *     summary: Get payroll period with paginated payslips
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *       - { in: query, name: page, schema: { type: integer, default: 1 } }
+ *       - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }
+ *     responses:
+ *       200: { description: Payroll period detail returned }
+ *       400: { description: Invalid ID or pagination }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period not found }
+ *
+ * /payroll/periods/{periodId}/payslips/{payslipId}:
+ *   get:
+ *     tags: [Payroll]
+ *     summary: Get a payslip in a payroll period
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *       - { in: path, name: payslipId, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: Payslip returned }
+ *       400: { description: Invalid IDs }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payslip not found }
+ *   patch:
+ *     tags: [Payroll]
+ *     summary: Edit note and manual costs of a draft payslip
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *       - { in: path, name: payslipId, required: true, schema: { type: string } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               note: { type: string }
+ *               manualAdjustments:
+ *                 type: array
+ *                 description: Replaces the current list. Positive amounts add money; negative amounts deduct money.
+ *                 items:
+ *                   type: object
+ *                   required: [name, amount]
+ *                   properties:
+ *                     category: { type: string, enum: [SALARY_ADVANCE, TET_BONUS, OTHER], default: OTHER }
+ *                     name: { type: string }
+ *                     amount: { type: number, not: { const: 0 } }
+ *                     note: { type: string }
+ *     responses:
+ *       200: { description: Draft payslip updated and net salary recalculated }
+ *       400: { description: Invalid input }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period or payslip not found }
+ *       409: { description: Payroll period is not in DRAFT }
+ *       422: { description: Net salary would become negative }
+ *
+ * /payroll/periods/{periodId}/submit:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Submit a draft payroll period for review
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: Status changed from DRAFT to REVIEW }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period not found }
+ *       409: { description: Invalid current status }
+ *       422: { description: Payroll period has no payslips }
+ *
+ * /payroll/periods/{periodId}/return-to-draft:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Return a payroll period under review to draft
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties: { reason: { type: string } }
+ *     responses:
+ *       200: { description: Status changed from REVIEW to DRAFT }
+ *       400: { description: Return reason is required }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period not found }
+ *       409: { description: Invalid current status }
+ *
+ * /payroll/periods/{periodId}/approve:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Approve a payroll period under review
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: Status changed from REVIEW to APPROVED }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period not found }
+ *       409: { description: Invalid current status }
+ *
+ * /payroll/periods/{periodId}/mark-paid:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Mark an approved payroll period as paid
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               paymentReference: { type: string }
+ *               paymentNote: { type: string }
+ *     responses:
+ *       200: { description: Status changed from APPROVED to PAID }
+ *       400: { description: Invalid payment information }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period not found }
+ *       409: { description: Invalid current status }
  *
  * /payroll/paysheets:
  *   post:
@@ -325,8 +655,143 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Forbidden
  *       404:
  *         description: Pay sheet not found
+ *
+ * /payroll/settings:
+ *   get:
+ *     tags: [Payroll]
+ *     summary: Get tenant payroll settings
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Payroll settings returned }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll settings not found }
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Create tenant payroll settings
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/PayrollSetting' }
+ *     responses:
+ *       201: { description: Payroll settings created }
+ *       400: { description: Validation failed }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       409: { description: Payroll settings already exist }
+ *   put:
+ *     tags: [Payroll]
+ *     summary: Update tenant payroll settings
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/PayrollSetting' }
+ *     responses:
+ *       200: { description: Payroll settings updated }
+ *       400: { description: Validation failed }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll settings not found }
  */
 function registerPayrollModule(app) {
+  app.post(
+    "/payroll/preview",
+    verifyJwt,
+    authorize("payroll", ["read"]),
+    PayrollController.generatePreview.bind(PayrollController),
+  );
+
+  app.post(
+    "/payroll/periods",
+    verifyJwt,
+    authorize("payroll", ["create"]),
+    PayrollController.generatePayrollPeriod.bind(PayrollController),
+  );
+
+  app.get(
+    "/payroll/periods",
+    verifyJwt,
+    authorize("payroll", ["read"]),
+    PayrollController.listPayrollPeriods.bind(PayrollController),
+  );
+
+  app.get(
+    "/payroll/periods/:periodId",
+    verifyJwt,
+    authorize("payroll", ["read"]),
+    PayrollController.getPayrollPeriod.bind(PayrollController),
+  );
+
+  app.get(
+    "/payroll/periods/:periodId/payslips/:payslipId",
+    verifyJwt,
+    authorize("payroll", ["read"]),
+    PayrollController.getPayslip.bind(PayrollController),
+  );
+
+  app.patch(
+    "/payroll/periods/:periodId/payslips/:payslipId",
+    verifyJwt,
+    authorize("payroll", ["update"]),
+    PayrollController.updateDraftPayslip.bind(PayrollController),
+  );
+
+  app.post(
+    "/payroll/periods/:periodId/submit",
+    verifyJwt,
+    authorize("payroll", ["update"]),
+    (req, res) =>
+      PayrollController.payrollPeriodAction(
+        req,
+        res,
+        "SUBMIT",
+        "Đã gửi duyệt kỳ lương",
+      ),
+  );
+
+  app.post(
+    "/payroll/periods/:periodId/return-to-draft",
+    verifyJwt,
+    authorize("payroll", ["update"]),
+    (req, res) =>
+      PayrollController.payrollPeriodAction(
+        req,
+        res,
+        "RETURN_TO_DRAFT",
+        "Đã trả kỳ lương về bản nháp",
+      ),
+  );
+
+  app.post(
+    "/payroll/periods/:periodId/approve",
+    verifyJwt,
+    authorize("payroll", ["update"]),
+    (req, res) =>
+      PayrollController.payrollPeriodAction(
+        req,
+        res,
+        "APPROVE",
+        "Đã duyệt kỳ lương",
+      ),
+  );
+
+  app.post(
+    "/payroll/periods/:periodId/mark-paid",
+    verifyJwt,
+    authorize("payroll", ["update"]),
+    (req, res) =>
+      PayrollController.payrollPeriodAction(
+        req,
+        res,
+        "MARK_PAID",
+        "Đã ghi nhận thanh toán kỳ lương",
+      ),
+  );
+
   app.post(
     "/payroll/paysheets",
     verifyJwt,
@@ -353,6 +818,31 @@ function registerPayrollModule(app) {
     verifyJwt,
     authorize("paysheets", ["update"]),
     PaySheetController.updatePaySheet.bind(PaySheetController),
+  );
+
+  app.get(
+    "/payroll/settings",
+    verifyJwt,
+    authorize("payrollSettings", ["read"]),
+    PayrollSettingController.getPayrollSetting.bind(PayrollSettingController),
+  );
+
+  app.post(
+    "/payroll/settings",
+    verifyJwt,
+    authorize("payrollSettings", ["create"]),
+    PayrollSettingController.createPayrollSetting.bind(
+      PayrollSettingController,
+    ),
+  );
+
+  app.put(
+    "/payroll/settings",
+    verifyJwt,
+    authorize("payrollSettings", ["update"]),
+    PayrollSettingController.updatePayrollSetting.bind(
+      PayrollSettingController,
+    ),
   );
 
   console.log(" Payroll module registered");

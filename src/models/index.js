@@ -20,6 +20,7 @@ module.exports = {
   Promotion: require("./Promotion"),
   Notification: require("./Notification"),
   Attendance: require("./Attendance"),
+  Holiday: require("./Holiday"),
   Payslip: require("./Payslip"),
   ShiftTemplate: require("./ShiftTemplate"),
   WorkingSchedule: require("./WorkingSchedule"),

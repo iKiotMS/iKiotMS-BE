@@ -15,7 +15,10 @@ const attendanceSchema = new mongoose.Schema(
     scheduleId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "WorkingSchedule",
-      required: [true, "Working schedule is required"],
+    },
+    workDate: {
+      type: Date,
+      required: true,
     },
     actualCheckinAt: {
       type: Date,
@@ -66,5 +69,7 @@ const attendanceSchema = new mongoose.Schema(
 
   { timestamps: true },
 );
+attendanceSchema.index({ tenantId: 1, userId: 1, workDate: 1 });
+attendanceSchema.index({ tenantId: 1, userId: 1, status: 1 });
 
 module.exports = mongoose.model("Attendance", attendanceSchema);

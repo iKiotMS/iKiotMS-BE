@@ -13,6 +13,7 @@ const { setupSwagger } = require("./config/setupSwagger");
 const { initSocket } = require("./services/socketService");
 const { startSubscriptionJob } = require("./jobs/subscriptionJob");
 const { startLeaveRequestJob } = require("./jobs/leaveRequestJob");
+const { startHolidaySyncJob } = require("./jobs/holidaySyncJob");
 
 const createApp = () => {
   const app = express();
@@ -72,6 +73,7 @@ const startServer = async () => {
   if (config.nodeEnv !== "test") {
     startSubscriptionJob();
     startLeaveRequestJob();
+    startHolidaySyncJob();
   }
 };
 

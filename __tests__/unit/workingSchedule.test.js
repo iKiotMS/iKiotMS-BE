@@ -18,11 +18,23 @@ jest.mock("../../src/models/Attendance", () => ({
   find: jest.fn(),
 }));
 
+jest.mock("../../src/models/PayrollSetting", () => ({
+  findOne: jest.fn(() => ({
+    select: jest.fn().mockReturnThis(),
+    lean: jest.fn().mockResolvedValue({ lateGraceMinutes: 15 }),
+  })),
+}));
+
 const User = require("../../src/models/User");
 const ShiftTemplate = require("../../src/models/ShiftTemplate");
 const WorkingSchedule = require("../../src/models/WorkingSchedule");
 const Attendance = require("../../src/models/Attendance");
 const WorkingScheduleService = require("../../src/modules/schedule/service/WorkingScheduleService");
+const {
+  attachAttendancesToUsers,
+  getAttendanceKey,
+  getLateMinutes,
+} = require("../../src/modules/schedule/service/WorkingScheduleAttendanceMapper");
 
 const sameDate = (left, right) => {
   return new Date(left).getTime() === new Date(right).getTime();
@@ -126,6 +138,7 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
         schedules.find((schedule) => {
           return (
             schedule.tenantId === filter.tenantId &&
+            schedule.scheduleType === filter.scheduleType &&
             schedule.shiftTemplateId === filter.shiftTemplateId &&
             sameDate(schedule.workDate, filter.workDate) &&
             sameDate(schedule.startAt, filter.startAt) &&
@@ -172,6 +185,7 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
       managedBy: "manager1",
       userId: ["staffA"],
       shiftTemplateId: "morningShift",
+      scheduleType: "NORMAL",
       workDate: new Date("2026-07-01T00:00:00.000Z"),
       startAt: new Date("2026-07-01T01:00:00.000Z"),
       endAt: new Date("2026-07-01T05:00:00.000Z"),
@@ -237,6 +251,7 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
       managedBy: "manager1",
       userId: ["staffA"],
       shiftTemplateId: "morningShift",
+      scheduleType: "NORMAL",
       workDate: new Date("2026-07-01T00:00:00.000Z"),
       startAt: new Date("2026-07-01T01:00:00.000Z"),
       endAt: new Date("2026-07-01T05:00:00.000Z"),
@@ -276,11 +291,54 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
       managedBy: "manager1",
       userId: ["staffA", "staffB"],
       shiftTemplateId: "morningShift",
+      scheduleType: "NORMAL",
       workDate: new Date("2026-07-01T00:00:00.000Z"),
       startAt: new Date("2026-07-01T01:00:00.000Z"),
       endAt: new Date("2026-07-01T05:00:00.000Z"),
       status: "SCHEDULED",
     });
+  });
+
+  test("does not merge normal and overtime schedules from the same request", async () => {
+    const result = await WorkingScheduleService.createBulkWorkingSchedules(
+      "tenant1",
+      "manager1",
+      {
+        schedules: [
+          {
+            userId: "staffA",
+            shiftTemplateId: "morningShift",
+            workDate: "2026-07-01",
+            scheduleType: "NORMAL",
+          },
+          {
+            userId: "staffB",
+            shiftTemplateId: "morningShift",
+            workDate: "2026-07-01",
+            scheduleType: "OVERTIME",
+          },
+        ],
+      },
+      "TENANT_OWNER",
+    );
+
+    expect(result.message).toBe("Phân ca thành công");
+    expect(result.data).toHaveLength(2);
+    expect(WorkingSchedule.create).toHaveBeenCalledTimes(2);
+    expect(WorkingSchedule.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        userId: ["staffA"],
+        scheduleType: "NORMAL",
+      }),
+    );
+    expect(WorkingSchedule.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        userId: ["staffB"],
+        scheduleType: "OVERTIME",
+      }),
+    );
   });
 
   test("rejects a schedule when the staff member already has an overlapping schedule", async () => {
@@ -291,6 +349,7 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
       managedBy: "manager1",
       userId: ["staffA"],
       shiftTemplateId: "morningShift",
+      scheduleType: "NORMAL",
       workDate: new Date("2026-07-01T00:00:00.000Z"),
       startAt: new Date("2026-07-01T01:00:00.000Z"),
       endAt: new Date("2026-07-01T05:00:00.000Z"),
@@ -320,6 +379,100 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
     expect(WorkingSchedule.findOneAndUpdate).not.toHaveBeenCalled();
     expect(WorkingSchedule.create).not.toHaveBeenCalled();
     expect(schedules).toHaveLength(1);
+  });
+});
+
+describe("WorkingScheduleAttendanceMapper", () => {
+  test("uses one attendance session to derive normal and overtime schedule status", () => {
+    const user = { _id: "staffA", profile: { firstName: "A" } };
+    const schedules = [
+      {
+        _id: "normalSchedule",
+        userId: [user],
+        workDate: new Date("2026-07-01T00:00:00.000Z"),
+        startAt: new Date("2026-07-01T01:00:00.000Z"),
+        endAt: new Date("2026-07-01T10:00:00.000Z"),
+        scheduleType: "NORMAL",
+      },
+      {
+        _id: "overtimeSchedule",
+        userId: [user],
+        workDate: new Date("2026-07-01T00:00:00.000Z"),
+        startAt: new Date("2026-07-01T10:00:00.000Z"),
+        endAt: new Date("2026-07-01T12:00:00.000Z"),
+        scheduleType: "OVERTIME",
+      },
+    ];
+    const attendance = {
+      _id: "attendance1",
+      userId: "staffA",
+      workDate: new Date("2026-07-01T00:00:00.000Z"),
+      status: "CHECKED_OUT",
+      actualCheckinAt: new Date("2026-07-01T01:00:00.000Z"),
+      actualCheckoutAt: new Date("2026-07-01T12:00:00.000Z"),
+      workedMinutes: 660,
+    };
+    const attendanceByUserAndWorkDate = {
+      [getAttendanceKey(attendance.workDate, attendance.userId)]: [attendance],
+    };
+
+    const result = attachAttendancesToUsers(
+      schedules,
+      attendanceByUserAndWorkDate,
+      true,
+    );
+
+    expect(result[0].userId[0].attendance).toMatchObject({
+      status: "CHECKED_OUT",
+      workedMinutes: 660,
+      workedMinutesInThisSchedule: 540,
+    });
+    expect(result[1].userId[0].attendance).toMatchObject({
+      status: "CHECKED_OUT",
+      workedMinutes: 660,
+      workedMinutesInThisSchedule: 120,
+      lateMinutes: 0,
+    });
+  });
+
+  test("calculates late minutes with a 15 minute grace period", () => {
+    const schedule = {
+      startAt: new Date("2026-07-01T01:00:00.000Z"),
+      endAt: new Date("2026-07-01T05:00:00.000Z"),
+      scheduleType: "NORMAL",
+    };
+
+    expect(
+      getLateMinutes(
+        {
+          actualCheckinAt: new Date("2026-07-01T01:15:00.000Z"),
+          actualCheckoutAt: new Date("2026-07-01T05:00:00.000Z"),
+        },
+        schedule,
+      ),
+    ).toBe(0);
+
+    expect(
+      getLateMinutes(
+        {
+          actualCheckinAt: new Date("2026-07-01T01:16:00.000Z"),
+          actualCheckoutAt: new Date("2026-07-01T05:00:00.000Z"),
+        },
+        schedule,
+      ),
+    ).toBe(16);
+
+    // IGNORE_WITHIN_GRACE does not subtract the grace period after it is exceeded.
+    expect(
+      getLateMinutes(
+        {
+          actualCheckinAt: new Date("2026-07-01T01:20:00.000Z"),
+          actualCheckoutAt: new Date("2026-07-01T05:00:00.000Z"),
+        },
+        schedule,
+        15,
+      ),
+    ).toBe(20);
   });
 });
 
@@ -355,6 +508,18 @@ describe("WorkingScheduleService date filters", () => {
         $gte: new Date("2026-07-02T00:00:00.000Z"),
         $lt: new Date("2026-07-05T00:00:00.000Z"),
       },
+    });
+  });
+
+  test("adds scheduleType to working schedule filters", async () => {
+    await WorkingScheduleService.getWorkingScheduleList("tenant1", {
+      scheduleType: "overtime",
+    });
+
+    expect(WorkingSchedule.find).toHaveBeenCalledWith({
+      tenantId: "tenant1",
+      status: { $ne: "DELETED" },
+      scheduleType: "OVERTIME",
     });
   });
 });

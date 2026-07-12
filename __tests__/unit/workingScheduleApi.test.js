@@ -55,6 +55,7 @@ describe("Working Schedule API response", () => {
           workDate: "2026-07-01T00:00:00.000Z",
           startAt: "2026-07-01T01:00:00.000Z",
           endAt: "2026-07-01T05:00:00.000Z",
+          scheduleType: "OVERTIME",
           status: "SCHEDULED",
         },
       ],
@@ -69,6 +70,7 @@ describe("Working Schedule API response", () => {
             userId: ["staffA", "staffB"],
             shiftTemplateId: "morningShift",
             workDate: "2026-07-01",
+            scheduleType: "OVERTIME",
           },
         ],
       });
@@ -85,6 +87,7 @@ describe("Working Schedule API response", () => {
           workDate: "2026-07-01T00:00:00.000Z",
           startAt: "2026-07-01T01:00:00.000Z",
           endAt: "2026-07-01T05:00:00.000Z",
+          scheduleType: "OVERTIME",
           status: "SCHEDULED",
         },
       ],
@@ -98,6 +101,7 @@ describe("Working Schedule API response", () => {
             userId: ["staffA", "staffB"],
             shiftTemplateId: "morningShift",
             workDate: "2026-07-01",
+            scheduleType: "OVERTIME",
           },
         ],
       },
@@ -190,7 +194,7 @@ describe("Working Schedule API response", () => {
     });
 
     const response = await request(app)
-      .get("/working-schedules/me")
+      .get("/working-schedules/me?scheduleType=OVERTIME")
       .set(
         "Authorization",
         `Bearer ${generateToken({ userId: "staffA", role: "STAFF" })}`,
@@ -224,7 +228,7 @@ describe("Working Schedule API response", () => {
     expect(WorkingScheduleService.getMyWorkingSchedules).toHaveBeenCalledWith(
       "tenant1",
       "staffA",
-      {},
+      { scheduleType: "OVERTIME" },
     );
   });
 
