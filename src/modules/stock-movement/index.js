@@ -20,13 +20,13 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         application/json:
  *           schema:
  *             type: object
- *             required: [movementType, toLocationId, toLocationType]
+ *             required: [movementType]
  *             properties:
  *               movementType: { type: string, enum: [IMPORT, EXPORT, RETURN, ADJUST] }
- *               fromSupplierId: { type: string }
- *               fromLocationId: { type: string }
+ *               fromSupplierId: { type: string, description: "Required for IMPORT" }
+ *               fromLocationId: { type: string, description: "Auto-filled for BM/WM. Required for TENANT_OWNER for EXPORT, RETURN, ADJUST" }
  *               fromLocationType: { type: string, enum: [branch, warehouse] }
- *               toLocationId: { type: string }
+ *               toLocationId: { type: string, description: "Required for IMPORT, EXPORT, RETURN" }
  *               toLocationType: { type: string, enum: [branch, warehouse] }
  *               note: { type: string }
  *               details:
@@ -35,8 +35,9 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *                   type: object
  *                   properties:
  *                     productItemId: { type: string }
- *                     quantity: { type: integer }
- *                     importPrice: { type: number }
+ *                     quantity: { type: integer, description: "Required for IMPORT, EXPORT, RETURN (> 0)" }
+ *                     importPrice: { type: number, description: "Required for IMPORT (> 0)" }
+ *                     receivedQuantity: { type: integer, description: "Required for ADJUST (>= 0)" }
  *     responses:
  *       201:
  *         description: Request created successfully (DRAFT or PENDING based on type)
@@ -104,6 +105,8 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *                   properties:
  *                     productItemId: { type: string }
  *                     quantity: { type: integer }
+ *                     importPrice: { type: number }
+ *                     receivedQuantity: { type: integer }
  *     responses:
  *       200:
  *         description: Details updated
