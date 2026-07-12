@@ -288,12 +288,6 @@ class StockMovementService {
         if (payloadItem && payloadItem.receivedQuantity !== undefined && payloadItem.receivedQuantity !== null) {
           const rQ = Number(payloadItem.receivedQuantity);
           if (rQ < 0) throw new Error("Received quantity cannot be negative");
-          
-          if (request.movementType === "EXPORT" || request.movementType === "RETURN") {
-            if (rQ > reqItem.quantity) {
-              throw new Error(`Received quantity cannot exceed shipped quantity for item ${reqItem.productItemId}`);
-            }
-          }
 
           totalReceivedQty += rQ;
           reqItem.receivedQuantity = rQ;
