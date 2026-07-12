@@ -68,6 +68,24 @@ class NotificationService {
     return { updated: result.modifiedCount };
   }
 
+  async deleteNotification(user, notificationId) {
+    const deleted = await Notification.findOneAndDelete({
+      _id: notificationId,
+      ...this.buildInboxFilter(user),
+    }).lean();
+
+    if (!deleted) {
+      throw new Error("Notification not found");
+    }
+
+    return deleted;
+  }
+
+  async deleteAllNotifications(user) {
+    const result = await Notification.deleteMany(this.buildInboxFilter(user));
+    return { deleted: result.deletedCount };
+  }
+
   /**
    * Attach an FCM device token to a user.
    *

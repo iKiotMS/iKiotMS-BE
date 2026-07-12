@@ -140,6 +140,46 @@ class SystemNotificationController {
       res.status(500).json({ success: false, message: error.message });
     }
   }
+
+  // Delete a single system notification
+  async deleteNotification(req, res) {
+    try {
+      if (req.user.role !== "SUPER_ADMIN") {
+        return res.status(403).json({ success: false, message: "Forbidden: Super admin only" });
+      }
+
+      const { id } = req.params;
+      const deleted = await Notification.findOneAndDelete({
+        _id: id,
+        type: { $in: ["SYSTEM_TRANSACTION", "SYSTEM_TENANT_CREATED", "SYSTEM_TICKET_CREATED"] },
+      });
+
+      if (!deleted) {
+        return res.status(404).json({ success: false, message: "Notification not found" });
+      }
+
+      res.status(200).json({ success: true, message: "Deleted" });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  // Delete all system notifications
+  async deleteAllNotifications(req, res) {
+    try {
+      if (req.user.role !== "SUPER_ADMIN") {
+        return res.status(403).json({ success: false, message: "Forbidden: Super admin only" });
+      }
+
+      const result = await Notification.deleteMany({
+        type: { $in: ["SYSTEM_TRANSACTION", "SYSTEM_TENANT_CREATED", "SYSTEM_TICKET_CREATED"] },
+      });
+
+      res.status(200).json({ success: true, message: "Deleted all", deleted: result.deletedCount });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
 }
 
 module.exports = new SystemNotificationController();
