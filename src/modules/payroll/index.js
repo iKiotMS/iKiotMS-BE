@@ -424,7 +424,35 @@ const PayrollController = require("./controller/PayrollController");
  *         name: status
  *         schema: { type: string, enum: [DRAFT, REVIEW, APPROVED, PAID, CANCELLED] }
  *     responses:
- *       200: { description: Payroll period list returned }
+ *       200:
+ *         description: Payroll period list returned. Each period includes totalCost summed from all of its payslips.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id: { type: string }
+ *                       name: { type: string, example: Kỳ lương 07/2026 }
+ *                       periodStart: { type: string, format: date-time }
+ *                       periodEnd: { type: string, format: date-time }
+ *                       status: { type: string, enum: [DRAFT, REVIEW, APPROVED, PAID, CANCELLED] }
+ *                       totalCost:
+ *                         type: number
+ *                         example: 125000000
+ *                         description: Sum of netSalary across every payslip in this payroll period.
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total: { type: integer }
+ *                     page: { type: integer }
+ *                     limit: { type: integer }
+ *                     totalPages: { type: integer }
  *       400: { description: Invalid filters }
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden }
@@ -439,7 +467,40 @@ const PayrollController = require("./controller/PayrollController");
  *       - { in: query, name: page, schema: { type: integer, default: 1 } }
  *       - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }
  *     responses:
- *       200: { description: Payroll period detail returned }
+ *       200:
+ *         description: Payroll period detail returned with paginated payslips and a full-period totalCost.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     payrollPeriod:
+ *                       type: object
+ *                       properties:
+ *                         _id: { type: string }
+ *                         name: { type: string, example: Kỳ lương 07/2026 }
+ *                         periodStart: { type: string, format: date-time }
+ *                         periodEnd: { type: string, format: date-time }
+ *                         status: { type: string, enum: [DRAFT, REVIEW, APPROVED, PAID, CANCELLED] }
+ *                         totalCost:
+ *                           type: number
+ *                           example: 125000000
+ *                           description: Sum of netSalary across all payslips, independent of payslip pagination.
+ *                     payslips:
+ *                       type: array
+ *                       description: Payslips on the requested page.
+ *                       items: { type: object }
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         total: { type: integer }
+ *                         page: { type: integer }
+ *                         limit: { type: integer }
+ *                         totalPages: { type: integer }
  *       400: { description: Invalid ID or pagination }
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden }
