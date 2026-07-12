@@ -82,7 +82,9 @@ describe("Payroll allowance calculation", () => {
 
     expect(preview.allowance).toBe(1200000);
     expect(preview.calculationWarnings).toEqual([]);
-    expect(preview.netSalary).toBe(13200000);
+    // FIXED salary is now prorated by attendance/paid leave; this fixture has
+    // neither, so only the independently configured monthly allowance remains.
+    expect(preview.netSalary).toBe(1200000);
   });
 
   test("calculates monthly percentage allowances for shift-paid employees", () => {
