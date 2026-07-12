@@ -179,10 +179,10 @@ async function getPayrollSummary(tenantId, query) {
  * 15. getActivePromotions
  */
 async function getActivePromotions(tenantId, query) {
-  const filter = { tenantId, isDeleted: { $ne: true } };
+  const filter = { tenantId, status: "ACTIVE" };
   const search = query?.search;
   if (search) {
-    filter.name = { $regex: search, $options: "i" };
+    filter.promoName = { $regex: search, $options: "i" };
   }
   return await Promotion.find(filter).lean();
 }
