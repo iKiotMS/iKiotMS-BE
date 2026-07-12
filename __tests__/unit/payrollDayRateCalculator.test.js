@@ -171,7 +171,7 @@ describe("PayrollDayRateCalculator", () => {
     });
   });
 
-  test("adds fixed salary once instead of once per normal schedule", () => {
+  test("leaves fixed normal pay for PayrollService to prorate", () => {
     const result = calculatePayrollBySchedules({
       schedules: [
         {
@@ -197,12 +197,12 @@ describe("PayrollDayRateCalculator", () => {
       holidayByDate: {},
     });
 
-    expect(result.basePay).toBe(12000000);
-    expect(result.grossPay).toBe(12000000);
+    expect(result.basePay).toBe(0);
+    expect(result.grossPay).toBe(0);
     expect(result.lines.map((line) => line.amount)).toEqual([0, 0]);
   });
 
-  test("pays fixed salary even when there are no payable schedules", () => {
+  test("does not prefill fixed salary when there are no payable schedules", () => {
     const result = calculatePayrollBySchedules({
       schedules: [],
       paySheet: {
@@ -212,9 +212,9 @@ describe("PayrollDayRateCalculator", () => {
     });
 
     expect(result).toMatchObject({
-      basePay: 12000000,
+      basePay: 0,
       overtimePay: 0,
-      grossPay: 12000000,
+      grossPay: 0,
       lines: [],
     });
   });
@@ -242,9 +242,9 @@ describe("PayrollDayRateCalculator", () => {
       holidayByDate: {},
     });
 
-    expect(result.basePay).toBe(12000000);
+    expect(result.basePay).toBe(0);
     expect(result.overtimePay).toBe(187500);
-    expect(result.grossPay).toBe(12187500);
+    expect(result.grossPay).toBe(187500);
   });
 
   test("uses standardWorkingDaySalary directly for daily pay and overtime", () => {

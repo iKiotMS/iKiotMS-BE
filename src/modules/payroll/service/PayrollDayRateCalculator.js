@@ -201,12 +201,10 @@ function calculatePayrollBySchedules({
   holidayByDate,
   payrollSetting = { standardWorkingDays: 26 },
 }) {
-  // Lương FIXED thuộc cả kỳ nên được cộng đúng một lần tại accumulator.
-  // Các ca NORMAL của FIXED vẫn tạo line để báo cáo thời gian nhưng amount = 0.
-  const fixedSalary =
-    paySheet.basicPay?.payType === "FIXED"
-      ? paySheet.basicPay.salaryPerPeriod || 0
-      : 0;
+  // Ca NORMAL của FIXED chỉ tạo line thời gian với amount = 0. PayrollService
+  // sẽ prorate lương kỳ theo ngày công thực tế và ngày phép có lương sau khi đã
+  // gom toàn bộ ca; làm ở đây sẽ không thể chặn tổng công tối đa 1 ngày/ngày.
+  const fixedSalary = 0;
 
   return schedules.reduce(
     (result, schedule) => {

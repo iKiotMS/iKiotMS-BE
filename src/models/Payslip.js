@@ -54,6 +54,52 @@ const payslipSchema = new mongoose.Schema(
       default: 0,
       min: [0, "Overtime pay cannot be negative"],
     },
+    paidLeaveDays: {
+      type: Number,
+      default: 0,
+      min: [0, "Paid leave days cannot be negative"],
+    },
+    unpaidLeaveDays: {
+      type: Number,
+      default: 0,
+      min: [0, "Unpaid leave days cannot be negative"],
+    },
+    paidLeavePay: {
+      type: Number,
+      default: 0,
+      min: [0, "Paid leave pay cannot be negative"],
+    },
+    unpaidLeaveDeduction: {
+      type: Number,
+      default: 0,
+      min: [0, "Unpaid leave deduction cannot be negative"],
+    },
+    leaveLines: [
+      {
+        leaveRequestId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "LeaveRequest",
+          required: true,
+        },
+        paidDays: { type: Number, default: 0, min: 0 },
+        unpaidDays: { type: Number, default: 0, min: 0 },
+        paidAmount: { type: Number, default: 0, min: 0 },
+        deductedAmount: { type: Number, default: 0, min: 0 },
+        dates: [
+          {
+            date: { type: Date, required: true },
+            leaveType: {
+              type: String,
+              enum: ["PAID", "UNPAID"],
+              required: true,
+            },
+            dayFraction: { type: Number, required: true, min: 0, max: 1 },
+            amount: { type: Number, default: 0, min: 0 },
+            ignoredBecauseAttended: { type: Boolean, default: false },
+          },
+        ],
+      },
+    ],
     bonus: {
       type: Number,
       default: 0,

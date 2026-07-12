@@ -128,6 +128,191 @@ class PayrollService {
       .filter((schedule) => schedule.payableMinutes > 0);
   }
 
+  allocateLeaveDays({ leaveRequests, schedules, periodStart, periodEnd }) {
+    leaveRequests = leaveRequests || [];
+    schedules = schedules || [];
+    const periodStartKey = periodStart.toISOString().slice(0, 10);
+    const periodEndKey = periodEnd.toISOString().slice(0, 10);
+
+    // Lịch được tải cho toàn bộ khoảng của các đơn giao với kỳ lương. Nhờ vậy,
+    // đơn vắt qua hai kỳ vẫn tiêu paidLeaveDays từ đầu đơn đúng một lần, thay vì
+    // mỗi kỳ lại bắt đầu phân bổ paid từ đầu.
+    const normalScheduleDates = new Set(
+      schedules
+        .filter((schedule) => schedule.scheduleType !== "OVERTIME")
+        .map((schedule) =>
+          new Date(schedule.workDate).toISOString().slice(0, 10),
+        ),
+    );
+
+    return leaveRequests.map((leaveRequest) => {
+      const requestStart = new Date(leaveRequest.startDate);
+      const requestEnd = new Date(leaveRequest.endDate);
+      requestStart.setUTCHours(0, 0, 0, 0);
+      requestEnd.setUTCHours(0, 0, 0, 0);
+
+      const workDates = [];
+      for (
+        const date = new Date(requestStart);
+        date <= requestEnd;
+        date.setUTCDate(date.getUTCDate() + 1)
+      ) {
+        const dateKey = date.toISOString().slice(0, 10);
+        if (normalScheduleDates.has(dateKey)) workDates.push(dateKey);
+      }
+
+      let paidRemaining = Number(leaveRequest.paidLeaveDays || 0);
+      let unpaidRemaining = Number(leaveRequest.unpaidLeaveDays || 0);
+      const dates = [];
+
+      // Quản lý chỉ lưu tổng ngày paid/unpaid, không chỉ rõ từng ngày. Policy
+      // payroll là phân bổ paid từ ngày làm việc đầu tiên, hết paid mới tới unpaid.
+      for (const dateKey of workDates) {
+        let availableDay = 1;
+        if (paidRemaining > 0) {
+          const dayFraction = Math.min(availableDay, paidRemaining);
+          paidRemaining -= dayFraction;
+          availableDay -= dayFraction;
+          if (dateKey >= periodStartKey && dateKey <= periodEndKey) {
+            dates.push({ dateKey, leaveType: "PAID", dayFraction });
+          }
+        }
+
+        // Một ngày có thể được duyệt nửa paid, nửa unpaid. Phần unpaid được đặt
+        // ngay sau phần paid trong cùng ngày trước khi chuyển sang ngày kế tiếp.
+        if (availableDay > 0 && unpaidRemaining > 0) {
+          const dayFraction = Math.min(availableDay, unpaidRemaining);
+          unpaidRemaining -= dayFraction;
+          if (dateKey >= periodStartKey && dateKey <= periodEndKey) {
+            dates.push({ dateKey, leaveType: "UNPAID", dayFraction });
+          }
+        }
+
+        if (paidRemaining <= 0 && unpaidRemaining <= 0) break;
+      }
+
+      return { leaveRequest, dates };
+    });
+  }
+
+  calculateLeavePayroll({
+    context,
+    payableSchedules,
+    periodStart,
+    periodEnd,
+    payrollSetting,
+  }) {
+    const basicPay = context.paySheet.basicPay || {};
+    const allocations = this.allocateLeaveDays({
+      leaveRequests: context.leaveRequests,
+      schedules: context.workingSchedules || [],
+      periodStart,
+      periodEnd,
+    });
+    const attendedNormalDates = new Set(
+      (payableSchedules || [])
+        .filter((schedule) => schedule.scheduleType !== "OVERTIME")
+        .map((schedule) =>
+          new Date(schedule.workDate).toISOString().slice(0, 10),
+        ),
+    );
+
+    const leaveLines = allocations.map(({ leaveRequest, dates }) => {
+      let paidDays = 0;
+      let unpaidDays = 0;
+      let paidAmount = 0;
+      let deductedAmount = 0;
+
+      const dateLines = dates.map((allocation) => {
+        // Nếu nhân viên vẫn chấm công trong ngày đã xin nghỉ, tiền công thực tế
+        // được ưu tiên; không cộng tiền phép hoặc trừ nghỉ không lương lần hai.
+        if (attendedNormalDates.has(allocation.dateKey)) {
+          return {
+            date: new Date(`${allocation.dateKey}T00:00:00.000Z`),
+            leaveType: allocation.leaveType,
+            dayFraction: allocation.dayFraction,
+            amount: 0,
+            ignoredBecauseAttended: true,
+          };
+        }
+
+        let amount = 0;
+        if (allocation.leaveType === "PAID") {
+          paidDays += allocation.dayFraction;
+          if (basicPay.payType === "FIXED") {
+            amount =
+              ((basicPay.salaryPerPeriod || 0) /
+                (payrollSetting.standardWorkingDays || 26)) *
+              allocation.dayFraction;
+          } else if (basicPay.payType === "STANDARD_WORKING_DAY") {
+            amount =
+              (basicPay.standardWorkingDaySalary ||
+                (basicPay.salaryPerPeriod || 0) /
+                  (basicPay.standardWorkingDays || 1)) *
+              allocation.dayFraction;
+          } else if (basicPay.payType === "PAY_BY_SHIFT") {
+            // Một ngày có thể có nhiều ca NORMAL; nghỉ có lương theo ca được trả
+            // đúng tổng các ca đã xếp trong ngày đó, không bao gồm ca overtime.
+            const shifts = context.workingSchedules.filter(
+              (schedule) =>
+                schedule.scheduleType !== "OVERTIME" &&
+                new Date(schedule.workDate).toISOString().slice(0, 10) ===
+                  allocation.dateKey,
+            );
+            amount =
+              shifts.length *
+              Number(basicPay.amountPerShift || 0) *
+              allocation.dayFraction;
+          }
+          paidAmount += amount;
+        } else {
+          unpaidDays += allocation.dayFraction;
+          if (basicPay.payType === "FIXED") {
+            amount =
+              ((basicPay.salaryPerPeriod || 0) /
+                (payrollSetting.standardWorkingDays || 26)) *
+              allocation.dayFraction;
+            deductedAmount += amount;
+          }
+        }
+
+        return {
+          date: new Date(`${allocation.dateKey}T00:00:00.000Z`),
+          leaveType: allocation.leaveType,
+          dayFraction: allocation.dayFraction,
+          amount,
+          ignoredBecauseAttended: false,
+        };
+      });
+
+      return {
+        leaveRequestId: leaveRequest._id,
+        paidDays,
+        unpaidDays,
+        paidAmount,
+        deductedAmount,
+        dates: dateLines,
+      };
+    });
+
+    return leaveLines.reduce(
+      (result, line) => {
+        result.paidLeaveDays += line.paidDays;
+        result.unpaidLeaveDays += line.unpaidDays;
+        result.paidLeavePay += line.paidAmount;
+        result.unpaidLeaveDeduction += line.deductedAmount;
+        return result;
+      },
+      {
+        paidLeaveDays: 0,
+        unpaidLeaveDays: 0,
+        paidLeavePay: 0,
+        unpaidLeaveDeduction: 0,
+        leaveLines,
+      },
+    );
+  }
+
   calculatePayslipPreview({
     context,
     periodStart,
@@ -146,6 +331,13 @@ class PayrollService {
       holidayByDate,
       payrollSetting,
     });
+    const leavePayroll = this.calculateLeavePayroll({
+      context,
+      payableSchedules,
+      periodStart,
+      periodEnd,
+      payrollSetting,
+    });
 
     const totalWorkedMinutes = payroll.lines.reduce((total, line) => {
       return total + (line.payableMinutes || 0);
@@ -159,7 +351,49 @@ class PayrollService {
           new Date(schedule.workDate).toISOString().slice(0, 10),
         ),
     ).size;
-    const grossSalary = payroll.grossPay;
+    const basicPay = context.paySheet.basicPay || {};
+    let fixedWorkedPay = 0;
+
+    if (basicPay.payType === "FIXED") {
+      const standardMinutesPerDay =
+        (payrollSetting.standardWorkingHoursPerDay || 8) * 60;
+      const payableMinutesByDate = payableSchedules
+        .filter((schedule) => schedule.scheduleType !== "OVERTIME")
+        .reduce((result, schedule) => {
+          const dateKey = new Date(schedule.workDate)
+            .toISOString()
+            .slice(0, 10);
+          result[dateKey] =
+            (result[dateKey] || 0) + Number(schedule.payableMinutes || 0);
+          return result;
+        }, {});
+
+      // FIXED cũng phải có công mới hưởng lương. Mỗi ngày được quy đổi theo số
+      // phút làm trên giờ chuẩn và chặn tối đa 1 công để nhiều ca không làm lương
+      // vượt kỳ; paid leave được cộng riêng phía dưới như một ngày có công.
+      const workedDayUnits = Object.values(payableMinutesByDate).reduce(
+        (total, minutes) =>
+          total + Math.min(1, minutes / standardMinutesPerDay),
+        0,
+      );
+      fixedWorkedPay =
+        workedDayUnits *
+        ((basicPay.salaryPerPeriod || 0) /
+          (payrollSetting.standardWorkingDays || 26));
+    }
+
+    const calculatedBasePay =
+      basicPay.payType === "FIXED"
+        ? fixedWorkedPay + leavePayroll.paidLeavePay
+        : payroll.basePay + leavePayroll.paidLeavePay;
+    const basePay =
+      basicPay.payType === "FIXED"
+        ? Math.min(
+            Number(basicPay.salaryPerPeriod || 0),
+            calculatedBasePay,
+          )
+        : calculatedBasePay;
+    const grossSalary = basePay + payroll.overtimePay;
     const bonus = 0;
     const calculationWarnings = [];
 
@@ -316,8 +550,9 @@ class PayrollService {
       periodEnd,
       totalWorkedDays,
       totalWorkedHours: totalWorkedMinutes / 60,
-      basePay: payroll.basePay,
+      basePay,
       overtimePay: payroll.overtimePay,
+      ...leavePayroll,
       bonus,
       allowance,
       allowanceLines,
@@ -352,8 +587,7 @@ class PayrollService {
     const paySheetIds = users.map((user) => user.paySheetId).filter(Boolean);
     //remove all falsy value in paysheetIds: false, 0, -0, 0n, "", null, undefined, NaN
 
-    const [paySheets, attendances, workingSchedules, leaveRequests] =
-      await Promise.all([
+    const [paySheets, attendances, leaveRequests] = await Promise.all([
         PaySheet.find({
           _id: { $in: paySheetIds },
           tenantId,
@@ -366,13 +600,6 @@ class PayrollService {
           workDate: { $gte: periodStart, $lte: periodEnd },
         }).lean(),
 
-        WorkingSchedule.find({
-          tenantId,
-          userId: { $in: targetUserIds },
-          workDate: { $gte: periodStart, $lte: periodEnd },
-          status: { $nin: ["CANCELLED", "DELETED"] },
-        }).lean(),
-
         LeaveRequest.find({
           tenantId,
           userId: { $in: targetUserIds },
@@ -381,6 +608,26 @@ class PayrollService {
           endDate: { $gte: periodStart },
         }).lean(),
       ]);
+
+    // Với đơn vắt qua kỳ khác, payroll cần nhìn thấy lịch từ đầu đến cuối đơn
+    // để biết các ngày paid đã được phân bổ trước kỳ hiện tại hay chưa.
+    const scheduleRange = leaveRequests.reduce(
+      (range, leaveRequest) => ({
+        start: new Date(
+          Math.min(range.start.getTime(), new Date(leaveRequest.startDate).getTime()),
+        ),
+        end: new Date(
+          Math.max(range.end.getTime(), new Date(leaveRequest.endDate).getTime()),
+        ),
+      }),
+      { start: periodStart, end: periodEnd },
+    );
+    const workingSchedules = await WorkingSchedule.find({
+      tenantId,
+      userId: { $in: targetUserIds },
+      workDate: { $gte: scheduleRange.start, $lte: scheduleRange.end },
+      status: { $nin: ["CANCELLED", "DELETED"] },
+    }).lean();
 
     const paySheetMap = this.keyById(paySheets);
     const attendancesByUser = this.groupByUserId(attendances);

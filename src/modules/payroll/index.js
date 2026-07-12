@@ -303,6 +303,23 @@ const PayrollController = require("./controller/PayrollController");
  *                           allowance:
  *                             type: number
  *                             description: Total calculated fixed-amount and percentage allowances.
+ *                           paidLeaveDays:
+ *                             type: number
+ *                             description: Approved paid leave days allocated to scheduled NORMAL workdays in this period.
+ *                           unpaidLeaveDays:
+ *                             type: number
+ *                             description: Approved unpaid leave days allocated to scheduled NORMAL workdays in this period.
+ *                           paidLeavePay:
+ *                             type: number
+ *                             description: Pay added for approved paid leave, including prorated FIXED salary.
+ *                           unpaidLeaveDeduction:
+ *                             type: number
+ *                             description: Amount deducted for unpaid leave; currently applies to FIXED salary.
+ *                           leaveLines:
+ *                             type: array
+ *                             description: Paid-first leave allocation details grouped by approved leave request.
+ *                             items:
+ *                               type: object
  *                           allowanceLines:
  *                             type: array
  *                             items:
