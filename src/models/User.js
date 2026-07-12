@@ -79,9 +79,23 @@ const userSchema = new mongoose.Schema(
       annualLeaveDays: { type: Number, default: 12, min: 0 },
       remainingDays: { type: Number, default: 12, min: 0 },
     },
+    // FCM device tokens for push notifications. One user can have several
+    // (nhiều trình duyệt / thiết bị). Tokens are rotated by Firebase, and go
+    // stale when a user clears site data — pushService prunes the ones FCM
+    // rejects as UNREGISTERED.
+    fcmTokens: [
+      {
+        token: { type: String, required: true },
+        userAgent: { type: String },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true },
 );
+
+// Push fan-out looks users up by token; keep that lookup indexed.
+userSchema.index({ "fcmTokens.token": 1 });
 
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;

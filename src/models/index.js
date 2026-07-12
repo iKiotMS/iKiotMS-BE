@@ -26,4 +26,6 @@ module.exports = {
   WorkingSchedule: require("./WorkingSchedule"),
   LeaveRequest: require("./LeaveRequest"),
   AIChatHistory: require("./AIChatHistory"),
+  AuditLog: require("./AuditLog"),
+  Ticket: require("./Ticket"),
 };

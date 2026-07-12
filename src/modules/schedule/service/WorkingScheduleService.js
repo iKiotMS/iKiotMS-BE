@@ -6,6 +6,7 @@ const ShiftTemplate = require("../../../models/ShiftTemplate");
 const User = require("../../../models/User");
 const WorkingSchedule = require("../../../models/WorkingSchedule");
 const { validateRoleHierarchy } = require("../../../utils/permissionChecker");
+const NotificationService = require("../../../services/notificationService");
 const {
   BulkWorkingScheduleDTO,
   SCHEDULE_TYPES,
@@ -572,6 +573,32 @@ class WorkingScheduleService {
         const createdSchedule = await WorkingSchedule.create(schedule);
         schedulesToSave.push(createdSchedule);
       }
+    }
+
+    // Báo cho từng nhân viên được xếp ca. Gộp theo người: một lần phân ca có thể
+    // tạo nhiều dòng lịch cho cùng một người, không ai muốn nhận 5 thông báo.
+    try {
+      const scheduledUserIds = [
+        ...new Set(
+          schedulesToSave.flatMap((schedule) =>
+            (schedule.userId || []).map(String),
+          ),
+        ),
+      ].filter((userId) => userId !== String(createdBy));
+
+      await NotificationService.notify({
+        tenantId,
+        recipientIds: scheduledUserIds,
+        type: "SCHEDULE_ASSIGNED",
+        title: "Bạn có lịch làm việc mới",
+        description: "Quản lý vừa xếp ca cho bạn. Xem lịch làm việc để biết chi tiết.",
+        link: "/calendar",
+      });
+    } catch (error) {
+      console.error(
+        "[WorkingScheduleService] Không gửi được thông báo phân ca:",
+        error.message,
+      );
     }
 
     return {

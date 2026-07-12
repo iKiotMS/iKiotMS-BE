@@ -1,6 +1,7 @@
 const cron = require("node-cron");
 const { Subscription } = require("../models");
 const { sendSubscriptionReminder } = require("../services/emailService");
+const NotificationService = require("../services/notificationService");
 const {
   GRACE_PERIOD_DAYS,
   REMINDER_DAYS,
@@ -13,9 +14,39 @@ function startOfTodayUTC() {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
+/**
+ * Báo cho chủ cửa hàng của các subscription vừa đổi trạng thái.
+ * Phải lấy danh sách TRƯỚC updateMany — sau đó thì không còn biết cái nào vừa đổi.
+ */
+async function notifyStatusChange(subscriptions, { type, title, description }) {
+  for (const sub of subscriptions) {
+    const owners = await NotificationService.tenantOwners(sub.tenantId);
+
+    await NotificationService.notify({
+      tenantId: sub.tenantId,
+      recipientIds: owners,
+      type,
+      title,
+      description,
+      link: "/pricing",
+      referenceId: sub._id,
+    });
+  }
+}
+
 async function runSubscriptionStatusCheck() {
   const now = new Date();
   const graceCutoff = addDays(now, -GRACE_PERIOD_DAYS);
+
+  // Chụp lại danh sách trước khi cập nhật, để biết ai vừa bị đổi trạng thái.
+  const [trialsToExpire, toExpire] = await Promise.all([
+    Subscription.find({ status: "TRIAL", trialEndDate: { $lt: now } })
+      .select("_id tenantId")
+      .lean(),
+    Subscription.find({ status: "PAST_DUE", endDate: { $lt: graceCutoff } })
+      .select("_id tenantId")
+      .lean(),
+  ]);
 
   // TRIAL đã hết ngày trial → EXPIRED
   const expiredTrials = await Subscription.updateMany(
@@ -40,6 +71,18 @@ async function runSubscriptionStatusCheck() {
       `Past due: ${markedPastDue.modifiedCount} | ` +
       `Expired: ${markedExpired.modifiedCount}`,
   );
+
+  await notifyStatusChange(trialsToExpire, {
+    type: "SUBSCRIPTION_EXPIRED",
+    title: "Bản dùng thử đã kết thúc",
+    description: "Thời gian dùng thử đã hết. Nâng cấp gói để tiếp tục sử dụng.",
+  });
+
+  await notifyStatusChange(toExpire, {
+    type: "SUBSCRIPTION_EXPIRED",
+    title: "Gói dịch vụ đã hết hạn",
+    description: "Gói dịch vụ đã hết hạn và hết thời gian gia hạn. Vui lòng thanh toán để khôi phục.",
+  });
 }
 
 async function sendExpiryReminders() {
@@ -62,6 +105,19 @@ async function sendExpiryReminders() {
 
     for (const sub of subscriptions) {
       const owner = sub.tenantId?.tenantOwnerId;
+
+      // Push + lưu vào hộp thư, song song với email. Chủ cửa hàng thường không
+      // mở dashboard mỗi ngày nên đây đúng là ca dùng push.
+      await NotificationService.notify({
+        tenantId: sub.tenantId?._id,
+        recipientIds: [owner?._id],
+        type: "SUBSCRIPTION_EXPIRING",
+        title: "Gói dịch vụ sắp hết hạn",
+        description: `Gói ${sub.planId?.planName || "dịch vụ"} của bạn sẽ hết hạn sau ${days} ngày. Gia hạn để không bị gián đoạn.`,
+        link: "/pricing",
+        referenceId: sub._id,
+      });
+
       const email = owner?.email;
       if (!email) continue;
 

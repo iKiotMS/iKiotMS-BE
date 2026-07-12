@@ -4,6 +4,7 @@ const CreateLeaveRequestDTO = require("../dto/CreateLeaveRequestDTO");
 const mongoose = require("mongoose");
 const { User, WorkingSchedule } = require("../../../models");
 const UpdateLeaveRequestDTO = require("../dto/UpdateLeaveRequestDTO");
+const NotificationService = require("../../../services/notificationService");
 
 class LeaveRequestService extends BaseService {
   escapeRegex(text) {
@@ -597,6 +598,25 @@ class LeaveRequestService extends BaseService {
       await session.endSession();
     }
 
+    // Báo cho người duyệt. Đặt NGOÀI transaction: nếu gửi noti lỗi thì đơn nghỉ
+    // phép vẫn phải được tạo. notify() tự nuốt lỗi nên không cần try/catch ở đây.
+    const approvers = await NotificationService.approversOf({
+      ...user,
+      tenantId,
+      _id: userId,
+    });
+    const requesterName = await NotificationService.displayName(userId);
+
+    await NotificationService.notify({
+      tenantId,
+      recipientIds: approvers,
+      type: "LEAVE_REQUEST_CREATED",
+      title: "Đơn nghỉ phép mới",
+      description: `${requesterName} đã gửi đơn nghỉ phép chờ bạn duyệt.`,
+      link: `/leave-requests/${createdLeaveRequest?._id}`,
+      referenceId: createdLeaveRequest?._id,
+    });
+
     return {
       statusCode: validation.statusCode,
       success: true,
@@ -787,6 +807,23 @@ class LeaveRequestService extends BaseService {
       await session.endSession();
     }
 
+    // Báo kết quả về cho chính người nộp đơn.
+    const approved = leaveRequest?.status === "APPROVED";
+
+    await NotificationService.notify({
+      tenantId,
+      recipientIds: [leaveRequest?.userId],
+      type: approved ? "LEAVE_REQUEST_APPROVED" : "LEAVE_REQUEST_REJECTED",
+      title: approved ? "Đơn nghỉ phép được duyệt" : "Đơn nghỉ phép bị từ chối",
+      description: approved
+        ? "Đơn nghỉ phép của bạn đã được duyệt."
+        : `Đơn nghỉ phép của bạn đã bị từ chối.${
+            leaveRequest?.reviewNote ? ` Lý do: ${leaveRequest.reviewNote}` : ""
+          }`,
+      link: `/leave-requests/${leaveRequestId}`,
+      referenceId: leaveRequestId,
+    });
+
     return leaveRequest;
   }
 
@@ -878,6 +915,39 @@ class LeaveRequestService extends BaseService {
       });
     } finally {
       await session.endSession();
+    }
+
+    // Người duyệt cần biết đơn đã bị rút — nhất là đơn đã APPROVED, vì lịch làm
+    // việc có thể đã được sắp xếp lại quanh nó. Đơn đã huỷ và commit xong rồi,
+    // nên lỗi khi gửi thông báo chỉ được log, không ném lên.
+    try {
+      const requester = await User.findById(leaveRequest.userId)
+        .select("role branchId tenantId")
+        .lean();
+
+      const approvers = await NotificationService.approversOf({
+        ...requester,
+        _id: leaveRequest.userId,
+        tenantId,
+      });
+      const requesterName = await NotificationService.displayName(
+        leaveRequest.userId,
+      );
+
+      await NotificationService.notify({
+        tenantId,
+        recipientIds: approvers,
+        type: "LEAVE_REQUEST_CANCELLED",
+        title: "Đơn nghỉ phép đã bị hủy",
+        description: `${requesterName} đã hủy đơn nghỉ phép.`,
+        link: `/leave-requests/${leaveRequestId}`,
+        referenceId: leaveRequestId,
+      });
+    } catch (error) {
+      console.error(
+        "[LeaveRequestService] Không gửi được thông báo hủy đơn:",
+        error.message,
+      );
     }
 
     return result;

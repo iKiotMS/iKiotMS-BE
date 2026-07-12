@@ -6,6 +6,7 @@ const PayrollPeriod = require("../../../models/PayrollPeriod");
 const Payslip = require("../../../models/Payslip");
 const User = require("../../../models/User");
 const WorkingSchedule = require("../../../models/WorkingSchedule");
+const NotificationService = require("../../../services/notificationService");
 const GeneratePreviewPayrollDTO = require("../dto/GeneratePreviewPayrollDTO");
 const GeneratePayrollDTO = require("../dto/GeneratePayrollDTO");
 const ListPayrollPeriodDTO = require("../dto/ListPayrollPeriodDTO");
@@ -939,6 +940,41 @@ class PayrollService {
       });
     } finally {
       await session.endSession();
+    }
+
+    // Chỉ báo cho nhân viên ở hai mốc họ thật sự quan tâm: lương được duyệt và
+    // lương đã trả. Các bước nội bộ (SUBMIT, RETURN_TO_DRAFT) không cần làm phiền.
+    //
+    // Bọc try/catch: notify() tự nuốt lỗi của nó, nhưng truy vấn Payslip.find
+    // bên dưới thì không. Kỳ lương đã được chốt và commit ở trên rồi — không thể
+    // để việc gửi thông báo thất bại kéo theo cả thao tác chốt lương.
+    if (action === "APPROVE" || action === "MARK_PAID") {
+      try {
+        const payslips = await Payslip.find({ tenantId, payrollPeriodId: periodId })
+          .select("_id userId")
+          .lean();
+
+        const paid = action === "MARK_PAID";
+
+        for (const payslip of payslips) {
+          await NotificationService.notify({
+            tenantId,
+            recipientIds: [payslip.userId],
+            type: paid ? "PAYSLIP_PAID" : "PAYSLIP_APPROVED",
+            title: paid ? "Lương đã được thanh toán" : "Phiếu lương đã được duyệt",
+            description: paid
+              ? "Lương kỳ này đã được chi trả. Xem chi tiết phiếu lương của bạn."
+              : "Phiếu lương kỳ này đã được duyệt.",
+            link: `/payroll/${payslip._id}`,
+            referenceId: payslip._id,
+          });
+        }
+      } catch (error) {
+        console.error(
+          "[PayrollService] Không gửi được thông báo phiếu lương:",
+          error.message,
+        );
+      }
     }
 
     return payrollPeriod;
