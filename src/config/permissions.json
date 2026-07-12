@@ -72,7 +72,7 @@
     "orders": ["create", "read", "pay_offline"],
     "inventory": ["read"],
     "branches": ["read"],
-    "promotions": ["read"],
+    "promotions": ["read", "calculate"],
     "schedules": ["read_own"],
     "attendances": ["read_own", "create", "update"],
     "leaveRequests": ["create", "read_mine","cancel"],
