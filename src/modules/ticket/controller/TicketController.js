@@ -1,6 +1,8 @@
 const Ticket = require("../../../models/Ticket");
 const Tenant = require("../../../models/Tenant");
-const { createSystemNotification } = require("../../../services/systemNotificationService");
+const {
+  createSystemNotification,
+} = require("../../../services/systemNotificationService");
 const { emitToRoom } = require("../../../services/socketService");
 const NotificationService = require("../../../services/notificationService");
 
@@ -12,11 +14,16 @@ class TicketController {
       const tenantId = req.user.tenantId;
 
       if (!tenantId) {
-        return res.status(403).json({ success: false, message: "Tenant context required" });
+        return res
+          .status(403)
+          .json({ success: false, message: "Tenant context required" });
       }
 
       if (!title || !description) {
-        return res.status(400).json({ success: false, message: "Title and description are required" });
+        return res.status(400).json({
+          success: false,
+          message: "Title and description are required",
+        });
       }
 
       const tenant = await Tenant.findById(tenantId).lean();
@@ -69,10 +76,14 @@ class TicketController {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) {
-        return res.status(403).json({ success: false, message: "Tenant context required" });
+        return res
+          .status(403)
+          .json({ success: false, message: "Tenant context required" });
       }
 
-      const tickets = await Ticket.find({ tenantId }).sort({ updatedAt: -1 }).lean();
+      const tickets = await Ticket.find({ tenantId })
+        .sort({ updatedAt: -1 })
+        .lean();
       res.status(200).json({ success: true, data: tickets });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
@@ -87,16 +98,22 @@ class TicketController {
       const tenantId = req.user.tenantId;
 
       if (!message) {
-        return res.status(400).json({ success: false, message: "Message is required" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Message is required" });
       }
 
       const ticket = await Ticket.findOne({ _id: id, tenantId });
       if (!ticket) {
-        return res.status(404).json({ success: false, message: "Ticket not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Ticket not found" });
       }
 
       if (ticket.status === "CLOSED") {
-        return res.status(400).json({ success: false, message: "Cannot reply to a closed ticket" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Cannot reply to a closed ticket" });
       }
 
       const namePart = req.user.profile?.firstName
@@ -126,7 +143,9 @@ class TicketController {
   async listAllTickets(req, res) {
     try {
       if (req.user.role !== "SUPER_ADMIN") {
-        return res.status(403).json({ success: false, message: "Forbidden: Super admin only" });
+        return res
+          .status(403)
+          .json({ success: false, message: "Forbidden: Super admin only" });
       }
 
       const tickets = await Ticket.find().sort({ updatedAt: -1 }).lean();
@@ -143,11 +162,16 @@ class TicketController {
       const ticket = await Ticket.findById(id);
 
       if (!ticket) {
-        return res.status(404).json({ success: false, message: "Ticket not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Ticket not found" });
       }
 
       // If tenant, verify ownership
-      if (req.user.role !== "SUPER_ADMIN" && ticket.tenantId.toString() !== req.user.tenantId.toString()) {
+      if (
+        req.user.role !== "SUPER_ADMIN" &&
+        ticket.tenantId.toString() !== req.user.tenantId.toString()
+      ) {
         return res.status(403).json({ success: false, message: "Forbidden" });
       }
 
@@ -161,19 +185,25 @@ class TicketController {
   async replyTicket(req, res) {
     try {
       if (req.user.role !== "SUPER_ADMIN") {
-        return res.status(403).json({ success: false, message: "Forbidden: Super admin only" });
+        return res
+          .status(403)
+          .json({ success: false, message: "Forbidden: Super admin only" });
       }
 
       const { id } = req.params;
       const { message } = req.body;
 
       if (!message) {
-        return res.status(400).json({ success: false, message: "Message is required" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Message is required" });
       }
 
       const ticket = await Ticket.findById(id);
       if (!ticket) {
-        return res.status(404).json({ success: false, message: "Ticket not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Ticket not found" });
       }
 
       const namePart = req.user.profile?.firstName
@@ -201,7 +231,8 @@ class TicketController {
         recipientIds: owners,
         type: "TICKET_REPLIED",
         title: "Yêu cầu hỗ trợ đã được phản hồi",
-        description: `Bộ phận hỗ trợ đã trả lời ticket ${ticket.ticketId || ""}.`.trim(),
+        description:
+          `Bộ phận hỗ trợ đã trả lời ticket ${ticket.title || ""}.`.trim(),
         link: `/faqs`,
         referenceId: ticket._id,
       });
@@ -216,13 +247,17 @@ class TicketController {
   async closeTicket(req, res) {
     try {
       if (req.user.role !== "SUPER_ADMIN") {
-        return res.status(403).json({ success: false, message: "Forbidden: Super admin only" });
+        return res
+          .status(403)
+          .json({ success: false, message: "Forbidden: Super admin only" });
       }
 
       const { id } = req.params;
       const ticket = await Ticket.findById(id);
       if (!ticket) {
-        return res.status(404).json({ success: false, message: "Ticket not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Ticket not found" });
       }
 
       ticket.status = "CLOSED";
