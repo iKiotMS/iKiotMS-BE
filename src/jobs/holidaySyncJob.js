@@ -25,7 +25,7 @@ async function syncVietnamHolidaysForAllTenants() {
         });
 
         console.log(
-          `[HolidaySyncJob] Synced ${result.data.length} holidays for tenant ${tenant._id} in ${year}`,
+          `[HolidaySyncJob] Synced ${result.syncedCount ?? result.data.length} holidays and skipped ${result.skippedManualCount ?? 0} manual overrides for tenant ${tenant._id} in ${year}`,
         );
       } catch (error) {
         console.error(

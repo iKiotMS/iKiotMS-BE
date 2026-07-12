@@ -711,6 +711,67 @@ class PayrollService {
     return payslip;
   }
 
+  async listMyPayslips({ tenantId, userId, query }) {
+    const dto = new ListPayrollPeriodDTO(query);
+    dto.status = undefined;
+    const validation = dto.validate();
+    if (!validation.isValid) {
+      const error = new Error("Phân trang không hợp lệ");
+      error.statusCode = 400;
+      error.errors = validation.errors;
+      throw error;
+    }
+
+    const filter = {
+      tenantId,
+      userId,
+      status: { $in: ["APPROVED", "PAID"] },
+    };
+    const skip = (dto.page - 1) * dto.limit;
+    const [data, total] = await Promise.all([
+      Payslip.find(filter)
+        .populate("payrollPeriodId", "name periodStart periodEnd status paidAt")
+        .sort({ periodEnd: -1 })
+        .skip(skip)
+        .limit(dto.limit)
+        .lean(),
+      Payslip.countDocuments(filter),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        total,
+        page: dto.page,
+        limit: dto.limit,
+        totalPages: Math.ceil(total / dto.limit),
+      },
+    };
+  }
+
+  async getMyPayslip({ tenantId, userId, payslipId }) {
+    if (!mongoose.Types.ObjectId.isValid(payslipId)) {
+      const error = new Error("payslipId không hợp lệ");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const payslip = await Payslip.findOne({
+      _id: payslipId,
+      tenantId,
+      userId,
+      status: { $in: ["APPROVED", "PAID"] },
+    })
+      .populate("payrollPeriodId", "name periodStart periodEnd status paidAt")
+      .lean();
+    if (!payslip) {
+      const error = new Error("Không tìm thấy phiếu lương đã được công bố");
+      error.statusCode = 404;
+      throw error;
+    }
+    return payslip;
+  }
+
   async updateDraftPayslip({
     tenantId,
     currentUserId,

@@ -122,4 +122,33 @@ describe("Payroll draft editing and status workflow", () => {
       }),
     ).rejects.toMatchObject({ statusCode: 400 });
   });
+
+  test("lists only the authenticated employee's approved or paid payslips", async () => {
+    const tenantId = new mongoose.Types.ObjectId();
+    const userId = new mongoose.Types.ObjectId();
+    const query = {};
+    query.populate = jest.fn().mockReturnValue(query);
+    query.sort = jest.fn().mockReturnValue(query);
+    query.skip = jest.fn().mockReturnValue(query);
+    query.limit = jest.fn().mockReturnValue(query);
+    query.lean = jest.fn().mockResolvedValue([{ status: "APPROVED" }]);
+    jest.spyOn(Payslip, "find").mockReturnValue(query);
+    jest.spyOn(Payslip, "countDocuments").mockResolvedValue(1);
+
+    const result = await PayrollService.listMyPayslips({
+      tenantId,
+      userId,
+      query: {},
+    });
+
+    expect(Payslip.find).toHaveBeenCalledWith({
+      tenantId,
+      userId,
+      status: { $in: ["APPROVED", "PAID"] },
+    });
+    expect(result).toMatchObject({
+      data: [{ status: "APPROVED" }],
+      pagination: { total: 1 },
+    });
+  });
 });

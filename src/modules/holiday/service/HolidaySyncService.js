@@ -73,33 +73,62 @@ class HolidaySyncService {
       };
     }
 
-    const operations = holidays.map((holiday) => ({
-      updateOne: {
-        filter: {
-          tenantId,
-          date: holiday.date,
-          branchId: null,
-          type: "PUBLIC_HOLIDAY",
-        },
-        update: {
-          $set: {
-            name: holiday.name,
-            isActive: true,
-          },
-          $setOnInsert: {
-            type: "PUBLIC_HOLIDAY",
-            branchId: null,
-          },
-        },
-        upsert: true,
-      },
-    }));
+    const existingHolidays = await Holiday.find({
+      tenantId,
+      date: { $in: holidays.map((holiday) => holiday.date) },
+      branchId: null,
+      type: "PUBLIC_HOLIDAY",
+    }).lean();
+    const existingByDate = existingHolidays.reduce((result, holiday) => {
+      result[new Date(holiday.date).toISOString().slice(0, 10)] = holiday;
+      return result;
+    }, {});
+    let skippedManualCount = 0;
+    const operations = holidays.reduce((result, holiday) => {
+      const dateKey = holiday.date.toISOString().slice(0, 10);
+      const existing = existingByDate[dateKey];
 
-    await Holiday.bulkWrite(operations);
+      // Tenant edits always win over the external calendar, including isActive=false.
+      if (existing?.isManuallyEdited) {
+        skippedManualCount += 1;
+        return result;
+      }
+
+      result.push({
+        updateOne: {
+          filter: existing
+            ? { _id: existing._id, tenantId }
+            : {
+                tenantId,
+                date: holiday.date,
+                branchId: null,
+                type: "PUBLIC_HOLIDAY",
+              },
+          update: {
+            $set: {
+              name: holiday.name,
+              isActive: true,
+              source: "GOOGLE_CALENDAR",
+              isManuallyEdited: false,
+            },
+            $setOnInsert: {
+              type: "PUBLIC_HOLIDAY",
+              branchId: null,
+            },
+          },
+          upsert: !existing,
+        },
+      });
+      return result;
+    }, []);
+
+    if (operations.length) await Holiday.bulkWrite(operations);
 
     return {
       message: "Sync ngày lễ thành công",
       data: holidays,
+      syncedCount: operations.length,
+      skippedManualCount,
     };
   }
 }

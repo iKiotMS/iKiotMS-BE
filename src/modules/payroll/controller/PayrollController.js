@@ -101,6 +101,32 @@ class PayrollController {
     }
   }
 
+  async listMyPayslips(req, res) {
+    try {
+      const result = await PayrollService.listMyPayslips({
+        tenantId: req.user.tenantId,
+        userId: req.user.userId,
+        query: req.query,
+      });
+      return res.status(200).json({ success: true, ...result });
+    } catch (error) {
+      return this.sendError(res, error, "Không thể lấy phiếu lương của tôi");
+    }
+  }
+
+  async getMyPayslip(req, res) {
+    try {
+      const data = await PayrollService.getMyPayslip({
+        tenantId: req.user.tenantId,
+        userId: req.user.userId,
+        payslipId: req.params.payslipId,
+      });
+      return res.status(200).json({ success: true, data });
+    } catch (error) {
+      return this.sendError(res, error, "Không thể lấy phiếu lương của tôi");
+    }
+  }
+
   async payrollPeriodAction(req, res, action, message) {
     try {
       const data = await PayrollService.changePayrollPeriodStatus({
