@@ -3,6 +3,9 @@ const jwt = require("jsonwebtoken");
 
 jest.mock("../../src/modules/payroll/service/PayrollService", () => ({
   generatePayRoll: jest.fn(),
+  generatePayrollPeriod: jest.fn(),
+  updateDraftPayslip: jest.fn(),
+  changePayrollPeriodStatus: jest.fn(),
 }));
 
 jest.mock("../../src/utils/redisTest", () => {
@@ -105,5 +108,77 @@ describe("Payroll preview API", () => {
       message: "Dữ liệu tạo bảng lương không hợp lệ",
       errors: { periodEndDate: "periodEndDate không hợp lệ" },
     });
+  });
+
+  test("POST /payroll/periods creates a draft payroll period", async () => {
+    PayrollService.generatePayrollPeriod.mockResolvedValue({
+      message: "Tạo kỳ lương nháp thành công",
+      data: {
+        payrollPeriod: { _id: "period1", status: "DRAFT" },
+        payslips: [{ _id: "payslip1", status: "DRAFT" }],
+        skipped: [],
+        summary: { generatedCount: 1, skippedCount: 0 },
+      },
+    });
+
+    const response = await request(app)
+      .post("/payroll/periods")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ payrollMonth: "2026-07" });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      success: true,
+      message: "Tạo kỳ lương nháp thành công",
+      data: {
+        payrollPeriod: { status: "DRAFT" },
+        summary: { generatedCount: 1 },
+      },
+    });
+    expect(PayrollService.generatePayrollPeriod).toHaveBeenCalledWith({
+      tenantId,
+      currentUserId: userId,
+      payrollData: { payrollMonth: "2026-07" },
+    });
+  });
+
+  test("PATCH draft payslip updates manual adjustments", async () => {
+    PayrollService.updateDraftPayslip.mockResolvedValue({
+      manualAdjustmentTotal: -500000,
+      payslip: { _id: "payslip1", netSalary: 9500000 },
+    });
+    const body = {
+      manualAdjustments: [
+        { category: "SALARY_ADVANCE", name: "Ứng lương", amount: -500000 },
+      ],
+    };
+    const response = await request(app)
+      .patch(
+        "/payroll/periods/64a000000000000000000011/payslips/64a000000000000000000012",
+      )
+      .set("Authorization", `Bearer ${token}`)
+      .send(body);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      success: true,
+      data: { manualAdjustmentTotal: -500000 },
+    });
+  });
+
+  test("POST submit moves a payroll period to review", async () => {
+    PayrollService.changePayrollPeriodStatus.mockResolvedValue({
+      _id: "period1",
+      status: "REVIEW",
+    });
+    const response = await request(app)
+      .post("/payroll/periods/64a000000000000000000011/submit")
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(PayrollService.changePayrollPeriodStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "SUBMIT" }),
+    );
   });
 });

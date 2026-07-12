@@ -1,9 +1,16 @@
+const mongoose = require("mongoose");
 const Attendance = require("../../../models/Attendance");
 const LeaveRequest = require("../../../models/LeaveRequest");
 const PaySheet = require("../../../models/Paysheet");
+const PayrollPeriod = require("../../../models/PayrollPeriod");
+const Payslip = require("../../../models/Payslip");
 const User = require("../../../models/User");
 const WorkingSchedule = require("../../../models/WorkingSchedule");
 const GeneratePreviewPayrollDTO = require("../dto/GeneratePreviewPayrollDTO");
+const GeneratePayrollDTO = require("../dto/GeneratePayrollDTO");
+const ListPayrollPeriodDTO = require("../dto/ListPayrollPeriodDTO");
+const PayrollPeriodActionDTO = require("../dto/PayrollPeriodActionDTO");
+const UpdatePayslipDraftDTO = require("../dto/UpdatePayslipDraftDTO");
 const {
   calculatePayrollBySchedules,
   getHolidayByDate,
@@ -482,6 +489,398 @@ class PayrollService {
         summary,
       },
     };
+  }
+
+  async generatePayrollPeriod({ tenantId, currentUserId, payrollData }) {
+    const inputData = new GeneratePayrollDTO(payrollData);
+    const validation = inputData.validate();
+
+    if (!validation.isValid) {
+      const error = new Error("Dữ liệu tạo kỳ lương không hợp lệ");
+      error.statusCode = 400;
+      error.errors = validation.errors;
+      throw error;
+    }
+
+    const payrollSettingResult =
+      await PayrollSettingService.getPayrollSetting(tenantId);
+    const payrollSetting = payrollSettingResult.data;
+    const [year, month] = inputData.payrollMonth.split("-").map(Number);
+    const periodStartDay = payrollSetting.periodStartDay || 1;
+
+    // payrollMonth là tháng chứa ngày kết thúc kỳ lương.
+    // Ví dụ payrollMonth 2026-07, start day 26 => 26/06 đến hết 25/07.
+    const periodStart =
+      periodStartDay === 1
+        ? new Date(Date.UTC(year, month - 1, 1))
+        : new Date(Date.UTC(year, month - 2, periodStartDay));
+    const nextPeriodStart =
+      periodStartDay === 1
+        ? new Date(Date.UTC(year, month, 1))
+        : new Date(Date.UTC(year, month - 1, periodStartDay));
+    const periodEnd = new Date(nextPeriodStart.getTime() - 1);
+
+    const overlappingPeriod = await PayrollPeriod.findOne({
+      tenantId,
+      status: { $ne: "CANCELLED" },
+      periodStart: { $lte: periodEnd },
+      periodEnd: { $gte: periodStart },
+    }).lean();
+
+    if (overlappingPeriod) {
+      const error = new Error("Kỳ lương bị trùng với kỳ lương đã tồn tại");
+      error.statusCode = 409;
+      error.conflictingPayrollPeriodId = overlappingPeriod._id;
+      throw error;
+    }
+
+    // Luôn tính lại ở server; không nhận số tiền do client gửi lên.
+    const preview = await this.generatePayRoll({
+      tenantId,
+      currentUserId,
+      payrollData: {
+        periodStartDate: periodStart.toISOString().slice(0, 10),
+        periodEndDate: periodEnd.toISOString().slice(0, 10),
+        userIds: inputData.userIds,
+      },
+    });
+
+    if (preview.data.payslips.length === 0) {
+      const error = new Error("Không có phiếu lương hợp lệ để tạo kỳ lương");
+      error.statusCode = 422;
+      error.skipped = preview.data.skipped;
+      throw error;
+    }
+
+    const session = await mongoose.startSession();
+    let payrollPeriod;
+    let payslips;
+
+    try {
+      await session.withTransaction(async () => {
+        [payrollPeriod] = await PayrollPeriod.create(
+          [
+            {
+              tenantId,
+              name: `Kỳ lương ${String(month).padStart(2, "0")}/${year}`,
+              periodStart,
+              periodEnd,
+              status: "DRAFT",
+              generatedBy: currentUserId,
+            },
+          ],
+          { session },
+        );
+
+        payslips = await Payslip.insertMany(
+          preview.data.payslips.map((payslip) => ({
+            ...payslip,
+            payrollPeriodId: payrollPeriod._id,
+            manageBy: currentUserId,
+            status: "DRAFT",
+          })),
+          { session },
+        );
+      });
+    } catch (error) {
+      if (error.code === 11000) {
+        const conflictError = new Error("Kỳ lương đã tồn tại");
+        conflictError.statusCode = 409;
+        throw conflictError;
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+
+    return {
+      message: "Tạo kỳ lương nháp thành công",
+      data: {
+        payrollPeriod,
+        payslips,
+        skipped: preview.data.skipped,
+        summary: preview.data.summary,
+      },
+    };
+  }
+
+  async listPayrollPeriods({ tenantId, query }) {
+    const dto = new ListPayrollPeriodDTO(query);
+    const validation = dto.validate();
+    if (!validation.isValid) {
+      const error = new Error("Bộ lọc kỳ lương không hợp lệ");
+      error.statusCode = 400;
+      error.errors = validation.errors;
+      throw error;
+    }
+
+    const filter = { tenantId };
+    if (dto.status) filter.status = dto.status;
+    const skip = (dto.page - 1) * dto.limit;
+    const [data, total] = await Promise.all([
+      PayrollPeriod.find(filter)
+        .sort({ periodStart: -1 })
+        .skip(skip)
+        .limit(dto.limit)
+        .lean(),
+      PayrollPeriod.countDocuments(filter),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        total,
+        page: dto.page,
+        limit: dto.limit,
+        totalPages: Math.ceil(total / dto.limit),
+      },
+    };
+  }
+
+  async getPayrollPeriod({ tenantId, periodId, query }) {
+    if (!mongoose.Types.ObjectId.isValid(periodId)) {
+      const error = new Error("periodId không hợp lệ");
+      error.statusCode = 400;
+      throw error;
+    }
+    const dto = new ListPayrollPeriodDTO(query);
+    dto.status = undefined;
+    const validation = dto.validate();
+    if (!validation.isValid) {
+      const error = new Error("Phân trang không hợp lệ");
+      error.statusCode = 400;
+      error.errors = validation.errors;
+      throw error;
+    }
+
+    const payrollPeriod = await PayrollPeriod.findOne({
+      _id: periodId,
+      tenantId,
+    }).lean();
+    if (!payrollPeriod) {
+      const error = new Error("Không tìm thấy kỳ lương");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const payslipFilter = { tenantId, payrollPeriodId: periodId };
+    const skip = (dto.page - 1) * dto.limit;
+    const [payslips, total] = await Promise.all([
+      Payslip.find(payslipFilter)
+        .populate("userId", "profile email")
+        .sort({ createdAt: 1 })
+        .skip(skip)
+        .limit(dto.limit)
+        .lean(),
+      Payslip.countDocuments(payslipFilter),
+    ]);
+
+    return {
+      payrollPeriod,
+      payslips,
+      pagination: {
+        total,
+        page: dto.page,
+        limit: dto.limit,
+        totalPages: Math.ceil(total / dto.limit),
+      },
+    };
+  }
+
+  async getPayslip({ tenantId, periodId, payslipId }) {
+    if (
+      !mongoose.Types.ObjectId.isValid(periodId) ||
+      !mongoose.Types.ObjectId.isValid(payslipId)
+    ) {
+      const error = new Error("periodId hoặc payslipId không hợp lệ");
+      error.statusCode = 400;
+      throw error;
+    }
+    const payslip = await Payslip.findOne({
+      _id: payslipId,
+      payrollPeriodId: periodId,
+      tenantId,
+    })
+      .populate("userId", "profile email")
+      .lean();
+    if (!payslip) {
+      const error = new Error("Không tìm thấy phiếu lương");
+      error.statusCode = 404;
+      throw error;
+    }
+    return payslip;
+  }
+
+  async updateDraftPayslip({
+    tenantId,
+    currentUserId,
+    periodId,
+    payslipId,
+    updateData,
+  }) {
+    if (
+      !mongoose.Types.ObjectId.isValid(periodId) ||
+      !mongoose.Types.ObjectId.isValid(payslipId)
+    ) {
+      const error = new Error("periodId hoặc payslipId không hợp lệ");
+      error.statusCode = 400;
+      throw error;
+    }
+    const dto = new UpdatePayslipDraftDTO(updateData);
+    const validation = dto.validate();
+    if (!validation.isValid) {
+      const error = new Error("Dữ liệu cập nhật phiếu lương không hợp lệ");
+      error.statusCode = 400;
+      error.errors = validation.errors;
+      throw error;
+    }
+
+    const payrollPeriod = await PayrollPeriod.findOne({
+      _id: periodId,
+      tenantId,
+    }).lean();
+    if (!payrollPeriod) {
+      const error = new Error("Không tìm thấy kỳ lương");
+      error.statusCode = 404;
+      throw error;
+    }
+    if (payrollPeriod.status !== "DRAFT") {
+      const error = new Error("Chỉ được sửa phiếu lương khi kỳ lương ở trạng thái DRAFT");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const payslip = await Payslip.findOne({
+      _id: payslipId,
+      payrollPeriodId: periodId,
+      tenantId,
+    });
+    if (!payslip) {
+      const error = new Error("Không tìm thấy phiếu lương trong kỳ này");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (dto.note !== undefined) payslip.note = dto.note.trim();
+    if (dto.manualAdjustments !== undefined) {
+      payslip.manualAdjustments = dto.manualAdjustments.map((item) => ({
+        category: item.category || "OTHER",
+        name: item.name.trim(),
+        amount: Number(item.amount),
+        note: item.note?.trim(),
+        createdBy: currentUserId,
+        createdAt: new Date(),
+      }));
+    }
+
+    const adjustmentTotal = payslip.manualAdjustments.reduce(
+      (total, item) => total + Number(item.amount || 0),
+      0,
+    );
+    payslip.netSalary =
+      Number(payslip.grossSalary || 0) +
+      Number(payslip.bonus || 0) +
+      Number(payslip.allowance || 0) -
+      Number(payslip.deduction || 0) +
+      adjustmentTotal;
+    if (payslip.netSalary < 0) {
+      const error = new Error("Tổng điều chỉnh làm lương thực nhận nhỏ hơn 0");
+      error.statusCode = 422;
+      throw error;
+    }
+
+    payslip.manageBy = currentUserId;
+    await payslip.save();
+    return { payslip, manualAdjustmentTotal: adjustmentTotal };
+  }
+
+  async changePayrollPeriodStatus({
+    tenantId,
+    currentUserId,
+    periodId,
+    action,
+    actionData,
+  }) {
+    if (!mongoose.Types.ObjectId.isValid(periodId)) {
+      const error = new Error("periodId không hợp lệ");
+      error.statusCode = 400;
+      throw error;
+    }
+    const transitions = {
+      SUBMIT: { from: "DRAFT", to: "REVIEW" },
+      RETURN_TO_DRAFT: { from: "REVIEW", to: "DRAFT" },
+      APPROVE: { from: "REVIEW", to: "APPROVED" },
+      MARK_PAID: { from: "APPROVED", to: "PAID" },
+    };
+    const transition = transitions[action];
+    const dto = new PayrollPeriodActionDTO(actionData);
+    const validation = dto.validate(action);
+    if (!transition || !validation.isValid) {
+      const error = new Error("Dữ liệu chuyển trạng thái không hợp lệ");
+      error.statusCode = 400;
+      error.errors = validation.errors;
+      throw error;
+    }
+
+    const payrollPeriod = await PayrollPeriod.findOne({
+      _id: periodId,
+      tenantId,
+    });
+    if (!payrollPeriod) {
+      const error = new Error("Không tìm thấy kỳ lương");
+      error.statusCode = 404;
+      throw error;
+    }
+    if (payrollPeriod.status !== transition.from) {
+      const error = new Error(
+        `Chỉ có thể thực hiện ${action} khi kỳ lương ở trạng thái ${transition.from}`,
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+    if (
+      action === "SUBMIT" &&
+      (await Payslip.countDocuments({ tenantId, payrollPeriodId: periodId })) === 0
+    ) {
+      const error = new Error("Kỳ lương chưa có phiếu lương để gửi duyệt");
+      error.statusCode = 422;
+      throw error;
+    }
+
+    const now = new Date();
+    payrollPeriod.status = transition.to;
+    if (action === "SUBMIT") {
+      payrollPeriod.submittedBy = currentUserId;
+      payrollPeriod.submittedAt = now;
+    } else if (action === "RETURN_TO_DRAFT") {
+      payrollPeriod.returnedBy = currentUserId;
+      payrollPeriod.returnedAt = now;
+      payrollPeriod.returnReason = dto.reason.trim();
+    } else if (action === "APPROVE") {
+      payrollPeriod.approvedBy = currentUserId;
+      payrollPeriod.approvedAt = now;
+    } else if (action === "MARK_PAID") {
+      payrollPeriod.paidBy = currentUserId;
+      payrollPeriod.paidAt = now;
+      payrollPeriod.paymentReference = dto.paymentReference?.trim();
+      payrollPeriod.paymentNote = dto.paymentNote?.trim();
+    }
+
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await payrollPeriod.save({ session });
+        await Payslip.updateMany(
+          { tenantId, payrollPeriodId: periodId },
+          { $set: { status: transition.to } },
+          { session },
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    return payrollPeriod;
   }
 }
 

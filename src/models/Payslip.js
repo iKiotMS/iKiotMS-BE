@@ -27,7 +27,8 @@ const payslipSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      trim: true,
+      enum: ["DRAFT", "REVIEW", "APPROVED", "PAID", "CANCELLED"],
+      default: "DRAFT",
     },
     periodStart: {
       type: Date,

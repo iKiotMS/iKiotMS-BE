@@ -337,6 +337,203 @@ const PayrollController = require("./controller/PayrollController");
  *       500:
  *         description: Unexpected server error
  *
+ * /payroll/periods:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Generate and save a draft payroll period
+ *     description: payrollMonth is the month containing the period end date. Dates are derived from PayrollSetting.periodStartDay.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [payrollMonth]
+ *             properties:
+ *               payrollMonth:
+ *                 type: string
+ *                 pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+ *                 example: 2026-07
+ *                 description: Tháng chứa ngày kết thúc kỳ lương.
+ *               userIds:
+ *                 type: array
+ *                 description: Omit or send an empty array to generate payslips for all eligible employees.
+ *                 items: { type: string }
+ *     responses:
+ *       201:
+ *         description: Draft payroll period and payslips created successfully
+ *       400:
+ *         description: Invalid payroll month or user IDs
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Payroll settings not found
+ *       409:
+ *         description: Payroll period overlaps an existing period
+ *       422:
+ *         description: No valid payslips can be generated
+ *       500:
+ *         description: Unexpected server error
+ *   get:
+ *     tags: [Payroll]
+ *     summary: List payroll periods
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: page, schema: { type: integer, default: 1 } }
+ *       - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [DRAFT, REVIEW, APPROVED, PAID, CANCELLED] }
+ *     responses:
+ *       200: { description: Payroll period list returned }
+ *       400: { description: Invalid filters }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *
+ * /payroll/periods/{periodId}:
+ *   get:
+ *     tags: [Payroll]
+ *     summary: Get payroll period with paginated payslips
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *       - { in: query, name: page, schema: { type: integer, default: 1 } }
+ *       - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }
+ *     responses:
+ *       200: { description: Payroll period detail returned }
+ *       400: { description: Invalid ID or pagination }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period not found }
+ *
+ * /payroll/periods/{periodId}/payslips/{payslipId}:
+ *   get:
+ *     tags: [Payroll]
+ *     summary: Get a payslip in a payroll period
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *       - { in: path, name: payslipId, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: Payslip returned }
+ *       400: { description: Invalid IDs }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payslip not found }
+ *   patch:
+ *     tags: [Payroll]
+ *     summary: Edit note and manual costs of a draft payslip
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *       - { in: path, name: payslipId, required: true, schema: { type: string } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               note: { type: string }
+ *               manualAdjustments:
+ *                 type: array
+ *                 description: Replaces the current list. Positive amounts add money; negative amounts deduct money.
+ *                 items:
+ *                   type: object
+ *                   required: [name, amount]
+ *                   properties:
+ *                     category: { type: string, enum: [SALARY_ADVANCE, TET_BONUS, OTHER], default: OTHER }
+ *                     name: { type: string }
+ *                     amount: { type: number, not: { const: 0 } }
+ *                     note: { type: string }
+ *     responses:
+ *       200: { description: Draft payslip updated and net salary recalculated }
+ *       400: { description: Invalid input }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period or payslip not found }
+ *       409: { description: Payroll period is not in DRAFT }
+ *       422: { description: Net salary would become negative }
+ *
+ * /payroll/periods/{periodId}/submit:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Submit a draft payroll period for review
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: Status changed from DRAFT to REVIEW }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period not found }
+ *       409: { description: Invalid current status }
+ *       422: { description: Payroll period has no payslips }
+ *
+ * /payroll/periods/{periodId}/return-to-draft:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Return a payroll period under review to draft
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties: { reason: { type: string } }
+ *     responses:
+ *       200: { description: Status changed from REVIEW to DRAFT }
+ *       400: { description: Return reason is required }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period not found }
+ *       409: { description: Invalid current status }
+ *
+ * /payroll/periods/{periodId}/approve:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Approve a payroll period under review
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: Status changed from REVIEW to APPROVED }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period not found }
+ *       409: { description: Invalid current status }
+ *
+ * /payroll/periods/{periodId}/mark-paid:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Mark an approved payroll period as paid
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               paymentReference: { type: string }
+ *               paymentNote: { type: string }
+ *     responses:
+ *       200: { description: Status changed from APPROVED to PAID }
+ *       400: { description: Invalid payment information }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period not found }
+ *       409: { description: Invalid current status }
+ *
  * /payroll/paysheets:
  *   post:
  *     tags:
@@ -506,6 +703,93 @@ function registerPayrollModule(app) {
     verifyJwt,
     authorize("payroll", ["read"]),
     PayrollController.generatePreview.bind(PayrollController),
+  );
+
+  app.post(
+    "/payroll/periods",
+    verifyJwt,
+    authorize("payroll", ["create"]),
+    PayrollController.generatePayrollPeriod.bind(PayrollController),
+  );
+
+  app.get(
+    "/payroll/periods",
+    verifyJwt,
+    authorize("payroll", ["read"]),
+    PayrollController.listPayrollPeriods.bind(PayrollController),
+  );
+
+  app.get(
+    "/payroll/periods/:periodId",
+    verifyJwt,
+    authorize("payroll", ["read"]),
+    PayrollController.getPayrollPeriod.bind(PayrollController),
+  );
+
+  app.get(
+    "/payroll/periods/:periodId/payslips/:payslipId",
+    verifyJwt,
+    authorize("payroll", ["read"]),
+    PayrollController.getPayslip.bind(PayrollController),
+  );
+
+  app.patch(
+    "/payroll/periods/:periodId/payslips/:payslipId",
+    verifyJwt,
+    authorize("payroll", ["update"]),
+    PayrollController.updateDraftPayslip.bind(PayrollController),
+  );
+
+  app.post(
+    "/payroll/periods/:periodId/submit",
+    verifyJwt,
+    authorize("payroll", ["update"]),
+    (req, res) =>
+      PayrollController.payrollPeriodAction(
+        req,
+        res,
+        "SUBMIT",
+        "Đã gửi duyệt kỳ lương",
+      ),
+  );
+
+  app.post(
+    "/payroll/periods/:periodId/return-to-draft",
+    verifyJwt,
+    authorize("payroll", ["update"]),
+    (req, res) =>
+      PayrollController.payrollPeriodAction(
+        req,
+        res,
+        "RETURN_TO_DRAFT",
+        "Đã trả kỳ lương về bản nháp",
+      ),
+  );
+
+  app.post(
+    "/payroll/periods/:periodId/approve",
+    verifyJwt,
+    authorize("payroll", ["update"]),
+    (req, res) =>
+      PayrollController.payrollPeriodAction(
+        req,
+        res,
+        "APPROVE",
+        "Đã duyệt kỳ lương",
+      ),
+  );
+
+  app.post(
+    "/payroll/periods/:periodId/mark-paid",
+    verifyJwt,
+    authorize("payroll", ["update"]),
+    (req, res) =>
+      PayrollController.payrollPeriodAction(
+        req,
+        res,
+        "MARK_PAID",
+        "Đã ghi nhận thanh toán kỳ lương",
+      ),
   );
 
   app.post(
