@@ -1,13 +1,20 @@
 const { STAFF_ROLES } = require("../../../constants/role");
 const Attendance = require("../../../models/Attendance");
+const Holiday = require("../../../models/Holiday");
+const PayrollSetting = require("../../../models/PayrollSetting");
 const ShiftTemplate = require("../../../models/ShiftTemplate");
 const User = require("../../../models/User");
 const WorkingSchedule = require("../../../models/WorkingSchedule");
 const { validateRoleHierarchy } = require("../../../utils/permissionChecker");
-const { BulkWorkingScheduleDTO } = require("../dto/WorkingScheduleDTO");
+const {
+  BulkWorkingScheduleDTO,
+  SCHEDULE_TYPES,
+} = require("../dto/WorkingScheduleDTO");
 const {
   attachAttendancesToUsers,
   getAttendanceKey,
+  getScheduleUsers,
+  getUserIdText,
   pickScheduleUser,
 } = require("./WorkingScheduleAttendanceMapper");
 const {
@@ -53,6 +60,71 @@ class WorkingScheduleService {
   normalizeScheduleUserIds(userId) {
     const userIds = Array.isArray(userId) ? userId : [userId];
     return [...new Set(userIds.filter(Boolean).map(String))];
+  }
+
+  isSunday(workDate) {
+    return new Date(workDate).getUTCDay() === 0;
+  }
+
+  buildDayType(isSunday, holiday) {
+    if (isSunday && holiday) return "SUNDAY_HOLIDAY";
+    if (isSunday) return "SUNDAY";
+    if (holiday) return "HOLIDAY";
+    return "NORMAL";
+  }
+
+  async attachScheduleDayInfo(tenantId, schedules) {
+    if (!schedules.length) {
+      return schedules;
+    }
+
+    const workDates = schedules
+      .map((schedule) => schedule.workDate)
+      .filter(Boolean)
+      .map((workDate) => buildWorkDate(workDate));
+
+    if (!workDates.length) {
+      return schedules;
+    }
+
+    const startWorkDate = new Date(
+      Math.min(...workDates.map((workDate) => workDate.getTime())),
+    );
+    const endWorkDate = new Date(
+      Math.max(...workDates.map((workDate) => workDate.getTime())),
+    );
+
+    const holidays = await Holiday.find({
+      tenantId,
+      isActive: true,
+      date: {
+        $gte: startWorkDate,
+        $lte: endWorkDate,
+      },
+      branchId: null,
+    }).lean();
+
+    const holidayByDate = {};
+    holidays.forEach((holiday) => {
+      holidayByDate[getLocalDateText(holiday.date)] = holiday;
+    });
+
+    return schedules.map((schedule) => {
+      const dateText = getLocalDateText(schedule.workDate);
+      const holiday = holidayByDate[dateText] || null;
+      const sunday = this.isSunday(schedule.workDate);
+
+      return {
+        ...schedule,
+        dayInfo: {
+          dayType: this.buildDayType(sunday, holiday),
+          isSunday: sunday,
+          isHoliday: Boolean(holiday),
+          holidayName: holiday?.name || null,
+          holidayType: holiday?.type || null,
+        },
+      };
+    });
   }
 
   // Lấy các ca mẫu theo tenant, sau đó gom lại theo id để tra cứu nhanh.
@@ -160,29 +232,70 @@ class WorkingScheduleService {
   }
 
   async attachAttendanceSummaries(tenantId, schedules, detail = false) {
-    const scheduleIds = schedules.map((schedule) => schedule._id);
+    const payrollSetting = await PayrollSetting.findOne({
+      tenantId,
+      status: "ACTIVE",
+    })
+      .select("lateGraceMinutes")
+      .lean();
+    const lateGraceMinutes = payrollSetting?.lateGraceMinutes ?? 15;
+
+    if (!schedules.length) {
+      return attachAttendancesToUsers(schedules, {}, detail, lateGraceMinutes);
+    }
+
+    const userIds = [
+      ...new Set(
+        schedules
+          .flatMap((schedule) => getScheduleUsers(schedule))
+          .map((user) => getUserIdText(user)),
+      ),
+    ];
+    const workDates = schedules
+      .map((schedule) => schedule.workDate)
+      .filter(Boolean)
+      .map((workDate) => new Date(workDate));
+
+    if (!userIds.length || !workDates.length) {
+      return attachAttendancesToUsers(schedules, {}, detail, lateGraceMinutes);
+    }
+
+    const startWorkDate = new Date(
+      Math.min(...workDates.map((workDate) => workDate.getTime())),
+    );
+    const endWorkDate = new Date(
+      Math.max(...workDates.map((workDate) => workDate.getTime())),
+    );
+
     const selectFields = detail
-      ? "scheduleId userId status actualCheckinAt actualCheckoutAt checkInLocation checkOutLocation workedMinutes overtimeMinute lateMinutes"
-      : "scheduleId userId status actualCheckinAt actualCheckoutAt";
+      ? "scheduleId userId workDate status actualCheckinAt actualCheckoutAt checkInLocation checkOutLocation workedMinutes overtimeMinute lateMinutes"
+      : "scheduleId userId workDate status actualCheckinAt actualCheckoutAt";
 
     const attendances = await Attendance.find({
       tenantId,
-      scheduleId: { $in: scheduleIds },
+      userId: { $in: userIds },
+      workDate: {
+        $gte: startWorkDate,
+        $lte: endWorkDate,
+      },
     })
       .select(selectFields)
       .lean();
 
-    const attendanceByScheduleAndUser = {};
+    const attendanceByUserAndWorkDate = {};
     attendances.forEach((attendance) => {
-      attendanceByScheduleAndUser[
-        getAttendanceKey(attendance.scheduleId, attendance.userId)
-      ] = attendance;
+      const key = getAttendanceKey(attendance.workDate, attendance.userId);
+      if (!attendanceByUserAndWorkDate[key]) {
+        attendanceByUserAndWorkDate[key] = [];
+      }
+      attendanceByUserAndWorkDate[key].push(attendance);
     });
 
     return attachAttendancesToUsers(
       schedules,
-      attendanceByScheduleAndUser,
+      attendanceByUserAndWorkDate,
       detail,
+      lateGraceMinutes,
     );
   }
 
@@ -234,6 +347,18 @@ class WorkingScheduleService {
       }
 
       filter.status = status;
+    }
+
+    if (query.scheduleType) {
+      const scheduleType = String(query.scheduleType).trim().toUpperCase();
+
+      if (!SCHEDULE_TYPES.includes(scheduleType)) {
+        const error = new Error("Loại lịch làm việc không hợp lệ");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      filter.scheduleType = scheduleType;
     }
 
     if (query.startDate || query.endDate) {
@@ -292,10 +417,14 @@ class WorkingScheduleService {
       WorkingSchedule.countDocuments(filter),
     ]);
 
-    const data = await this.attachAttendanceSummaries(
+    const schedulesWithAttendance = await this.attachAttendanceSummaries(
       tenantId,
       workingSchedules,
       detail,
+    );
+    const data = await this.attachScheduleDayInfo(
+      tenantId,
+      schedulesWithAttendance,
     );
 
     return {
@@ -360,6 +489,7 @@ class WorkingScheduleService {
           workDate: "2026-07-01",
           startAt: "2026-07-01T01:00:00.000Z",
           endAt: "2026-07-01T05:00:00.000Z",
+          scheduleType: "NORMAL",
           status: "SCHEDULED"
         }
         */
@@ -371,6 +501,7 @@ class WorkingScheduleService {
         workDate,
         startAt,
         endAt,
+        scheduleType: schedule.scheduleType,
         status: "SCHEDULED",
       };
     });
@@ -378,6 +509,7 @@ class WorkingScheduleService {
 
     for (const schedule of schedules) {
       const key = [
+        schedule.scheduleType,
         schedule.shiftTemplateId,
         schedule.workDate.toISOString(),
         schedule.startAt.toISOString(),
@@ -403,9 +535,10 @@ class WorkingScheduleService {
     const schedulesToSave = [];
 
     for (const schedule of mergedSchedules) {
-      //check for already existing schedule with same shiftTemplateId, workDate, startAt, endAt and status not in ["CANCELLED", "DELETED"]
+      //check for already existing schedule with same scheduleType, shiftTemplateId, workDate, startAt, endAt and status not in ["CANCELLED", "DELETED"]
       const existingSchedule = await WorkingSchedule.findOne({
         tenantId,
+        scheduleType: schedule.scheduleType,
         shiftTemplateId: schedule.shiftTemplateId,
         workDate: schedule.workDate,
         startAt: schedule.startAt,
@@ -459,6 +592,7 @@ class WorkingScheduleService {
       startDate,
       endDate,
       status,
+      scheduleType,
     } = {},
   ) {
     if (!tenantId) {
@@ -468,7 +602,7 @@ class WorkingScheduleService {
     }
 
     const selectedFields =
-      "userId shiftTemplateId workDate startAt endAt status managedBy";
+      "userId shiftTemplateId workDate startAt endAt scheduleType status managedBy";
     const populatedFields = [
       {
         path: "userId",
@@ -481,7 +615,15 @@ class WorkingScheduleService {
 
     const result = await this.fetchWorkingSchedules({
       tenantId,
-      query: { userId, branchId, warehouseId, startDate, endDate, status },
+      query: {
+        userId,
+        branchId,
+        warehouseId,
+        startDate,
+        endDate,
+        status,
+        scheduleType,
+      },
       selectedFields,
       populatedFields,
       page,
@@ -539,9 +681,12 @@ class WorkingScheduleService {
       [schedule],
       true,
     );
+    const [scheduleWithDayInfo] = await this.attachScheduleDayInfo(tenantId, [
+      scheduleWithAttendance,
+    ]);
 
     return {
-      data: scheduleWithAttendance,
+      data: scheduleWithDayInfo,
       serverTime: now.toISOString(),
     };
   }
@@ -549,7 +694,7 @@ class WorkingScheduleService {
   async getMyWorkingSchedules(
     tenantId,
     userId,
-    { page, recordPerPage, startDate, endDate, status } = {},
+    { page, recordPerPage, startDate, endDate, status, scheduleType } = {},
   ) {
     const result = await this.getWorkingScheduleList(tenantId, {
       page,
@@ -558,6 +703,7 @@ class WorkingScheduleService {
       startDate,
       endDate,
       status,
+      scheduleType,
     });
 
     return {
@@ -574,7 +720,7 @@ class WorkingScheduleService {
   async getBranchWorkingSchedules(
     tenantId,
     branchId,
-    { page, recordPerPage, startDate, endDate, status } = {},
+    { page, recordPerPage, startDate, endDate, status, scheduleType } = {},
   ) {
     if (!branchId) {
       const error = new Error("Thiếu thông tin chi nhánh");
@@ -589,13 +735,14 @@ class WorkingScheduleService {
       startDate,
       endDate,
       status,
+      scheduleType,
     });
   }
 
   async getWarehouseWorkingSchedules(
     tenantId,
     warehouseId,
-    { page, recordPerPage, startDate, endDate, status } = {},
+    { page, recordPerPage, startDate, endDate, status, scheduleType } = {},
   ) {
     if (!warehouseId) {
       const error = new Error("Thiếu thông tin kho");
@@ -610,6 +757,7 @@ class WorkingScheduleService {
       startDate,
       endDate,
       status,
+      scheduleType,
     });
   }
 

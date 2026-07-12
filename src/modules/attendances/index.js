@@ -23,10 +23,11 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       allOf:
  *         - $ref: '#/components/schemas/AttendanceLocationRequest'
  *         - type: object
- *           required: [scheduleId, actualCheckinAt]
+ *           required: [actualCheckinAt]
  *           properties:
  *             scheduleId:
  *               type: string
+ *               description: Optional normal schedule anchor. If omitted, the current normal schedule is resolved from actualCheckinAt.
  *               example: 665aaa1234567890abcdef12
  *             actualCheckinAt:
  *               type: string

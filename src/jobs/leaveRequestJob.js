@@ -21,7 +21,9 @@ const expireOverduePendingRequest = async () => {
 
 const startLeaveRequestJob = () => {
   // Run every day at midnight
-    cron.schedule("0 1 0 * * *", expireOverduePendingRequest);
+  cron.schedule("0 1 0 1 * *", expireOverduePendingRequest, {
+    timezone: "Asia/Ho_Chi_Minh",
+  });
 };
 
 module.exports = {

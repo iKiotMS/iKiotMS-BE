@@ -29,19 +29,18 @@ const PaysheetSchema = new mongoose.Schema(
         required: true,
       },
       amountPerShift: Number,
-      amountPerHour: Number,
       salaryPerPeriod: Number,
-      standardWorkingDays: Number,
+      standardWorkingDaySalary: Number,
 
       rates: {
-        holiday: { type: Number, default: 1 },
-        specialHoliday: { type: Number, default: 1 },
+        weekend: { type: Number, default: 2 },
+        publicHoliday: { type: Number, default: 3 },
       },
     },
     overtime: {
-      normalDay: Number,
-      holiday: Number,
-      specialHoliday: Number,
+      normalDay: { type: Number, default: 1.5 },
+      weekend: { type: Number, default: 2 },
+      publicHoliday: { type: Number, default: 3 },
     },
     bonuses: [
       {
@@ -85,10 +84,6 @@ const PaysheetSchema = new mongoose.Schema(
           trim: true,
         },
         enable: { type: Boolean, default: false },
-        allowancesType: {
-          type: String,
-          enum: ["FIXED_DAILY", "FIXED_MONTHLY"],
-        },
         amountType: {
           type: String,
           enum: ["FIXED_AMOUNT", "PERCENTAGE"],
@@ -119,30 +114,19 @@ const PaysheetSchema = new mongoose.Schema(
         // ==========================================
         conditionType: {
           type: String,
-          enum: ["BY_OCCURRENCE", "BY_BLOCK", "BY_SALARY_COEFFICIENT"],
-          // Tương ứng: Theo số lần, Theo block, Theo hệ số lương
+          enum: ["BY_OCCURRENCE", "BY_BLOCK"],
+          // Tương ứng: Theo số lần hoặc theo block
         },
         blockMinutes: {
           type: Number,
           // Tương ứng input "[ 1 ] phút". Chỉ lưu giá trị nếu conditionType = 'BY_BLOCK'
         },
 
-        // ==========================================
-        // NHÓM 2: Dành cho FIXED (Cố định)
-        // ==========================================
-        amountType: {
-          type: String,
-          enum: ["FIXED_AMOUNT", "PERCENTAGE"],
-          // Tương ứng: VND, % Tổng thu nhập
-        },
-
-        // ==========================================
-        // TRƯỜNG DÙNG CHUNG: Giá trị giảm trừ
-        // ==========================================
         deductionValue: {
           type: Number,
-          // Tương ứng input: "Khoản giảm trừ".
-          // Sẽ lưu số tiền VND, hoặc con số % tùy theo các điều kiện trên.
+          required: true,
+          min: 0,
+          // Luôn là số tiền VND cố định.
         },
       },
     ],

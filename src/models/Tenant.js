@@ -34,6 +34,10 @@ const tenantSchema = new mongoose.Schema(
       accountName: { type: String, trim: true },
       sepayWebhookApiKey: { type: String, select: false }, // hidden by default
     },
+    workingPolicy: {
+      
+    }
+
   },
   { timestamps: true },
 );
