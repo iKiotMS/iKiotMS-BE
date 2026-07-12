@@ -18,6 +18,7 @@ module.exports = {
   CashFlow: require("./CashFlow"),
   StockMovementRequest: require("./StockMovementRequest"),
   Promotion: require("./Promotion"),
+  PromotionLog: require("./PromotionLog"),
   Notification: require("./Notification"),
   Attendance: require("./Attendance"),
   Holiday: require("./Holiday"),

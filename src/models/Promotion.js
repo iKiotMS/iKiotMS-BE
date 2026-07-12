@@ -7,24 +7,39 @@ const promotionSchema = new mongoose.Schema(
       ref: "Tenant",
       required: [true, "Tenant is required"],
     },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Branch",
+      default: null,
+    },
     promoName: {
       type: String,
       required: [true, "Promotion name is required"],
       trim: true,
     },
-    discountPercent: {
+    description: {
+      type: String,
+      trim: true,
+    },
+    discountType: {
+      type: String,
+      enum: ["PERCENT", "FIXED_AMOUNT"],
+      required: [true, "Discount type is required"],
+    },
+    discountValue: {
       type: Number,
-      required: [true, "Discount percent is required"],
-      min: [0, "Discount cannot be negative"],
-      max: [100, "Discount cannot exceed 100"],
+      required: [true, "Discount value is required"],
+      min: [0, "Discount value cannot be negative"],
     },
-    startDate: {
-      type: Date,
-      required: [true, "Start date is required"],
+    maxDiscountAmount: {
+      type: Number,
+      min: [0, "Max discount amount cannot be negative"],
+      default: null,
     },
-    endDate: {
-      type: Date,
-      required: [true, "End date is required"],
+    minOrderValue: {
+      type: Number,
+      min: [0, "Min order value cannot be negative"],
+      default: 0,
     },
     applicableRule: {
       type: {
@@ -35,8 +50,48 @@ const promotionSchema = new mongoose.Schema(
       categoryIds: [mongoose.Schema.Types.ObjectId],
       productItemIds: [mongoose.Schema.Types.ObjectId],
     },
+    startDate: {
+      type: Date,
+      required: [true, "Start date is required"],
+    },
+    endDate: {
+      type: Date,
+      required: [true, "End date is required"],
+    },
+    priority: {
+      type: Number,
+      default: 0,
+    },
+    stackable: {
+      type: Boolean,
+      default: false,
+    },
+    usageLimit: {
+      type: Number,
+      min: [1, "Usage limit must be at least 1"],
+      default: null,
+    },
+    usageLimitPerCustomer: {
+      type: Number,
+      min: [1, "Usage limit per customer must be at least 1"],
+      default: null,
+    },
+    usedCount: {
+      type: Number,
+      default: 0,
+      min: [0, "Used count cannot be negative"],
+    },
+    status: {
+      type: String,
+      enum: ["ACTIVE", "INACTIVE"],
+      default: "ACTIVE",
+    },
   },
   { timestamps: true },
 );
+
+promotionSchema.index({ tenantId: 1, status: 1 });
+promotionSchema.index({ tenantId: 1, branchId: 1 });
+promotionSchema.index({ tenantId: 1, startDate: 1, endDate: 1 });
 
 module.exports = mongoose.model("Promotion", promotionSchema);
