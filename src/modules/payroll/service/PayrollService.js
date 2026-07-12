@@ -122,10 +122,7 @@ class PayrollService {
       .map((schedule) => {
         return {
           ...schedule,
-          payableMinutes: this.getSchedulePayableMinutes(
-            schedule,
-            attendances,
-          ),
+          payableMinutes: this.getSchedulePayableMinutes(schedule, attendances),
         };
       })
       .filter((schedule) => schedule.payableMinutes > 0);
@@ -166,6 +163,8 @@ class PayrollService {
     const bonus = 0;
     const calculationWarnings = [];
 
+    //==============Allowance calc
+
     // Allowance chỉ tính các rule đang bật. Với PERCENTAGE, phần trăm được lấy
     // trên salaryPerPeriod; FIXED_AMOUNT được cộng nguyên giá trị cấu hình.
     const allowanceLines = (context.paySheet.allowances || [])
@@ -191,6 +190,9 @@ class PayrollService {
       (total, item) => total + item.amount,
       0,
     );
+
+    //==============Late Minutes Deuction calc
+
     // lateMinutes đã được attendance module tính sẵn sau khi áp dụng grace time.
     // Mỗi phần tử dương tương ứng một lần vi phạm để dùng cho BY_OCCURRENCE/BLOCK.
     const lateViolationMinutes = context.attendances
@@ -198,6 +200,8 @@ class PayrollService {
       .filter((minutes) => minutes > 0);
     // Về sớm chưa có field lưu sẵn nên được suy ra từ schedule.endAt và checkout.
     // Ưu tiên ghép bằng scheduleId; dữ liệu cũ thiếu scheduleId sẽ ghép theo ngày.
+
+    //=================Early Leave Deduction calc
 
     const earlyLeaveViolationMinutes = context.workingSchedules
       .filter((schedule) => schedule.scheduleType !== "OVERTIME")
@@ -236,9 +240,11 @@ class PayrollService {
         );
       })
       .filter((minutes) => minutes > 0);
+
     const enabledDeductions = (context.paySheet.deductions || []).filter(
       (item) => item.enable,
     );
+
     // Chỉ nhận deduction fixed amount theo schema mới. Rule percentage hoặc
     // BY_SALARY_COEFFICIENT cũ bị bỏ qua và trả warning để không trừ nhầm tiền.
     const supportedDeductions = enabledDeductions.filter(
@@ -252,45 +258,44 @@ class PayrollService {
       calculationWarnings.push("UNSUPPORTED_DEDUCTION_RULE");
     }
 
-    const deductionLines = supportedDeductions
-      .map((item) => {
-        let violationMinutes = [];
-        let units = 1;
+    const deductionLines = supportedDeductions.map((item) => {
+      let violationMinutes = [];
+      let units = 1;
 
-        if (item.deductionType === "LATE") {
-          violationMinutes = lateViolationMinutes;
-        } else if (item.deductionType === "EARLY_LEAVE") {
-          violationMinutes = earlyLeaveViolationMinutes;
-        }
+      if (item.deductionType === "LATE") {
+        violationMinutes = lateViolationMinutes;
+      } else if (item.deductionType === "EARLY_LEAVE") {
+        violationMinutes = earlyLeaveViolationMinutes;
+      }
 
-        if (item.deductionType !== "FIXED") {
-          // BY_OCCURRENCE: mỗi lần vi phạm = 1 unit.
-          // BY_BLOCK: mỗi lần được làm tròn lên riêng, ví dụ 16 phút/15 = 2 block.
-          units =
-            item.conditionType === "BY_BLOCK"
-              ? violationMinutes.reduce(
-                  (total, minutes) =>
-                    total + Math.ceil(minutes / item.blockMinutes),
-                  0,
-                )
-              : violationMinutes.length;
-        }
+      if (item.deductionType !== "FIXED") {
+        // BY_OCCURRENCE: mỗi lần vi phạm = 1 unit.
+        // BY_BLOCK: mỗi lần được làm tròn lên riêng, ví dụ 16 phút/15 = 2 block.
+        units =
+          item.conditionType === "BY_BLOCK"
+            ? violationMinutes.reduce(
+                (total, minutes) =>
+                  total + Math.ceil(minutes / item.blockMinutes),
+                0,
+              )
+            : violationMinutes.length;
+      }
 
-        return {
-          name: item.name,
-          deductionType: item.deductionType,
-          conditionType: item.conditionType || null,
-          blockMinutes:
-            item.conditionType === "BY_BLOCK" ? item.blockMinutes : null,
-          deductionValue: item.deductionValue,
-          violationMinutes: violationMinutes.reduce(
-            (total, minutes) => total + minutes,
-            0,
-          ),
-          units,
-          amount: units * (item.deductionValue || 0),
-        };
-      });
+      return {
+        name: item.name,
+        deductionType: item.deductionType,
+        conditionType: item.conditionType || null,
+        blockMinutes:
+          item.conditionType === "BY_BLOCK" ? item.blockMinutes : null,
+        deductionValue: item.deductionValue,
+        violationMinutes: violationMinutes.reduce(
+          (total, minutes) => total + minutes,
+          0,
+        ),
+        units,
+        amount: units * (item.deductionValue || 0),
+      };
+    });
     const deduction = deductionLines.reduce(
       (total, item) => total + item.amount,
       0,
@@ -301,6 +306,11 @@ class PayrollService {
     return {
       tenantId: context.user.tenantId,
       userId: context.user._id,
+      user: {
+        profile: context.user.profile,
+        email: context.user.email,
+        phoneNumber: context.user.phoneNumber,
+      },
       paySheetId: context.paySheet._id,
       periodStart,
       periodEnd,
@@ -332,7 +342,9 @@ class PayrollService {
     }
 
     const users = await User.find(userFilter)
-      .select("_id tenantId profile email role branchId warehouseId paySheetId")
+      .select(
+        "_id tenantId profile email phoneNumber role branchId warehouseId paySheetId",
+      )
       .lean();
 
     const targetUserIds = users.map((user) => user._id);
@@ -358,7 +370,7 @@ class PayrollService {
           tenantId,
           userId: { $in: targetUserIds },
           workDate: { $gte: periodStart, $lte: periodEnd },
-          status :{$nin:["CANCELLED","DELETED"]},
+          status: { $nin: ["CANCELLED", "DELETED"] },
         }).lean(),
 
         LeaveRequest.find({
@@ -807,7 +819,9 @@ class PayrollService {
       throw error;
     }
     if (payrollPeriod.status !== "DRAFT") {
-      const error = new Error("Chỉ được sửa phiếu lương khi kỳ lương ở trạng thái DRAFT");
+      const error = new Error(
+        "Chỉ được sửa phiếu lương khi kỳ lương ở trạng thái DRAFT",
+      );
       error.statusCode = 409;
       throw error;
     }
@@ -902,7 +916,10 @@ class PayrollService {
     }
     if (
       action === "SUBMIT" &&
-      (await Payslip.countDocuments({ tenantId, payrollPeriodId: periodId })) === 0
+      (await Payslip.countDocuments({
+        tenantId,
+        payrollPeriodId: periodId,
+      })) === 0
     ) {
       const error = new Error("Kỳ lương chưa có phiếu lương để gửi duyệt");
       error.statusCode = 422;
@@ -950,7 +967,10 @@ class PayrollService {
     // để việc gửi thông báo thất bại kéo theo cả thao tác chốt lương.
     if (action === "APPROVE" || action === "MARK_PAID") {
       try {
-        const payslips = await Payslip.find({ tenantId, payrollPeriodId: periodId })
+        const payslips = await Payslip.find({
+          tenantId,
+          payrollPeriodId: periodId,
+        })
           .select("_id userId")
           .lean();
 
@@ -961,7 +981,9 @@ class PayrollService {
             tenantId,
             recipientIds: [payslip.userId],
             type: paid ? "PAYSLIP_PAID" : "PAYSLIP_APPROVED",
-            title: paid ? "Lương đã được thanh toán" : "Phiếu lương đã được duyệt",
+            title: paid
+              ? "Lương đã được thanh toán"
+              : "Phiếu lương đã được duyệt",
             description: paid
               ? "Lương kỳ này đã được chi trả. Xem chi tiết phiếu lương của bạn."
               : "Phiếu lương kỳ này đã được duyệt.",

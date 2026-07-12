@@ -282,6 +282,24 @@ const PayrollController = require("./controller/PayrollController");
  *                       items:
  *                         type: object
  *                         properties:
+ *                           userId:
+ *                             type: string
+ *                             description: ID of the employee whose payroll is being previewed.
+ *                             example: 665abc1234567890abcdef12
+ *                           user:
+ *                             type: object
+ *                             description: Employee display information included only in the preview response.
+ *                             properties:
+ *                               profile:
+ *                                 $ref: '#/components/schemas/StaffProfile'
+ *                               email:
+ *                                 type: string
+ *                                 format: email
+ *                                 nullable: true
+ *                                 example: staff@example.com
+ *                               phoneNumber:
+ *                                 type: string
+ *                                 example: "0901234567"
  *                           allowance:
  *                             type: number
  *                             description: Total calculated fixed-amount and percentage allowances.
