@@ -2,6 +2,7 @@ const { User, Branch, Warehouse } = require("../../../models");
 const BaseService = require("../../../common/services/baseService");
 const { STAFF_ROLES } = require("../../../constants/role");
 const { createStaffDTO, updateStaffDTO } = require("../dto/StaffDTO");
+const UpdateAnnualLeaveDaysDTO = require("../dto/UpdateAnnualLeaveDaysDTO");
 const { validateRoleHierarchy } = require("../../../utils/permissionChecker");
 const {
   buildKeywordFilter,
@@ -472,6 +473,229 @@ class StaffService extends BaseService {
     return {
       message: "Staff updated successfully",
       data: updatedStaff,
+    };
+  }
+
+  async updateAnnualLeaveDays({
+    tenantId,
+    requesterId,
+    requesterRole,
+    requesterBranchId,
+    requesterWarehouseId,
+    staffId,
+    data,
+  }) {
+    checktenantId(tenantId);
+
+    const dto = new UpdateAnnualLeaveDaysDTO(data);
+    const validation = dto.validate();
+    if (!validation.isValid) {
+      const error = new Error("Dữ liệu số ngày nghỉ phép không hợp lệ");
+      error.statusCode = 400;
+      error.errors = validation.errors;
+      throw error;
+    }
+
+    const accessFilter = await this.buildStaffAccessFilter({
+      tenantId,
+      requesterId,
+      requesterRole,
+      requesterBranchId,
+      requesterWarehouseId,
+    });
+
+    const targetFilter = {
+      tenantId,
+      _id: staffId,
+      role: { $in: STAFF_ROLES },
+      status: { $ne: "DELETED" },
+      ...accessFilter,
+    };
+
+    const staff = await User.findOne(targetFilter).select(
+      "role leaveBalance",
+    );
+
+    if (!staff) {
+      const error = new Error(
+        "Không tìm thấy nhân viên hoặc bạn không có quyền cập nhật",
+      );
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (!validateRoleHierarchy(requesterRole, staff.role)) {
+      const error = new Error(
+        `Vai trò ${requesterRole} không có quyền cập nhật ngày phép của vai trò ${staff.role}`,
+      );
+      error.statusCode = 403;
+      throw error;
+    }
+
+    const currentAnnualLeaveDays =
+      staff.leaveBalance?.annualLeaveDays ?? 12;
+    const currentRemainingDays =
+      staff.leaveBalance?.remainingDays ?? currentAnnualLeaveDays;
+    const usedDays = currentAnnualLeaveDays - currentRemainingDays;
+
+    if (usedDays < 0) {
+      const error = new Error(
+        "Dữ liệu ngày phép hiện tại không hợp lệ: remainingDays lớn hơn annualLeaveDays",
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+
+    if (dto.annualLeaveDays < usedDays) {
+      const error = new Error(
+        `annualLeaveDays không được nhỏ hơn số ngày đã sử dụng (${usedDays})`,
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const nextRemainingDays = dto.annualLeaveDays - usedDays;
+    const updatedStaff = await User.findOneAndUpdate(
+      {
+        ...targetFilter,
+        "leaveBalance.annualLeaveDays": currentAnnualLeaveDays,
+        "leaveBalance.remainingDays": currentRemainingDays,
+      },
+      {
+        $set: {
+          "leaveBalance.annualLeaveDays": dto.annualLeaveDays,
+          "leaveBalance.remainingDays": nextRemainingDays,
+        },
+      },
+      { new: true, runValidators: true },
+    )
+      .select("-password")
+      .populate("branchId")
+      .populate("warehouseId");
+
+    if (!updatedStaff) {
+      const error = new Error(
+        "Số dư ngày phép vừa thay đổi; vui lòng tải lại và thử lại",
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+
+    return {
+      message: "Cập nhật số ngày nghỉ phép năm thành công",
+      data: updatedStaff,
+      leaveBalance: {
+        annualLeaveDays: dto.annualLeaveDays,
+        remainingDays: nextRemainingDays,
+        usedDays,
+      },
+    };
+  }
+
+  async createLeaveBalance({
+    tenantId,
+    requesterId,
+    requesterRole,
+    requesterBranchId,
+    requesterWarehouseId,
+    staffId,
+    data,
+  }) {
+    checktenantId(tenantId);
+
+    const dto = new UpdateAnnualLeaveDaysDTO(data);
+    const validation = dto.validate();
+    if (!validation.isValid) {
+      const error = new Error("Dữ liệu số ngày nghỉ phép không hợp lệ");
+      error.statusCode = 400;
+      error.errors = validation.errors;
+      throw error;
+    }
+
+    const accessFilter = await this.buildStaffAccessFilter({
+      tenantId,
+      requesterId,
+      requesterRole,
+      requesterBranchId,
+      requesterWarehouseId,
+    });
+
+    const targetFilter = {
+      tenantId,
+      _id: staffId,
+      role: { $in: STAFF_ROLES },
+      status: { $ne: "DELETED" },
+      ...accessFilter,
+    };
+
+    const staff = await User.findOne(targetFilter).select(
+      "role leaveBalance",
+    );
+
+    if (!staff) {
+      const error = new Error(
+        "Không tìm thấy nhân viên hoặc bạn không có quyền cập nhật",
+      );
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (!validateRoleHierarchy(requesterRole, staff.role)) {
+      const error = new Error(
+        `Vai trò ${requesterRole} không có quyền tạo số dư ngày phép cho vai trò ${staff.role}`,
+      );
+      error.statusCode = 403;
+      throw error;
+    }
+
+    const currentAnnualLeaveDays =
+      staff.leaveBalance?.annualLeaveDays ?? 12;
+    const currentRemainingDays =
+      staff.leaveBalance?.remainingDays ?? currentAnnualLeaveDays;
+    const usedDays = currentAnnualLeaveDays - currentRemainingDays;
+
+    if (usedDays !== 0) {
+      const error = new Error(
+        "Nhân viên đã sử dụng ngày phép; hãy dùng API PATCH để cập nhật quota mà không làm mất lịch sử",
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const updatedStaff = await User.findOneAndUpdate(
+      {
+        ...targetFilter,
+        "leaveBalance.annualLeaveDays": currentAnnualLeaveDays,
+        "leaveBalance.remainingDays": currentRemainingDays,
+      },
+      {
+        $set: {
+          "leaveBalance.annualLeaveDays": dto.annualLeaveDays,
+          "leaveBalance.remainingDays": dto.annualLeaveDays,
+        },
+      },
+      { new: true, runValidators: true },
+    )
+      .select("-password")
+      .populate("branchId")
+      .populate("warehouseId");
+
+    if (!updatedStaff) {
+      const error = new Error(
+        "Số dư ngày phép vừa thay đổi; vui lòng tải lại và thử lại",
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+
+    return {
+      message: "Khởi tạo số dư ngày nghỉ phép thành công",
+      data: updatedStaff,
+      leaveBalance: {
+        annualLeaveDays: dto.annualLeaveDays,
+        remainingDays: dto.annualLeaveDays,
+        usedDays: 0,
+      },
     };
   }
 

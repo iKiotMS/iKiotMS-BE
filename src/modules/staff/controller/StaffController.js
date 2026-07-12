@@ -86,6 +86,60 @@ class StaffController {
     }
   }
 
+  async updateAnnualLeaveDays(req, res) {
+    try {
+      const result = await StaffService.updateAnnualLeaveDays({
+        tenantId: req.user.tenantId,
+        requesterId: req.user.userId,
+        requesterRole: req.user.role,
+        requesterBranchId: req.user.branchId,
+        requesterWarehouseId: req.user.warehouseId,
+        staffId: req.params.staffId,
+        data: req.body,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        leaveBalance: result.leaveBalance,
+      });
+    } catch (error) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+        ...(error.errors && { errors: error.errors }),
+      });
+    }
+  }
+
+  async createLeaveBalance(req, res) {
+    try {
+      const result = await StaffService.createLeaveBalance({
+        tenantId: req.user.tenantId,
+        requesterId: req.user.userId,
+        requesterRole: req.user.role,
+        requesterBranchId: req.user.branchId,
+        requesterWarehouseId: req.user.warehouseId,
+        staffId: req.params.staffId,
+        data: req.body,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        leaveBalance: result.leaveBalance,
+      });
+    } catch (error) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+        ...(error.errors && { errors: error.errors }),
+      });
+    }
+  }
+
   async deleteStaff(req, res) {
     try {
       const tenantId = req.user.tenantId;
