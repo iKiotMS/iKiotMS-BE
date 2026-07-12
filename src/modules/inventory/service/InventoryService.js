@@ -157,7 +157,7 @@ class InventoryService {
           type: "INVENTORY_LOW_STOCK",
           title: "Cảnh báo tồn kho thấp",
           description: `${label} chỉ còn ${inventory.stock} (ngưỡng ${inventory.minStock}). Cân nhắc nhập thêm.`,
-          link: "/inventory",
+          link: "/products",
           referenceId: inventory._id,
         });
       }

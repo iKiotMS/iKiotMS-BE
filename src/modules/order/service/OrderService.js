@@ -74,8 +74,6 @@ class OrderService {
 
     const isSepay = paymentMethod === "SEPAY";
     const status = INSTANT_COMPLETE_METHODS.includes(paymentMethod) ? "COMPLETED" : "PENDING";
-    // Every order gets an ORD ref regardless of payment method, so an ORD prefix on a
-    // CashFlow row always means "sales revenue". Only SEPAY puts it in the QR.
     const orderRef = sepayService.generateOrderRef();
 
     const lowStockCrossings = [];

@@ -28,7 +28,7 @@ async function notifyStatusChange(subscriptions, { type, title, description }) {
       type,
       title,
       description,
-      link: "/pricing",
+      link: "/settings/billing",
       referenceId: sub._id,
     });
   }
@@ -114,7 +114,7 @@ async function sendExpiryReminders() {
         type: "SUBSCRIPTION_EXPIRING",
         title: "Gói dịch vụ sắp hết hạn",
         description: `Gói ${sub.planId?.planName || "dịch vụ"} của bạn sẽ hết hạn sau ${days} ngày. Gia hạn để không bị gián đoạn.`,
-        link: "/pricing",
+        link: "/settings/billing",
         referenceId: sub._id,
       });
 

@@ -151,10 +151,6 @@ class WorkingScheduleService {
       shiftTemplatesById[shiftTemplateId] = shiftTemplate;
     });
 
-    // {
-    //   "shiftTemplateId1": shiftTemplateObject,
-    //   "shiftTemplateId2": shiftTemplateObject
-    // }
     return shiftTemplatesById;
   }
 
@@ -480,20 +476,6 @@ class WorkingScheduleService {
       const scheduleUserIds = this.normalizeScheduleUserIds(schedule.userId);
 
       return {
-        /*
-        {
-          tenantId: "tenant1",
-          createdBy: "manager1",
-          managedBy: "manager1",
-          userId: ["staffA", "staffB"],
-          shiftTemplateId: "morningShift",
-          workDate: "2026-07-01",
-          startAt: "2026-07-01T01:00:00.000Z",
-          endAt: "2026-07-01T05:00:00.000Z",
-          scheduleType: "NORMAL",
-          status: "SCHEDULED"
-        }
-        */
         tenantId,
         createdBy,
         managedBy: createdBy,
@@ -536,7 +518,6 @@ class WorkingScheduleService {
     const schedulesToSave = [];
 
     for (const schedule of mergedSchedules) {
-      //check for already existing schedule with same scheduleType, shiftTemplateId, workDate, startAt, endAt and status not in ["CANCELLED", "DELETED"]
       const existingSchedule = await WorkingSchedule.findOne({
         tenantId,
         scheduleType: schedule.scheduleType,
@@ -592,7 +573,7 @@ class WorkingScheduleService {
         type: "SCHEDULE_ASSIGNED",
         title: "Bạn có lịch làm việc mới",
         description: "Quản lý vừa xếp ca cho bạn. Xem lịch làm việc để biết chi tiết.",
-        link: "/calendar",
+        link: "/staff/schedule",
       });
     } catch (error) {
       console.error(
@@ -657,11 +638,6 @@ class WorkingScheduleService {
       recordPerPage,
     });
 
-    // Data mẫu trả về:
-    // {
-    //   data: [{ _id: "...", userId: {...}, shiftTemplateId: {...}, status: "SCHEDULED" }],
-    //   pagination: { total: 20, page: 1, recordPerPage: 10, totalPages: 2 }
-    // }
     return {
       data: result.workingSchedules,
       pagination: result.pagination,
@@ -819,13 +795,6 @@ class WorkingScheduleService {
       throw error;
     }
 
-    // Data mẫu trả về:
-    // {
-    //   _id: "...",
-    //   userId: { phoneNumber: "0901234567", profile: {...}, role: "STAFF" },
-    //   shiftTemplateId: { name: "Ca hành chính", startTime: "08:00", endTime: "17:00" },
-    //   status: "SCHEDULED"
-    // }
     return schedule;
   }
 
@@ -909,10 +878,6 @@ class WorkingScheduleService {
       },
     );
 
-    // {
-    //   message: "Xóa lịch làm việc thành công",
-    //   data: { id: "665aaa1234567890abcdef12" }
-    // }
     return {
       message: "Xóa lịch làm việc thành công",
       data: {
