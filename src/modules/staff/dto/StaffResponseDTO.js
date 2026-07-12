@@ -7,6 +7,7 @@ class StaffResponseDTO {
         this.role = staff.role;
         this.status = staff.status;
         this.hireDate = staff.hireDate;
+        this.paySheetId = staff.paySheetId;
         this.branch = staff.branchId;
         this.warehouse = staff.warehouseId;
         this.profile = staff.profile;

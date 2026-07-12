@@ -119,6 +119,11 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *               type: string
  *               format: date
  *               example: 2026-06-12
+ *             paySheetId:
+ *               type: string
+ *               nullable: true
+ *               example: 665abc1234567890abcdef12
+ *               description: Paysheet assigned to the staff. Use null to remove the assignment.
  *             warehouseId:
  *               type: string
  *               example: null
