@@ -162,7 +162,8 @@ class SubscriptionController {
       const result = await SubscriptionService.initiateRenewal(tenantId);
       res.status(200).json({
         success: true,
-        message: "Renewal initiated. Scan QR or transfer with the reference code.",
+        message:
+          "Renewal initiated. Scan QR or transfer with the reference code.",
         data: result,
       });
     } catch (error) {
@@ -190,8 +191,8 @@ class SubscriptionController {
 
   async listAllInvoices(req, res) {
     try {
-      if (req.user.role !== 'SUPER_ADMIN') {
-        return res.status(403).json({ success: false, message: 'Forbidden' });
+      if (req.user.role !== "SUPER_ADMIN") {
+        return res.status(403).json({ success: false, message: "Forbidden" });
       }
       const invoices = await SubscriptionInvoice.find()
         .populate("planId", "planName planCode")
@@ -204,7 +205,6 @@ class SubscriptionController {
       res.status(500).json({ success: false, message: error.message });
     }
   }
-
 
   async getInvoiceStatus(req, res) {
     try {
@@ -295,8 +295,9 @@ class SubscriptionController {
         recipientIds: owners,
         type: "SUBSCRIPTION_ACTIVATED",
         title: "Gói dịch vụ đã được kích hoạt",
-        description: "Thanh toán của bạn đã được xác nhận, gói dịch vụ đang hoạt động.",
-        link: "/pricing",
+        description:
+          "Thanh toán của bạn đã được xác nhận, gói dịch vụ đang hoạt động.",
+        link: "/settings/billing",
         referenceId: invoice._id,
       });
 
@@ -308,7 +309,6 @@ class SubscriptionController {
       res.status(200).json({ success: false, message: error.message });
     }
   }
-
 }
 
 module.exports = new SubscriptionController();

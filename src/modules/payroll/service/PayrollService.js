@@ -987,7 +987,7 @@ class PayrollService {
             description: paid
               ? "Lương kỳ này đã được chi trả. Xem chi tiết phiếu lương của bạn."
               : "Phiếu lương kỳ này đã được duyệt.",
-            link: `/payroll/${payslip._id}`,
+            link: `/staffs/payroll/${payslip._id}`,
             referenceId: payslip._id,
           });
         }

@@ -591,8 +591,9 @@ class WorkingScheduleService {
         recipientIds: scheduledUserIds,
         type: "SCHEDULE_ASSIGNED",
         title: "Bạn có lịch làm việc mới",
-        description: "Quản lý vừa xếp ca cho bạn. Xem lịch làm việc để biết chi tiết.",
-        link: "/calendar",
+        description:
+          "Quản lý vừa xếp ca cho bạn. Xem lịch làm việc để biết chi tiết.",
+        link: "/staffs/schedule",
       });
     } catch (error) {
       console.error(
@@ -682,7 +683,7 @@ class WorkingScheduleService {
     }
 
     const now = new Date();
-    
+
     const schedule = await WorkingSchedule.findOne({
       tenantId,
       userId,
