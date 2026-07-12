@@ -87,7 +87,7 @@ class ProductController {
       const tenantId = req.user.tenantId;
       const { id } = req.params;
 
-      const product = await ProductService.getProductById(tenantId, id);
+      const product = await ProductService.getProductById(tenantId, id, req.query);
 
       res.status(200).json({
         success: true,
