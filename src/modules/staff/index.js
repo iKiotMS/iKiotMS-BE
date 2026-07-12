@@ -1,9 +1,9 @@
 const StaffController = require("./controller/StaffController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
 const { authorize } = require("../../middlewares/authorizationMiddleware");
-const {
-  requireActiveSubscription,
-} = require("../../middlewares/subscriptionMiddleware");
+const { requireActiveSubscription } = require("../../middlewares/subscriptionMiddleware");
+const { cacheResponse } = require("../../middlewares/cacheMiddleware");
+const { cacheKeys } = require("../../utils/cacheHelpers");
 
 /**
  * @openapi
@@ -65,8 +65,41 @@ const {
  *         branchId:
  *           type: string
  *           example: 665abc1234567890abcdef12
+ *         firstName:
+ *           type: string
+ *           example: An
+ *           description: Stored as profile.firstName by the DTO.
+ *         lastName:
+ *           type: string
+ *           example: Nguyen
+ *           description: Stored as profile.lastName by the DTO.
+ *         avatarUrl:
+ *           type: string
+ *           example: https://example.com/avatar.png
+ *           description: Stored as profile.avatarUrl by the DTO.
+ *         dob:
+ *           type: string
+ *           format: date
+ *           example: 2001-04-20
+ *           description: Stored as profile.dob by the DTO.
+ *         taxNumber:
+ *           type: string
+ *           example: TAX123456
+ *           description: Stored as profile.taxNumber by the DTO.
  *         profile:
- *           $ref: '#/components/schemas/StaffProfile'
+ *           type: object
+ *           description: The create DTO reads only identificationId, address, and gender from this nested object.
+ *           properties:
+ *             identificationId:
+ *               type: string
+ *               example: "079201000001"
+ *             address:
+ *               type: string
+ *               example: Ho Chi Minh City
+ *             gender:
+ *               type: string
+ *               enum: [MALE, FEMALE, OTHER]
+ *               example: MALE
  *     UpdateStaffRequest:
  *       type: object
  *       properties:
@@ -81,10 +114,16 @@ const {
  *               type: string
  *               enum: [BRANCH_MANAGER, WAREHOUSE_MANAGER, STAFF]
  *               example: STAFF
+ *               description: Manager role changes are not allowed through this endpoint. Use branch or warehouse manager assignment endpoints.
  *             hireDate:
  *               type: string
  *               format: date
  *               example: 2026-06-12
+ *             paySheetId:
+ *               type: string
+ *               nullable: true
+ *               example: 665abc1234567890abcdef12
+ *               description: Paysheet assigned to the staff. Use null to remove the assignment.
  *             warehouseId:
  *               type: string
  *               example: null
@@ -109,6 +148,13 @@ const {
  *           format: password
  *           minLength: 6
  *           example: "123456"
+ *     StaffManagerReplacementRequest:
+ *       type: object
+ *       properties:
+ *         replacementManagerId:
+ *           type: string
+ *           description: Required when deleting or deactivating a branch manager or warehouse manager. For branch managers, replacement must be an active staff member in the same branch. For warehouse managers, replacement can be any active staff member in the tenant.
+ *           example: 665abc1234567890abcdef12
  *     StaffRoleOption:
  *       type: object
  *       properties:
@@ -129,6 +175,15 @@ const {
  *           type: string
  *           enum: [INACTIVE, DELETED]
  *           example: INACTIVE
+ *     UpdateAnnualLeaveDaysRequest:
+ *       type: object
+ *       required: [annualLeaveDays]
+ *       properties:
+ *         annualLeaveDays:
+ *           type: number
+ *           minimum: 0
+ *           example: 15
+ *           description: New annual leave entitlement. Backend preserves used days and recalculates remainingDays automatically.
  *     Staff:
  *       type: object
  *       properties:
@@ -163,6 +218,11 @@ const {
  *             - type: object
  *         profile:
  *           $ref: '#/components/schemas/StaffProfile'
+ *         leaveBalance:
+ *           type: object
+ *           properties:
+ *             annualLeaveDays: { type: number, example: 15 }
+ *             remainingDays: { type: number, example: 8 }
  *     Pagination:
  *       type: object
  *       properties:
@@ -315,7 +375,7 @@ const {
  *     tags:
  *       - Staff
  *     summary: Update staff
- *     description: Update staff details. Password and phone number should not be changed through this endpoint.
+ *     description: Update staff details. Password, phone number, and manager role/workplace changes should not be changed through this endpoint.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -344,8 +404,8 @@ const {
  *   delete:
  *     tags:
  *       - Staff
- *     summary: Deactivate staff
- *     description: Soft delete a staff user by setting status to INACTIVE.
+ *     summary: Delete staff
+ *     description: Soft delete a staff user by setting status to DELETED. If the staff is a branch manager or warehouse manager, replacementManagerId is required and the replacement staff is promoted before deletion.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -354,9 +414,15 @@ const {
  *         required: true
  *         schema:
  *           type: string
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StaffManagerReplacementRequest'
  *     responses:
  *       200:
- *         description: Staff deactivated successfully
+ *         description: Staff deleted successfully
  *         content:
  *           application/json:
  *             schema:
@@ -381,6 +447,67 @@ const {
  *         description: Forbidden
  *       404:
  *         description: Staff not found
+ * /staff/{staffId}/leave-balance:
+ *   post:
+ *     tags: [Staff]
+ *     summary: Initialize a staff member's annual leave balance
+ *     description: Sets annualLeaveDays and remainingDays to the same initial value. Because the User schema currently creates a default 12/12 balance, this endpoint may replace that unused default. It rejects initialization after any leave days have been used; use PATCH instead in that case.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: staffId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateAnnualLeaveDaysRequest'
+ *     responses:
+ *       201:
+ *         description: Leave balance initialized successfully
+ *       400:
+ *         description: Invalid annualLeaveDays
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden by role hierarchy or workplace scope
+ *       404:
+ *         description: Staff not found in the allowed scope
+ *       409:
+ *         description: Leave days were already used or the balance changed concurrently
+ *   patch:
+ *     tags: [Staff]
+ *     summary: Update a staff member's annual leave entitlement
+ *     description: Preserves the number of used leave days and atomically recalculates remainingDays. For example, changing 12 annual / 5 remaining to 15 annual produces 8 remaining. Rejects a new entitlement lower than the number of days already used.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: staffId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateAnnualLeaveDaysRequest'
+ *     responses:
+ *       200:
+ *         description: Annual leave entitlement and remaining balance updated successfully
+ *       400:
+ *         description: Invalid annualLeaveDays or entitlement is lower than used days
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden by role hierarchy or workplace scope
+ *       404:
+ *         description: Staff not found in the allowed scope
+ *       409:
+ *         description: Existing balance is inconsistent or changed concurrently
  * /staff/{staffId}/account:
  *   post:
  *     tags:
@@ -468,7 +595,7 @@ const {
  *     tags:
  *       - Staff
  *     summary: Deactivate staff account
- *     description: Remove the staff password and set status to INACTIVE.
+ *     description: Remove the staff password and set status to INACTIVE. If the staff is a branch manager or warehouse manager, replacementManagerId is required and the replacement staff is promoted before deactivation.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -477,6 +604,12 @@ const {
  *         required: true
  *         schema:
  *           type: string
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StaffManagerReplacementRequest'
  *     responses:
  *       200:
  *         description: Staff account deactivated successfully
@@ -528,6 +661,20 @@ function registerStaffModule(app) {
     StaffController.updateStaff.bind(StaffController),
   );
 
+  app.patch(
+    "/staff/:staffId/leave-balance",
+    verifyJwt,
+    authorize("staff", ["update"]),
+    StaffController.updateAnnualLeaveDays.bind(StaffController),
+  );
+
+  app.post(
+    "/staff/:staffId/leave-balance",
+    verifyJwt,
+    authorize("staff", ["update"]),
+    StaffController.createLeaveBalance.bind(StaffController),
+  );
+
   app.post(
     "/staff/:staffId/account",
     verifyJwt,
@@ -560,6 +707,7 @@ function registerStaffModule(app) {
     "/staff/roles",
     verifyJwt,
     authorize("staff", "read"),
+    cacheResponse((req) => cacheKeys.staffRoles(req.user.role), 3600),
     StaffController.getAvailableRoles.bind(StaffController),
   );
 

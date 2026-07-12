@@ -1,5 +1,7 @@
 const WarehouseController = require("./controller/WarehouseController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
+const { cacheResponse } = require("../../middlewares/cacheMiddleware");
+const { cacheKeys } = require("../../utils/cacheHelpers");
 
 /**
  * @openapi
@@ -103,6 +105,43 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *       200:
  *         description: Warehouse updated
  *
+ * /warehouses/{id}/manager:
+ *   patch:
+ *     tags:
+ *       - Warehouse
+ *     summary: Change warehouse manager
+ *     description: Tenant owner assigns any active staff member in the tenant as warehouse manager. The current warehouse manager is demoted to staff.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - staffId
+ *             properties:
+ *               staffId:
+ *                 type: string
+ *                 example: 665abc1234567890abcdef12
+ *     responses:
+ *       200:
+ *         description: Warehouse manager updated successfully
+ *       400:
+ *         description: Validation failed
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only tenant owner can change warehouse manager
+ *       404:
+ *         description: Warehouse not found
+ *
  * /warehouses/{id}/delete:
  *   delete:
  *     tags:
@@ -120,18 +159,49 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Warehouse deleted
  */
 const registerWarehouseModule = (app) => {
-  const warehouseRoutes = [
-    { method: "post", path: "/warehouses", handler: WarehouseController.create.bind(WarehouseController), protected: true },
-    { method: "get", path: "/warehouses", handler: WarehouseController.getList.bind(WarehouseController), protected: true },
-    { method: "get", path: "/warehouses/:id", handler: WarehouseController.getById.bind(WarehouseController), protected: true },
-    { method: "patch", path: "/warehouses/:id", handler: WarehouseController.update.bind(WarehouseController), protected: true },
-    { method: "delete", path: "/warehouses/:id/delete", handler: WarehouseController.softDelete.bind(WarehouseController), protected: true },
-  ];
+  app.post(
+    "/warehouses",
+    verifyJwt,
+    WarehouseController.create.bind(WarehouseController),
+  );
 
-  warehouseRoutes.forEach((route) => {
-    const handlers = route.protected ? [verifyJwt, route.handler] : [route.handler];
-    app[route.method](route.path, ...handlers);
-  });
+  app.get(
+    "/warehouses",
+    verifyJwt,
+    cacheResponse(
+      (req) => cacheKeys.warehouseList(req.user.tenantId, req.query),
+      300,
+    ),
+    WarehouseController.getList.bind(WarehouseController),
+  );
+
+  app.get(
+    "/warehouses/:id",
+    verifyJwt,
+    cacheResponse(
+      (req) => cacheKeys.warehouseDetail(req.user.tenantId, req.params.id),
+      300,
+    ),
+    WarehouseController.getById.bind(WarehouseController),
+  );
+
+  app.patch(
+    "/warehouses/:id",
+    verifyJwt,
+    WarehouseController.update.bind(WarehouseController),
+  );
+
+  app.patch(
+    "/warehouses/:id/manager",
+    verifyJwt,
+    WarehouseController.assignManager.bind(WarehouseController),
+  );
+
+  app.delete(
+    "/warehouses/:id/delete",
+    verifyJwt,
+    WarehouseController.softDelete.bind(WarehouseController),
+  );
 
   console.log("✓ Warehouse module registered");
 };

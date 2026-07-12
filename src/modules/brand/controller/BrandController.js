@@ -1,9 +1,11 @@
 const BrandService = require("../service/BrandService");
+const { deleteByPattern, deleteKeys, cacheKeys } = require("../../../utils/cacheHelpers");
 
 class BrandController {
   async create(req, res) {
     try {
       const brand = await BrandService.create(req.body);
+      deleteByPattern("brands:list:*").catch(() => {});
       res.status(201).json({
         success: true,
         message: "Brand created successfully",
@@ -50,6 +52,8 @@ class BrandController {
   async update(req, res) {
     try {
       const brand = await BrandService.update(req.params.id, req.body);
+      deleteByPattern("brands:list:*").catch(() => {});
+      deleteKeys(cacheKeys.brandDetail(req.params.id)).catch(() => {});
       res.status(200).json({
         success: true,
         message: "Brand updated successfully",
@@ -66,6 +70,8 @@ class BrandController {
   async delete(req, res) {
     try {
       await BrandService.delete(req.params.id);
+      deleteByPattern("brands:list:*").catch(() => {});
+      deleteKeys(cacheKeys.brandDetail(req.params.id)).catch(() => {});
       res.status(200).json({
         success: true,
         message: "Brand deleted successfully",

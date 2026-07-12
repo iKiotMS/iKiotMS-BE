@@ -11,9 +11,10 @@
     "orders": ["read", "view_all"],
     "inventory": ["read", "view_all"],
     "subscriptions": ["read", "update", "manage"],
-    "promotions": ["create", "read", "update", "delete"],
+    "promotions": ["create", "read", "update", "delete", "calculate", "apply"],
     "notifications": ["create", "read", "update", "delete"],
     "reports": ["read", "export"],
+    "attendances": ["read"],
     "leaveRequests": ["create", "read", "update", "delete"]
   },
   "TENANT_OWNER": {
@@ -27,41 +28,55 @@
     "branches": ["create", "read", "update", "delete"],
     "warehouses": ["create", "read", "update", "delete"],
     "orders": ["read"],
-    "inventory": ["read"],
-    "promotions": ["create", "read", "update", "delete"],
+    "inventory": ["read", "update"],
+    "promotions": ["create", "read", "update", "delete", "calculate", "apply"],
     "reports": ["read", "export"],
     "paysheets": ["create", "read", "update", "delete"],
-    "schedules": ["create", "read", "update", "delete"],
-    "leaveRequests": ["read", "update", "delete", "read_all","approve","reject", "create_emergency","readBR","readWH"]
+    "schedules": ["create", "read", "read_all", "update", "delete", "readBR", "readWH"],
+    "stock_movement": ["create", "read", "update", "approve", "receive", "cancel"],
+    "attendances": ["read"],
+    "leaveRequests": ["read", "update", "delete", "read_all","approve","reject", "create_emergency","readBR","readWH"],
+    "payrollSettings": ["create", "read", "update"],
+    "payroll": ["read", "create", "update", "delete"],
+    "holidays": ["create", "read", "update", "delete"]
   },
   "BRANCH_MANAGER": {
     "users": ["read", "create_staff"],
-    "staff": ["create", "read", "update", "inactive", "suspend"],
+    "staff": ["create", "read", "update", "inactive", "suspend","delete"],
     "products": ["read"],
     "branches": ["read", "update"],
     "orders": ["create", "read", "update"],
     "inventory": ["read", "update"],
-    "promotions": ["read"],
+    "promotions": ["read", "calculate", "apply"],
     "reports": ["read"],
     "paysheets": ["create", "read", "update", "delete"],
-    "schedules": ["create", "read", "update", "delete"],
-    "leaveRequests": ["create", "readBR", "update", "read_mine", "cancel","approve","reject", "create_emergency"]
+    "stock_movement": ["create", "read", "update", "approve", "receive", "cancel"],
+    "schedules": ["create", "read", "readBR", "update", "delete"],
+    "attendances": ["read"],
+    "leaveRequests": ["create", "readBR", "update", "read_mine", "cancel","approve","reject", "create_emergency"],
+    "payslips": ["read_own"]
   },
   "WAREHOUSE_MANAGER": {
     "products": ["read"],
     "warehouses": ["read", "update"],
     "inventory": ["read", "update", "manage"],
-    "stock_movement": ["create", "read", "update"],
+    "stock_movement": ["create", "read", "update", "approve", "receive", "cancel"],
     "reports": ["read"],
-    "schedules": ["read"],
-    "leaveRequests": ["create", "readWH", "update", "read_mine", "cancel"]
+    "attendances": ["read"],
+    "schedules": ["read", "readWH"],
+    "leaveRequests": ["create", "readWH", "update", "read_mine", "cancel"],
+    "payslips": ["read_own"]
   },
   "STAFF": {
     "products": ["read"],
-    "orders": ["create", "read"],
+    "orders": ["create", "read", "pay_offline"],
     "inventory": ["read"],
     "branches": ["read"],
-    "leaveRequests": ["create", "read_mine","cancel"]
+    "promotions": ["read", "calculate", "apply"],
+    "schedules": ["read_own"],
+    "attendances": ["read_own", "create", "update"],
+    "leaveRequests": ["create", "read_mine","cancel"],
+    "payslips": ["read_own"]
   },
   "CUSTOMER": {
     "profile": ["read"]

@@ -5,9 +5,16 @@ const {
 const { Attendance } = require("../../../models");
 const WorkingSchedule = require("../../../models/WorkingSchedule");
 const StaffService = require("../../staff/service/StaffService");
-const { AttendanceDTO } = require("../dto/AttendanceDTO");
+const { CheckoutDTO } = require("../dto/CheckoutDTO");
+const { CheckinDTO } = require("../dto/CheckinDTO");
+const {
+  ALLOWED_EARLY_CHECKIN_MINUTES,
+} = require("../../../constants/PayrollConstants");
 
 class TakeAttendanceService {
+  //===============================================================================
+  //==================== Helper Functions ========================================
+  //===============================================================================
   calculateDistanceInMeters = (lat1, lon1, lat2, lon2) => {
     // Calculate the straight-line distance between two points using the Haversine formula.
     // Latitude/longitude are angles on the Earth, so we first convert degrees to radians.
@@ -105,8 +112,60 @@ class TakeAttendanceService {
     };
   }
 
+  getCheckInOpenAt(schedule) {
+    return new Date(
+      new Date(schedule.startAt).getTime() -
+        ALLOWED_EARLY_CHECKIN_MINUTES * 60 * 1000,
+    );
+  }
+
+  checkDate(actualCheckinAt, schedule) {
+    const checkInOpenAt = this.getCheckInOpenAt(schedule);
+
+    if (actualCheckinAt < checkInOpenAt || actualCheckinAt > schedule.endAt) {
+      const error = new Error(
+        "Nhân viên chỉ được check-in trong khoảng thời gian của ca làm và trước ca làm 30 phút",
+      );
+      error.statusCode = 422;
+      error.errors = {
+        actualCheckinAt,
+        checkInOpenAt,
+        scheduleStartAt: schedule.startAt,
+        scheduleEndAt: schedule.endAt,
+        allowedEarlyCheckinMinutes: ALLOWED_EARLY_CHECKIN_MINUTES,
+      };
+      throw error;
+    }
+  }
+
+  buildWorkDate(dateValue) {
+    const date = new Date(dateValue);
+    return new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+    );
+  }
+  async findNormalScheduleForCheckIn({ tenantId, userId, actualCheckinAt }) {
+    const workDate = this.buildWorkDate(actualCheckinAt);
+    const latestAllowedScheduleStartAt = new Date(
+      actualCheckinAt.getTime() + ALLOWED_EARLY_CHECKIN_MINUTES * 60 * 1000,
+    );
+
+    return WorkingSchedule.findOne({
+      tenantId,
+      userId,
+      scheduleType: "NORMAL",
+      status: "SCHEDULED",
+      workDate,
+      startAt: { $lte: latestAllowedScheduleStartAt },
+      endAt: { $gte: actualCheckinAt },
+    }).sort({ startAt: 1 });
+  }
+
+  //===============================================================================
+  //==================== Main Services ===========================================
+  //===============================================================================
   async checkIn(tenantId, userId, data) {
-    let newAttendanceRecord = new AttendanceDTO(tenantId, userId, data);
+    let newAttendanceRecord = new CheckinDTO(tenantId, userId, data);
     const validation = newAttendanceRecord.validate();
     if (!validation.isValid) {
       const error = new Error("Dữ liệu không hợp lệ");
@@ -115,30 +174,46 @@ class TakeAttendanceService {
       throw error;
     }
 
-    const scheduleId = data.scheduleId;
-    const schedule = await WorkingSchedule.findOne({
-      _id: scheduleId,
-      tenantId,
-      userId,
-      status: "SCHEDULED",
-    });
-    if (!schedule) {
-      const error = new Error("Lịch làm việc không tồn tại");
-      error.statusCode = 404;
-      throw error;
-    }
+    const workDate = this.buildWorkDate(newAttendanceRecord.actualCheckinAt);
 
     const existingAttendance = await Attendance.findOne({
       tenantId,
       userId,
-      scheduleId: schedule._id,
+      workDate,
+      status: "CHECKED_IN",
     });
 
     if (existingAttendance) {
-      const error = new Error("Nhân viên đã check-in cho lịch làm việc này");
+      const error = new Error("Nhân viên đã check-in trong ngày làm việc này");
       error.statusCode = 409;
       throw error;
     }
+
+    let schedule = null;
+
+    if (newAttendanceRecord.scheduleId) {
+      schedule = await WorkingSchedule.findOne({
+        _id: newAttendanceRecord.scheduleId,
+        tenantId,
+        userId,
+        scheduleType: "NORMAL",
+        status: "SCHEDULED",
+        workDate,
+      });
+    } else {
+      schedule = await this.findNormalScheduleForCheckIn({
+        tenantId,
+        userId,
+        actualCheckinAt: newAttendanceRecord.actualCheckinAt,
+      });
+    }
+
+    if (!schedule) {
+      const error = new Error("Không tìm thấy ca làm bình thường để check-in");
+      error.statusCode = 404;
+      throw error;
+    }
+    this.checkDate(newAttendanceRecord.actualCheckinAt, schedule);
 
     const staffWorkplace = await StaffService.getStaffWorkplace({
       tenantId,
@@ -155,8 +230,9 @@ class TakeAttendanceService {
     const attendance = await Attendance.create({
       tenantId,
       userId,
+      workDate,
       scheduleId: schedule._id,
-      actualCheckinAt: new Date(),
+      actualCheckinAt: newAttendanceRecord.actualCheckinAt,
       checkInLocation: {
         latitude: newAttendanceRecord.checkInLocation.latitude,
         longitude: newAttendanceRecord.checkInLocation.longitude,
@@ -170,6 +246,86 @@ class TakeAttendanceService {
     return {
       success: true,
       message: "Check-in thành công",
+      data: {
+        attendance,
+        geo: geoResult,
+      },
+    };
+  }
+
+  async checkOut(tenantId, userId, data) {
+    const checkoutRecord = new CheckoutDTO(tenantId, userId, data);
+    const validation = checkoutRecord.validate();
+    if (!validation.isValid) {
+      const error = new Error("Dữ liệu không hợp lệ");
+      error.statusCode = validation.statusCode;
+      error.errors = validation.errors;
+      throw error;
+    }
+
+    const attendance = await Attendance.findOne({
+      _id: checkoutRecord.attendanceId,
+      tenantId,
+      userId,
+    });
+
+    if (!attendance) {
+      const error = new Error("Attendance not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (attendance.status !== "CHECKED_IN") {
+      const error = new Error("Attendance is not in CHECKED_IN status");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const staffWorkplace = await StaffService.getStaffWorkplace({
+      tenantId,
+      staffId: userId,
+    });
+
+    const workplace = staffWorkplace?.workplace;
+    const geoResult = this.verifyStatus(workplace, {
+      latitude: checkoutRecord.checkOutLocation.latitude,
+      longitude: checkoutRecord.checkOutLocation.longitude,
+      accuracy: checkoutRecord.checkOutLocation.accuracy,
+    });
+
+    if (
+      attendance.actualCheckinAt &&
+      checkoutRecord.actualCheckoutAt < attendance.actualCheckinAt
+    ) {
+      const error = new Error("Thời gian check-out không thể trước check-in");
+      error.statusCode = 422;
+      throw error;
+    }
+
+    attendance.actualCheckoutAt = checkoutRecord.actualCheckoutAt;
+    attendance.workedMinutes = attendance.actualCheckinAt
+      ? Math.max(
+          0,
+          Math.floor(
+            (checkoutRecord.actualCheckoutAt - attendance.actualCheckinAt) /
+              60000,
+          ),
+        )
+      : 0;
+    attendance.checkOutLocation = {
+      latitude: checkoutRecord.checkOutLocation.latitude,
+      longitude: checkoutRecord.checkOutLocation.longitude,
+      accuracy: checkoutRecord.checkOutLocation.accuracy,
+      distance: geoResult.distance,
+      verificationStatus: geoResult.verificationStatus,
+    };
+    attendance.status = "CHECKED_OUT";
+
+    await attendance.save();
+
+    return {
+      success: true,
+      message: "Check-out thành công",
       data: {
         attendance,
         geo: geoResult,

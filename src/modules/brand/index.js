@@ -1,5 +1,7 @@
 const BrandController = require("./controller/BrandController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
+const { cacheResponse } = require("../../middlewares/cacheMiddleware");
+const { cacheKeys } = require("../../utils/cacheHelpers");
 
 /**
  * @openapi
@@ -94,8 +96,21 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  */
 const registerBrandModule = (app) => {
   app.post("/brands", verifyJwt, BrandController.create.bind(BrandController));
-  app.get("/brands", verifyJwt, BrandController.getList.bind(BrandController));
-  app.get("/brands/:id", verifyJwt, BrandController.getDetail.bind(BrandController));
+
+  app.get(
+    "/brands",
+    verifyJwt,
+    cacheResponse((req) => cacheKeys.brandList(req.query), 600),
+    BrandController.getList.bind(BrandController),
+  );
+
+  app.get(
+    "/brands/:id",
+    verifyJwt,
+    cacheResponse((req) => cacheKeys.brandDetail(req.params.id), 600),
+    BrandController.getDetail.bind(BrandController),
+  );
+
   app.patch("/brands/:id", verifyJwt, BrandController.update.bind(BrandController));
   app.delete("/brands/:id", verifyJwt, BrandController.delete.bind(BrandController));
 

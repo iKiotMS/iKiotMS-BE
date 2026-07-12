@@ -2,6 +2,8 @@ const WarehouseService = require("../service/WarehouseService");
 const CreateWarehouseRequestDTO = require("../dto/CreateWarehouseRequestDTO");
 const UpdateWarehouseRequestDTO = require("../dto/UpdateWarehouseRequestDTO");
 const WarehouseQueryDTO = require("../dto/WarehouseQueryDTO");
+const AssignWarehouseManagerDTO = require("../dto/AssignWarehouseManagerDTO");
+const { deleteByPattern, deleteKeys, cacheKeys } = require("../../../utils/cacheHelpers");
 
 class WarehouseController {
   async create(req, res) {
@@ -19,6 +21,8 @@ class WarehouseController {
       }
 
       const warehouse = await WarehouseService.createWarehouse(tenantId, dto);
+
+      await deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
 
       res.status(201).json({
         success: true,
@@ -102,6 +106,9 @@ class WarehouseController {
 
       const warehouse = await WarehouseService.updateWarehouse(tenantId, id, dto);
 
+      await deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
+      await deleteKeys(cacheKeys.warehouseDetail(tenantId, id)).catch(() => {});
+
       res.status(200).json({
         success: true,
         message: "Warehouse updated successfully",
@@ -123,6 +130,9 @@ class WarehouseController {
 
       const warehouse = await WarehouseService.softDeleteWarehouse(tenantId, id);
 
+      await deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
+      await deleteKeys(cacheKeys.warehouseDetail(tenantId, id)).catch(() => {});
+
       res.status(200).json({
         success: true,
         message: "Warehouse deleted successfully",
@@ -133,6 +143,50 @@ class WarehouseController {
       res.status(error.message === "Warehouse not found" ? 404 : 400).json({
         success: false,
         message: error.message || "Failed to delete warehouse",
+      });
+    }
+  }
+
+  async assignManager(req, res) {
+    try {
+      if (req.user.role !== "TENANT_OWNER") {
+        return res.status(403).json({
+          success: false,
+          message: "Only tenant owner can change warehouse manager",
+        });
+      }
+
+      const tenantId = req.user.tenantId;
+      const { id } = req.params;
+      const dto = new AssignWarehouseManagerDTO(req.body);
+      const validation = dto.validate();
+
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: validation.errors,
+        });
+      }
+
+      const result = await WarehouseService.assignWarehouseManager({
+        tenantId,
+        warehouseId: id,
+        staffId: dto.staffId,
+      });
+
+      await deleteByPattern(`warehouses:list:${tenantId}:*`).catch(() => {});
+      await deleteKeys(cacheKeys.warehouseDetail(tenantId, id)).catch(() => {});
+
+      res.status(200).json({
+        success: true,
+        message: "Warehouse manager updated successfully",
+        data: result,
+      });
+    } catch (error) {
+      res.status(error.message === "Warehouse not found" ? 404 : 400).json({
+        success: false,
+        message: error.message || "Failed to update warehouse manager",
       });
     }
   }

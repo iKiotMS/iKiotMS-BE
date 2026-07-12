@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const { User, RefreshToken, Tenant } = require("../../../models");
 const Subscription = require("../../../models/Subscription");
 const Plan = require("../../../models/Plan");
+const otpService = require("../../../services/otpService");
 
 class AuthService {
   async login(phoneNumber, password, userAgent) {
@@ -144,6 +145,7 @@ class AuthService {
       tenantName,
       tenantMainAddress,
       tenantTaxNumber,
+      otpCode,
     } = userData;
 
     const existingUser = await User.findOne({ phoneNumber });
@@ -155,6 +157,10 @@ class AuthService {
     if (existingTenant) {
       throw new Error("Tenant name already in use");
     }
+
+    // Verify the phone number was confirmed via the SMS OTP sent through eSMS
+    // before creating any records. In dev this is bypassed (see otpService).
+    await otpService.verifyOtp(phoneNumber, otpCode);
 
     const tenant = await Tenant.create({
       name: tenantName,
@@ -191,15 +197,76 @@ class AuthService {
     }
 
     let subscription = null;
+    let tenant = null;
 
     // If user is TENANT_OWNER, fetch subscription with plan details
     if (user.role === "TENANT_OWNER") {
       subscription = await Subscription.findOne({
         tenantId: user.tenantId,
-      }).populate("planId", "planName planCode price features").lean();
+      })
+        .populate("planId", "planName planCode price features")
+        .lean();
     }
 
-    return { user, subscription };
+    if (user.tenantId) {
+      tenant = await Tenant.findById(user.tenantId).lean();
+    }
+
+    return { user, subscription, tenant };
+  }
+
+  async updateProfile(userId, tenantId, data) {
+    const user = await User.findOne({ _id: userId, tenantId });
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const flatUpdate = {};
+
+    // 1. Handle root level fields (like email)
+    if (user.role === "TENANT_OWNER" && data.email !== undefined) {
+      if (data.email !== user.email) {
+        const existingEmail = await User.findOne({
+          tenantId,
+          email: data.email.toLowerCase().trim(),
+          _id: { $ne: userId },
+        });
+        if (existingEmail) {
+          throw new Error("Email already exists");
+        }
+      }
+      flatUpdate.email = data.email;
+    }
+
+    // 2. Handle nested profile fields based on role permissions
+    const tenantOnlyProfileFields = [
+      "firstName",
+      "lastName",
+      "identificationId",
+      "taxNumber",
+      "address",
+      "gender",
+      "dob",
+    ];
+    const publicProfileFields = ["avatarUrl"];
+
+    const allowedProfileFields = user.role === "TENANT_OWNER"
+      ? [...tenantOnlyProfileFields, ...publicProfileFields]
+      : publicProfileFields;
+
+    allowedProfileFields.forEach((field) => {
+      if (data.profile?.[field] !== undefined) {
+        flatUpdate[`profile.${field}`] = data.profile[field];
+      }
+    });
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: flatUpdate },
+      { new: true, runValidators: true },
+    ).select("-password");
+
+    return updatedUser;
   }
 }
 

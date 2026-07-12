@@ -1,66 +1,87 @@
 const mongoose = require("mongoose");
-const { allowedLeaveTypes } = require("../../../constants/leaveRequest");
 
 class CreateLeaveRequestDTO {
- constructor(tenantId, userId, data = {} ) {
+  constructor(tenantId, userId, data = {}) {
     this.tenantId = tenantId;
     this.userId = userId;
-    this.leaveType = data.leaveType;
     this.startDate = data.startDate;
     this.endDate = data.endDate;
     this.status = data.status || "PENDING";
     this.reason = data.reason ? data.reason.trim() : "";
- }  
+    this.handoverToUserId = data.handoverToUserId || null;
+  }
 
- validate(){
-    const errors = [];
+  validate() {
+    const errors = {};
 
     if (!this.tenantId || !mongoose.Types.ObjectId.isValid(this.tenantId)) {
-      errors.push("Valid tenantId is required");
+      errors.tenantId = "Tenant không hợp lệ";
     }
 
     if (!this.userId || !mongoose.Types.ObjectId.isValid(this.userId)) {
-      errors.push("Valid userId is required");
+      errors.userId = "Nhân viên không hợp lệ";
     }
 
-    if (!this.leaveType || typeof this.leaveType !== "string") {
-      errors.push("Leave type is required and must be a string");
-    } else if (!Object.values(allowedLeaveTypes).includes(this.leaveType)) {
-      errors.push(`Leave type must be one of: ${Object.values(allowedLeaveTypes).join(", ")}`);
-    }
 
-        if (!this.startDate) {
-        errors.push("Start date is required");
-        } else if (Number.isNaN(new Date(this.startDate).getTime())) {
-        errors.push("Start date must be a valid date");
+    const startDate = this.startDate ? new Date(this.startDate) : null;
+    const endDate = this.endDate ? new Date(this.endDate) : null;
+    const now = new Date();
+
+    if (!this.startDate) {
+      errors.startDate = "Ngày bắt đầu là bắt buộc";
+    } else if (Number.isNaN(startDate.getTime())) {
+      errors.startDate = "Ngày bắt đầu không hợp lệ";
     }
 
     if (!this.endDate) {
-      errors.push("End date is required");
-    } else if (Number.isNaN(new Date(this.endDate).getTime())) {
-      errors.push("End date must be a valid date");
+      errors.endDate = "Ngày kết thúc là bắt buộc";
+    } else if (Number.isNaN(endDate.getTime())) {
+      errors.endDate = "Ngày kết thúc không hợp lệ";
     }
 
     if (
-      this.startDate &&
-      this.endDate &&
-      !Number.isNaN(new Date(this.startDate).getTime()) &&
-      !Number.isNaN(new Date(this.endDate).getTime()) &&
-      new Date(this.endDate) < new Date(this.startDate)
+      startDate &&
+      endDate &&
+      !Number.isNaN(startDate.getTime()) &&
+      !Number.isNaN(endDate.getTime()) &&
+      endDate < startDate
     ) {
-      errors.push("End date cannot be before start date");
+      errors.endDate = "Ngày kết thúc không được trước ngày bắt đầu";
     }
 
-    if (!this.reason || typeof this.reason !== "string" || this.reason.trim() === "") {
-      errors.push("Reason is required and must be a non-empty string");
+    if (
+      startDate &&
+      !Number.isNaN(startDate.getTime()) &&
+      startDate < now
+    ) {
+      errors.startDate = "Ngày bắt đầu không được trước thời điểm hiện tại";
+    }
+
+    if (endDate && !Number.isNaN(endDate.getTime()) && endDate < now) {
+      errors.endDate = "Ngày kết thúc không được trước thời điểm hiện tại";
+    }
+
+    if (
+      !this.reason ||
+      typeof this.reason !== "string" ||
+      this.reason.trim() === ""
+    ) {
+      errors.reason = "Lý do nghỉ phép là bắt buộc";
+    }
+
+    if (
+      this.handoverToUserId &&
+      !mongoose.Types.ObjectId.isValid(this.handoverToUserId)
+    ) {
+      errors.handoverToUserId = "Nhân viên nhận bàn giao không hợp lệ";
     }
 
     return {
-      isValid: errors.length === 0,
-      statusCode: errors.length === 0 ? 200 : 400,
+      isValid: Object.keys(errors).length === 0,
+      statusCode: Object.keys(errors).length === 0 ? 200 : 400,
       errors,
     };
- }
+  }
 }
 
 module.exports = CreateLeaveRequestDTO;

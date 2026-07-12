@@ -158,6 +158,50 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Invalid status transition
  *       404:
  *         description: Order not found
+ * /orders/{id}/pay-offline:
+ *   post:
+ *     tags:
+ *       - Orders
+ *     summary: Record an offline payment for a pending SEPAY order
+ *     description: |
+ *       The customer abandoned the SePay QR and paid at the counter. Converts the
+ *       PENDING SEPAY order to COMPLETED with the given offline method and books an
+ *       INCOME CashFlow under that method, so SEPAY CashFlow rows always correspond
+ *       to a real bank transaction.
+ *
+ *       The original `paymentReference` (ORDxxxxxx) is retained as an audit trail. A
+ *       SePay webhook arriving afterwards no longer matches a PENDING SEPAY order, so
+ *       the transfer is ignored (and logged) rather than double-booked.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: [CASH, BANK_TRANSFER, MOMO, VNPAY]
+ *                 default: CASH
+ *               customerPay:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Amount handed over. Defaults to grandTotal; must not be less.
+ *               note:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Offline payment recorded; order COMPLETED and CashFlow created
+ *       400:
+ *         description: Underpaid, validation error, or order already paid/cancelled
+ *       404:
+ *         description: Order not found or no longer awaiting SePay payment
  * /webhook/sepay/order:
  *   post:
  *     tags:
@@ -204,6 +248,8 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *             type: object
  *             required: [name]
  *             properties:
+ *               customerCode:
+ *                 type: string
  *               name:
  *                 type: string
  *               phone:
@@ -238,9 +284,36 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         name: search
  *         schema: { type: string }
  *         description: Search by name or phone
+ *       - in: query
+ *         name: branchId
+ *         schema: { type: string }
+ *         description: Filter customers by branch ID
  *     responses:
  *       200:
  *         description: Paginated list of customers
+ *   delete:
+ *     tags:
+ *       - Customers
+ *     summary: Delete multiple customers
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Customers deleted
+ *       400:
+ *         description: Invalid request
  * /customers/{id}:
  *   get:
  *     tags:
@@ -276,6 +349,8 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *           schema:
  *             type: object
  *             properties:
+ *               customerCode:
+ *                 type: string
  *               name:
  *                 type: string
  *               phone:
@@ -293,6 +368,22 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Customer updated
  *       404:
  *         description: Customer not found
+ *   delete:
+ *     tags:
+ *       - Customers
+ *     summary: Delete a customer
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Customer deleted
+ *       404:
+ *         description: Customer not found
  */
 const registerOrderModule = (app) => {
   // Order routes
@@ -300,6 +391,7 @@ const registerOrderModule = (app) => {
   app.get("/orders", verifyJwt, authorize("orders", "read"), OrderController.getList.bind(OrderController));
   app.get("/orders/:id", verifyJwt, authorize("orders", "read"), OrderController.getDetail.bind(OrderController));
   app.patch("/orders/:id/status", verifyJwt, authorize("orders", "update"), OrderController.updateStatus.bind(OrderController));
+  app.post("/orders/:id/pay-offline", verifyJwt, authorize("orders", ["update", "pay_offline"]), OrderController.payOffline.bind(OrderController));
 
   // SePay order webhook (no auth — called by SePay)
   app.post("/webhook/sepay/order", OrderController.handleSepayOrderWebhook.bind(OrderController));
@@ -309,6 +401,8 @@ const registerOrderModule = (app) => {
   app.get("/customers", verifyJwt, CustomerController.getList.bind(CustomerController));
   app.get("/customers/:id", verifyJwt, CustomerController.getDetail.bind(CustomerController));
   app.patch("/customers/:id", verifyJwt, CustomerController.update.bind(CustomerController));
+  app.delete("/customers/:id", verifyJwt, CustomerController.delete.bind(CustomerController));
+  app.delete("/customers", verifyJwt, CustomerController.deleteMany.bind(CustomerController));
 
   console.log("✓ Order module registered");
 };

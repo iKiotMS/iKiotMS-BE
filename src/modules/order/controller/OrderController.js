@@ -1,6 +1,7 @@
 const OrderService = require("../service/OrderService");
 const CreateOrderDTO = require("../dto/CreateOrderDTO");
 const UpdateOrderStatusDTO = require("../dto/UpdateOrderStatusDTO");
+const PayOfflineOrderDTO = require("../dto/PayOfflineOrderDTO");
 const OrderQueryDTO = require("../dto/OrderQueryDTO");
 const sepayService = require("../../../services/sepayService");
 
@@ -69,6 +70,28 @@ class OrderController {
     }
   }
 
+  async payOffline(req, res) {
+    try {
+      const { tenantId, userId } = req.user;
+      const dto = new PayOfflineOrderDTO(req.body);
+      const { isValid, errors } = dto.validate();
+      if (!isValid) {
+        return res.status(400).json({ success: false, message: "Validation failed", errors });
+      }
+
+      const order = await OrderService.payOfflineForSepayOrder(
+        tenantId,
+        req.params.id,
+        userId,
+        dto,
+      );
+      res.status(200).json({ success: true, message: "Offline payment recorded", data: order });
+    } catch (error) {
+      const status = error.message.startsWith("Order not found") ? 404 : 400;
+      res.status(status).json({ success: false, message: error.message });
+    }
+  }
+
   async handleSepayOrderWebhook(req, res) {
     try {
       const payload = req.body;
@@ -77,7 +100,10 @@ class OrderController {
         return res.status(200).json({ success: true });
       }
 
-      const tenant = await sepayService.findTenantByWebhookKey(payload.apiKey);
+      const authHeader = req.headers["authorization"] || req.headers["Authorization"] || "";
+      const apiKey = authHeader.startsWith("Apikey ") ? authHeader.slice(7).trim() : null;
+
+      const tenant = await sepayService.findTenantByWebhookKey(apiKey);
       if (!tenant) {
         return res.status(200).json({ success: false, message: "Unknown API key" });
       }

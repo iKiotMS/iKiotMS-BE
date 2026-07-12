@@ -2,6 +2,7 @@ const GENDERS = ["MALE", "FEMALE", "OTHER"];
 
 class UpdateCustomerDTO {
   constructor(data = {}) {
+    this.customerCode = data.customerCode?.trim();
     this.name = data.name?.trim();
     this.phone = data.phone?.trim();
     this.gender = data.gender;
@@ -26,6 +27,7 @@ class UpdateCustomerDTO {
 
   toUpdateFields() {
     const fields = {};
+    if (this.customerCode !== undefined) fields.customerCode = this.customerCode;
     if (this.name !== undefined) fields.name = this.name;
     if (this.phone !== undefined) fields.phone = this.phone;
     if (this.gender !== undefined) fields.gender = this.gender;

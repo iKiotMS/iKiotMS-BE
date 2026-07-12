@@ -1,6 +1,5 @@
 const PAY_TYPES = [
   "PAY_BY_SHIFT",
-  "PAY_BY_HOUR",
   "STANDARD_WORKING_DAY",
   "FIXED",
 ];
@@ -15,12 +14,10 @@ const BONUS_CALCULATION_TYPES = [
   "COLLECTED_REVENUE",
 ];
 const AMOUNT_TYPES = ["FIXED_AMOUNT", "PERCENTAGE"];
-const ALLOWANCE_TYPES = ["FIXED_DAILY", "FIXED_MONTHLY"];
 const DEDUCTION_TYPES = ["LATE", "EARLY_LEAVE", "FIXED"];
 const DEDUCTION_CONDITION_TYPES = [
   "BY_OCCURRENCE",
   "BY_BLOCK",
-  "BY_SALARY_COEFFICIENT",
 ];
 
 const isNumber = (value) => {
@@ -54,12 +51,18 @@ class PaySheetDTO {
     return {
       payType: basicPay?.payType,
       amountPerShift: basicPay?.amountPerShift,
-      amountPerHour: basicPay?.amountPerHour,
       salaryPerPeriod: basicPay?.salaryPerPeriod,
-      standardWorkingDays: basicPay?.standardWorkingDays,
+      standardWorkingDaySalary: basicPay?.standardWorkingDaySalary,
       rates: {
-        holiday: basicPay?.rates?.holiday ?? 1,
-        specialHoliday: basicPay?.rates?.specialHoliday ?? 1,
+        weekend:
+          basicPay?.rates?.weekend ??
+          basicPay?.rates?.sunday ??
+          basicPay?.rates?.holiday ??
+          2,
+        publicHoliday:
+          basicPay?.rates?.publicHoliday ??
+          basicPay?.rates?.specialHoliday ??
+          3,
       },
     };
   }
@@ -67,8 +70,10 @@ class PaySheetDTO {
   mapOvertime(overtime = {}) {
     return {
       normalDay: overtime?.normalDay ?? 1.5,
-      holiday: overtime?.holiday ?? 2,
-      specialHoliday: overtime?.specialHoliday ?? 3,
+      weekend:
+        overtime?.weekend ?? overtime?.sunday ?? overtime?.holiday ?? 2,
+      publicHoliday:
+        overtime?.publicHoliday ?? overtime?.specialHoliday ?? 3,
     };
   }
 
@@ -103,7 +108,6 @@ class PaySheetDTO {
       ? allowances.map((allowance) => ({
           name: allowance.name?.trim(),
           enable: allowance.enable ?? false,
-          allowancesType: allowance.allowancesType,
           amountType: allowance.amountType,
           amountValue: allowance.amountValue,
         }))
@@ -122,7 +126,6 @@ class PaySheetDTO {
           deductionType: deduction.deductionType,
           conditionType: deduction.conditionType,
           blockMinutes: deduction.blockMinutes,
-          amountType: deduction.amountType,
           deductionValue: deduction.deductionValue,
         }))
       : [];
@@ -168,9 +171,8 @@ class PaySheetDTO {
     const {
       payType,
       amountPerShift,
-      amountPerHour,
       salaryPerPeriod,
-      standardWorkingDays,
+      standardWorkingDaySalary,
       rates,
     } = this.basicPay;
 
@@ -178,31 +180,27 @@ class PaySheetDTO {
       errors.push("Lương mỗi ca phải lớn hơn 0");
     }
 
-    if (payType === "PAY_BY_HOUR" && !isPositiveNumber(amountPerHour)) {
-      errors.push("Lương mỗi giờ phải lớn hơn 0");
+    if (payType === "STANDARD_WORKING_DAY") {
+      if (!isPositiveNumber(standardWorkingDaySalary)) {
+        errors.push("Lương một ngày công chuẩn phải lớn hơn 0");
+      }
     }
 
-    if (payType === "STANDARD_WORKING_DAY") {
+    if (payType === "FIXED") {
       if (!isPositiveNumber(salaryPerPeriod)) {
         errors.push("Lương mỗi kỳ phải lớn hơn 0");
       }
 
-      if (!isPositiveNumber(standardWorkingDays)) {
-        errors.push("Số ngày công chuẩn phải lớn hơn 0");
-      }
     }
 
-    if (payType === "FIXED" && !isPositiveNumber(salaryPerPeriod)) {
-      errors.push("Lương mỗi kỳ phải lớn hơn 0");
+    if (rates && !isPositiveNumber(rates.weekend)) {
+      errors.push("Hệ số cuối tuần phải lớn hơn 0");
     }
 
-    if (rates && !isPositiveNumber(rates.holiday)) {
-      errors.push("Hệ số ngày nghỉ phải lớn hơn 0");
+    if (rates && !isPositiveNumber(rates.publicHoliday)) {
+      errors.push("Hệ số ngày lễ quốc gia phải lớn hơn 0");
     }
 
-    if (rates && !isPositiveNumber(rates.specialHoliday)) {
-      errors.push("Hệ số ngày lễ tết phải lớn hơn 0");
-    }
   }
 
   validateOvertime(errors) {
@@ -210,13 +208,14 @@ class PaySheetDTO {
       errors.push("Hệ số làm thêm ngày thường phải lớn hơn 0");
     }
 
-    if (!isPositiveNumber(this.overtime.holiday)) {
-      errors.push("Hệ số làm thêm ngày nghỉ phải lớn hơn 0");
+    if (!isPositiveNumber(this.overtime.weekend)) {
+      errors.push("Hệ số làm thêm cuối tuần phải lớn hơn 0");
     }
 
-    if (!isPositiveNumber(this.overtime.specialHoliday)) {
-      errors.push("Hệ số làm thêm ngày lễ tết phải lớn hơn 0");
+    if (!isPositiveNumber(this.overtime.publicHoliday)) {
+      errors.push("Hệ số làm thêm ngày lễ quốc gia phải lớn hơn 0");
     }
+
   }
 
   validateBonuses(errors) {
@@ -287,10 +286,6 @@ class PaySheetDTO {
         errors.push(`${prefix}: tên phụ cấp là bắt buộc`);
       }
 
-      if (!ALLOWANCE_TYPES.includes(allowance.allowancesType)) {
-        errors.push(`${prefix}: loại phụ cấp không hợp lệ`);
-      }
-
       if (!AMOUNT_TYPES.includes(allowance.amountType)) {
         errors.push(`${prefix}: loại giá trị phụ cấp không hợp lệ`);
       }
@@ -347,23 +342,7 @@ class PaySheetDTO {
         }
       }
 
-      if (!AMOUNT_TYPES.includes(deduction.amountType)) {
-        errors.push(`${prefix}: loại giá trị giảm trừ không hợp lệ`);
-      }
-
-      if (
-        deduction.amountType === "PERCENTAGE" &&
-        !isValidPercentage(deduction.deductionValue)
-      ) {
-        errors.push(
-          `${prefix}: phần trăm giảm trừ phải nằm trong khoảng 0 đến 100`,
-        );
-      }
-
-      if (
-        deduction.amountType === "FIXED_AMOUNT" &&
-        !isNonNegativeNumber(deduction.deductionValue)
-      ) {
+      if (!isNonNegativeNumber(deduction.deductionValue)) {
         errors.push(`${prefix}: giá trị giảm trừ phải là số không âm`);
       }
     });

@@ -1,4 +1,5 @@
 const Warehouse = require("../../../models/Warehouse");
+const { User } = require("../../../models");
 const { WAREHOUSE_STATUS } = require("../../../constants/warehouseConstants");
 
 class WarehouseService {
@@ -78,6 +79,72 @@ class WarehouseService {
     }
 
     return warehouse;
+  }
+
+  async assignWarehouseManager({ tenantId, warehouseId, staffId }) {
+    const session = await User.startSession();
+
+    try {
+      let result;
+
+      await session.withTransaction(async () => {
+        const warehouse = await Warehouse.findOne({
+          _id: warehouseId,
+          tenantId,
+          status: { $ne: WAREHOUSE_STATUS.DELETED },
+        }).session(session);
+
+        if (!warehouse) {
+          throw new Error("Warehouse not found");
+        }
+
+        const newManager = await User.findOne({
+          _id: staffId,
+          tenantId,
+          role: "STAFF",
+          status: "ACTIVE",
+        }).session(session);
+
+        if (!newManager) {
+          throw new Error(
+            "New warehouse manager must be an active staff member in this tenant",
+          );
+        }
+
+        const currentManager = await User.findOne({
+          tenantId,
+          warehouseId,
+          role: "WAREHOUSE_MANAGER",
+          status: { $ne: "DELETED" },
+        }).session(session);
+
+        if (currentManager) {
+          currentManager.role = "STAFF";
+          await currentManager.save({ session });
+        }
+
+        newManager.role = "WAREHOUSE_MANAGER";
+        newManager.branchId = null;
+        newManager.warehouseId = warehouseId;
+        await newManager.save({ session });
+
+        const manager = await User.findById(newManager._id)
+          .select("-password")
+          .populate("branchId")
+          .populate("warehouseId")
+          .session(session)
+          .lean();
+
+        result = {
+          warehouseId,
+          manager,
+        };
+      });
+
+      return result;
+    } finally {
+      session.endSession();
+    }
   }
 }
 

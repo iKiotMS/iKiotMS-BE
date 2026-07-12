@@ -1,14 +1,15 @@
-class AttendanceDTO {
+class CheckinDTO {
   constructor(tenantId, userId, data = {}) {
     data = data || {};
 
     this.tenantId = tenantId;
     this.userId = userId;
-    this.scheduleId = data.scheduleId;
+    this.scheduleId = data.scheduleId || null;
+    this.actualCheckinAt = new Date(data.actualCheckinAt);
     this.checkInLocation = {
-      latitude: data.latitude,
-      longitude: data.longitude,
-      accuracy: data.accuracy,
+      latitude: data.checkInLocation?.latitude ?? data.latitude,
+      longitude: data.checkInLocation?.longitude ?? data.longitude,
+      accuracy: data.checkInLocation?.accuracy ?? data.accuracy,
     }
   }
 
@@ -20,8 +21,11 @@ class AttendanceDTO {
     if (!this.userId) {
       errors.push("Thiếu thông tin user");
     }
-    if (!this.scheduleId) {
-      errors.push("Thiếu lịch làm việc");
+    if (
+      !this.actualCheckinAt ||
+      Number.isNaN(this.actualCheckinAt.getTime())
+    ) {
+      errors.push("Thời gian check-in không hợp lệ");
     }
 
     if(this.checkInLocation.latitude === undefined || this.checkInLocation.latitude === null) {
@@ -52,4 +56,4 @@ class AttendanceDTO {
   }
 }
 
-module.exports = { AttendanceDTO };
+module.exports = { CheckinDTO };

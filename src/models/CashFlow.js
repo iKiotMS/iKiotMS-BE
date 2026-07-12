@@ -29,12 +29,35 @@ const cashFlowSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Order",
     },
+    supplierId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Supplier",
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    paymentReference: {
+      type: String,
+      trim: true,
+    },
+    sepayTransactionId: {
+      type: Number,
+    },
     description: {
       type: String,
       trim: true,
     },
   },
   { timestamps: true },
+);
+
+cashFlowSchema.index({ tenantId: 1, createdAt: -1 });
+cashFlowSchema.index({ tenantId: 1, branchId: 1, createdAt: -1 });
+
+cashFlowSchema.index(
+  { orderId: 1, flowType: 1 },
+  { unique: true, partialFilterExpression: { orderId: { $exists: true } } },
 );
 
 module.exports = mongoose.model("CashFlow", cashFlowSchema);

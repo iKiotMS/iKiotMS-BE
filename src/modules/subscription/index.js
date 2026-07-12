@@ -1,8 +1,57 @@
 const SubscriptionController = require("./controller/SubscriptionController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
+const { cacheResponse } = require("../../middlewares/cacheMiddleware");
+const { cacheKeys } = require("../../utils/cacheHelpers");
 
 /**
  * @openapi
+ * /plans:
+ *   get:
+ *     tags:
+ *       - Subscription
+ *     summary: List all available subscription plans
+ *     description: Returns all active plans sorted by price. No authentication required.
+ *     responses:
+ *       200:
+ *         description: Plans retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       planName:
+ *                         type: string
+ *                       planCode:
+ *                         type: string
+ *                       price:
+ *                         type: number
+ *                       billingCycle:
+ *                         type: string
+ *                         enum: [MONTHLY, YEARLY, NONE]
+ *                       maxBranches:
+ *                         type: number
+ *                       maxUsers:
+ *                         type: number
+ *                       maxProducts:
+ *                         type: number
+ *                       trialDays:
+ *                         type: number
+ *                       features:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *       500:
+ *         description: Server error
  * /subscription/free-trial:
  *   post:
  *     tags:
@@ -128,6 +177,50 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Bad request
  *       401:
  *         description: Unauthorized
+ * /subscription/renew/initiate:
+ *   post:
+ *     tags:
+ *       - Subscription
+ *     summary: Initiate renewal of current plan via SePay
+ *     description: Creates a pending invoice to renew the tenant's existing plan. Works for ACTIVE, PAST_DUE, and EXPIRED subscriptions. Returns payment reference for bank transfer.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Renewal invoice created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     invoiceId:
+ *                       type: string
+ *                     paymentReference:
+ *                       type: string
+ *                       example: IKMSA1B2C3
+ *                     amount:
+ *                       type: number
+ *                     plan:
+ *                       type: object
+ *                       properties:
+ *                         planCode:
+ *                           type: string
+ *                         planName:
+ *                           type: string
+ *                     qrDataUrl:
+ *                       type: string
+ *                     expiredAt:
+ *                       type: string
+ *                       format: date-time
+ *       400:
+ *         description: Bad request (trial plan or no subscription found)
+ *       401:
+ *         description: Unauthorized
  * /webhook/sepay:
  *   post:
  *     tags:
@@ -167,6 +260,12 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
 const registerSubscriptionModule = (app) => {
   const subscriptionRoutes = [
     {
+      method: "get",
+      path: "/plans",
+      handler: SubscriptionController.listPlans.bind(SubscriptionController),
+      protected: false,
+    },
+    {
       method: "post",
       path: "/subscription/free-trial",
       handler: SubscriptionController.assignFreeTrial.bind(
@@ -184,16 +283,24 @@ const registerSubscriptionModule = (app) => {
     },
     {
       method: "post",
-      path: "/subscription/upgrade/:tenantId",
-      handler: SubscriptionController.upgradePlan.bind(SubscriptionController),
-      protected: true,
-    },
-    {
-      method: "post",
       path: "/subscription/upgrade/initiate",
       handler: SubscriptionController.initiateUpgrade.bind(
         SubscriptionController,
       ),
+      protected: true,
+    },
+    {
+      method: "post",
+      path: "/subscription/renew/initiate",
+      handler: SubscriptionController.initiateRenewal.bind(
+        SubscriptionController,
+      ),
+      protected: true,
+    },
+    {
+      method: "post",
+      path: "/subscription/upgrade/:tenantId",
+      handler: SubscriptionController.upgradePlan.bind(SubscriptionController),
       protected: true,
     },
     {
@@ -205,12 +312,10 @@ const registerSubscriptionModule = (app) => {
       protected: false,
     },
     {
-      method: "post",
-      path: "/webhook/sepay/order",
-      handler: SubscriptionController.handleSepayOrderWebhook.bind(
-        SubscriptionController,
-      ),
-      protected: false,
+      method: "get",
+      path: "/subscription/invoices",
+      handler: SubscriptionController.listInvoices.bind(SubscriptionController),
+      protected: true,
     },
     {
       method: "get",
@@ -220,12 +325,24 @@ const registerSubscriptionModule = (app) => {
       ),
       protected: true,
     },
+    {
+      method: "get",
+      path: "/subscription/admin/invoices",
+      handler: SubscriptionController.listAllInvoices.bind(
+        SubscriptionController,
+      ),
+      protected: true,
+    },
   ];
 
   subscriptionRoutes.forEach((route) => {
-    const handlers = route.protected
-      ? [verifyJwt, route.handler]
-      : [route.handler];
+    const handlers = [];
+    if (route.protected) handlers.push(verifyJwt);
+    // Cache GET /plans for 24 h — plans only change when admin re-seeds the DB
+    if (route.path === "/plans") {
+      handlers.push(cacheResponse(() => cacheKeys.plansAll(), 86400));
+    }
+    handlers.push(route.handler);
 
     if (route.method === "post") {
       app.post(route.path, ...handlers);

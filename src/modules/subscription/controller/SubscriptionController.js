@@ -1,14 +1,19 @@
 const SubscriptionService = require("../service/SubscriptionService");
-const {
-  Plan,
-  SubscriptionInvoice,
-  Order,
-  CashFlow,
-} = require("../../../models");
+const { Plan, SubscriptionInvoice } = require("../../../models");
 const sepayService = require("../../../services/sepayService");
 const { emitToRoom } = require("../../../services/socketService");
+const NotificationService = require("../../../services/notificationService");
 
 class SubscriptionController {
+  async listPlans(req, res) {
+    try {
+      const plans = await SubscriptionService.listPlans();
+      res.status(200).json({ success: true, data: plans });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
   async assignFreeTrial(req, res) {
     try {
       const userId = req.user.userId;
@@ -25,7 +30,7 @@ class SubscriptionController {
       }
 
       const plan = await Plan.findOne({
-        planCode: "FREE_TRIAL",
+        planCode: "TRIAL",
         isActive: true,
       });
 
@@ -151,6 +156,56 @@ class SubscriptionController {
     }
   }
 
+  async initiateRenewal(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const result = await SubscriptionService.initiateRenewal(tenantId);
+      res.status(200).json({
+        success: true,
+        message:
+          "Renewal initiated. Scan QR or transfer with the reference code.",
+        data: result,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to initiate renewal",
+      });
+    }
+  }
+
+  async listInvoices(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const invoices = await SubscriptionInvoice.find({ tenantId })
+        .populate("planId", "planName planCode")
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+
+      res.status(200).json({ success: true, data: invoices });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  async listAllInvoices(req, res) {
+    try {
+      if (req.user.role !== "SUPER_ADMIN") {
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
+      const invoices = await SubscriptionInvoice.find()
+        .populate("planId", "planName planCode")
+        .populate("tenantId", "name phoneNumber")
+        .sort({ createdAt: -1 })
+        .lean();
+
+      res.status(200).json({ success: true, data: invoices });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
   async getInvoiceStatus(req, res) {
     try {
       const { invoiceId } = req.params;
@@ -234,88 +289,23 @@ class SubscriptionController {
         endDate: subscription.endDate,
       });
 
+      const owners = await NotificationService.tenantOwners(invoice.tenantId);
+      await NotificationService.notify({
+        tenantId: invoice.tenantId,
+        recipientIds: owners,
+        type: "SUBSCRIPTION_ACTIVATED",
+        title: "Gói dịch vụ đã được kích hoạt",
+        description:
+          "Thanh toán của bạn đã được xác nhận, gói dịch vụ đang hoạt động.",
+        link: "/settings/billing",
+        referenceId: invoice._id,
+      });
+
       res
         .status(200)
         .json({ success: true, message: "Subscription activated" });
     } catch (error) {
       console.error("SePay webhook error:", error);
-      res.status(200).json({ success: false, message: error.message });
-    }
-  }
-
-  // Called by SePay when money arrives in a tenant's bank account (order payment)
-  async handleSepayOrderWebhook(req, res) {
-    try {
-      const payload = req.body;
-
-      if (payload.transferType !== "in") {
-        return res.status(200).json({ success: true });
-      }
-
-      const tenant = await sepayService.findTenantByWebhookKey(payload.apiKey);
-      if (!tenant) {
-        return res
-          .status(200)
-          .json({ success: true, message: "Unknown API key" });
-      }
-
-      const paymentReference = sepayService.extractOrderRef(
-        payload.content ?? "",
-      );
-      if (!paymentReference) {
-        return res
-          .status(200)
-          .json({ success: true, message: "No order reference found" });
-      }
-
-      const order = await Order.findOne({
-        paymentReference,
-        status: "PENDING",
-        paymentMethod: "SEPAY",
-        tenantId: tenant._id,
-      });
-
-      if (!order) {
-        return res
-          .status(200)
-          .json({ success: true, message: "Order not found or already paid" });
-      }
-
-      if (payload.transferAmount < order.grandTotal) {
-        console.warn(
-          `SePay order: underpaid order ${order._id}. Expected ${order.grandTotal}, got ${payload.transferAmount}`,
-        );
-        return res
-          .status(200)
-          .json({ success: true, message: "Underpaid — ignored" });
-      }
-
-      order.status = "COMPLETED";
-      order.sepayTransactionId = payload.id;
-      await order.save();
-
-      await CashFlow.create({
-        tenantId: order.tenantId,
-        branchId: order.branchId,
-        orderId: order._id,
-        flowType: "INCOME",
-        amount: payload.transferAmount,
-        paymentMethod: "SEPAY",
-        description: `SePay - ${order.paymentReference}`,
-      });
-
-      // Notify FE: room = "order:<orderId>"
-      emitToRoom(`order:${order._id}`, "order:paid", {
-        orderId: order._id,
-        status: order.status,
-        paidAmount: payload.transferAmount,
-      });
-
-      res
-        .status(200)
-        .json({ success: true, message: "Order payment confirmed" });
-    } catch (error) {
-      console.error("SePay order webhook error:", error);
       res.status(200).json({ success: false, message: error.message });
     }
   }

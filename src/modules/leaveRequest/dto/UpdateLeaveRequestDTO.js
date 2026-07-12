@@ -1,6 +1,7 @@
 class UpdateLeaveRequestDTO {
   constructor(data = {}) {
-    this.leaveType = data.leaveType;
+    this.paidLeaveDays = data.paidLeaveDays !== undefined ? Number(data.paidLeaveDays) : undefined;
+    this.unpaidLeaveDays = data.unpaidLeaveDays !== undefined ? Number(data.unpaidLeaveDays) : undefined;
     this.startDate = data.startDate;
     this.endDate = data.endDate;
     this.reason = data.reason;
@@ -10,45 +11,60 @@ class UpdateLeaveRequestDTO {
   }
 
   validate() {
-    const errors = [];
+    const errors = {};
 
     if (
-      this.leaveType !== undefined &&
-      !["ANNUAL", "UNPAID", "SICK", "OTHER"].includes(this.leaveType)
+      this.paidLeaveDays !== undefined &&
+      (Number.isNaN(this.paidLeaveDays) || this.paidLeaveDays < 0)
     ) {
-      errors.push("Invalid leaveType");
+      errors.paidLeaveDays = "Số ngày nghỉ có lương phải là số không âm";
+    }
+
+    if (
+      this.unpaidLeaveDays !== undefined &&
+      (Number.isNaN(this.unpaidLeaveDays) || this.unpaidLeaveDays < 0)
+    ) {
+      errors.unpaidLeaveDays = "Số ngày nghỉ không lương phải là số không âm";
     }
 
     if (
       this.status !== undefined &&
-      !["PENDING", "APPROVED", "REJECTED", "CANCELLED", "EXPIRED", "DELETED"].includes(this.status)
+      ![
+        "PENDING",
+        "APPROVED",
+        "REJECTED",
+        "CANCELLED",
+        "EXPIRED",
+        "DELETED",
+      ].includes(this.status)
     ) {
-      errors.push("Invalid status");
+      errors.status = "Trạng thái đơn nghỉ phép không hợp lệ";
     }
 
     if (
       this.startDate !== undefined &&
       Number.isNaN(new Date(this.startDate).getTime())
     ) {
-      errors.push("startDate must be a valid date");
+      errors.startDate = "Ngày bắt đầu không hợp lệ";
     }
 
     if (
       this.endDate !== undefined &&
       Number.isNaN(new Date(this.endDate).getTime())
     ) {
-      errors.push("endDate must be a valid date");
+      errors.endDate = "Ngày kết thúc không hợp lệ";
     }
 
     if (
       this.reason !== undefined &&
       (typeof this.reason !== "string" || this.reason.trim() === "")
     ) {
-      errors.push("reason must be a non-empty string");
+      errors.reason = "Lý do nghỉ phép không được để trống";
     }
 
     return {
-      isValid: errors.length === 0,
+      isValid: Object.keys(errors).length === 0,
+      statusCode: Object.keys(errors).length === 0 ? 200 : 400,
       errors,
     };
   }
@@ -57,7 +73,8 @@ class UpdateLeaveRequestDTO {
     const updateData = {};
 
     [
-      "leaveType",
+      "paidLeaveDays",
+      "unpaidLeaveDays",
       "startDate",
       "endDate",
       "reason",

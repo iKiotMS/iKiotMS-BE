@@ -7,14 +7,24 @@ const { registerUploadModule } = require("./upload");
 const { registerProductModule } = require("./product");
 const { registerBrandModule } = require("./brand");
 const { registerCategoryModule } = require("./category");
+const { registerSupplierModule } = require("./supplier");
 const { registerBranchModule } = require("./branch");
 const { registerPayrollModule } = require("./payroll");
 const { registerWarehouseModule } = require("./warehouse");
 const { registerScheduleModule } = require("./schedule");
 const { registerInventoryModule } = require("./inventory");
+const { registerStockMovementModule } = require("./stock-movement");
 const { registerOrderModule } = require("./order");
 const { registerAttendanceModule } = require("./attendances");
 const { registerLeaveRequestModule } = require("./leaveRequest");
+const { registerHolidayModule } = require("./holiday");
+const { registerAIModule } = require("./ai");
+const { registerStatsModule } = require("./stats");
+const { registerAuditModule } = require("./audit");
+const { registerSystemNotificationModule } = require("./system-notification");
+const { registerTicketModule } = require("./ticket");
+const { registerNotificationModule } = require("./notification");
+const { registerPromotionModule } = require("./promotion");
 
 function registerModules(app) {
   registerAuthModule(app);
@@ -26,14 +36,24 @@ function registerModules(app) {
   registerProductModule(app);
   registerBrandModule(app);
   registerCategoryModule(app);
+  registerSupplierModule(app);
   registerBranchModule(app);
   registerPayrollModule(app);
   registerWarehouseModule(app);
   registerScheduleModule(app);
   registerInventoryModule(app);
+  registerStockMovementModule(app);
   registerOrderModule(app);
   registerAttendanceModule(app);
   registerLeaveRequestModule(app);
+  registerHolidayModule(app);
+  registerAIModule(app);
+  registerStatsModule(app);
+  registerAuditModule(app);
+  registerSystemNotificationModule(app);
+  registerTicketModule(app);
+  registerNotificationModule(app);
+  registerPromotionModule(app);
 }
 
 module.exports = { registerModules };

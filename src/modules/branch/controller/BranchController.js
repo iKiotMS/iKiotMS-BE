@@ -2,6 +2,8 @@ const BranchService = require("../service/BranchService");
 const CreateBranchRequestDTO = require("../dto/CreateBranchRequestDTO");
 const UpdateBranchRequestDTO = require("../dto/UpdateBranchRequestDTO");
 const BranchQueryDTO = require("../dto/BranchQueryDTO");
+const AssignBranchManagerDTO = require("../dto/AssignBranchManagerDTO");
+const { deleteByPattern, deleteKeys, cacheKeys } = require("../../../utils/cacheHelpers");
 
 class BranchController {
   async create(req, res) {
@@ -24,6 +26,8 @@ class BranchController {
         dto,
         subscription,
       );
+
+      await deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
 
       res.status(201).json({
         success: true,
@@ -107,6 +111,9 @@ class BranchController {
 
       const branch = await BranchService.updateBranch(tenantId, id, dto);
 
+      await deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
+      await deleteKeys(cacheKeys.branchDetail(tenantId, id)).catch(() => {});
+
       res.status(200).json({
         success: true,
         message: "Branch updated successfully",
@@ -128,6 +135,9 @@ class BranchController {
 
       const branch = await BranchService.softDeleteBranch(tenantId, id);
 
+      await deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
+      await deleteKeys(cacheKeys.branchDetail(tenantId, id)).catch(() => {});
+
       res.status(200).json({
         success: true,
         message: "Branch deleted successfully",
@@ -138,6 +148,50 @@ class BranchController {
       res.status(error.message === "Branch not found" ? 404 : 400).json({
         success: false,
         message: error.message || "Failed to delete branch",
+      });
+    }
+  }
+
+  async assignManager(req, res) {
+    try {
+      if (req.user.role !== "TENANT_OWNER") {
+        return res.status(403).json({
+          success: false,
+          message: "Only tenant owner can change branch manager",
+        });
+      }
+
+      const tenantId = req.user.tenantId;
+      const { id } = req.params;
+      const dto = new AssignBranchManagerDTO(req.body);
+      const validation = dto.validate();
+
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: validation.errors,
+        });
+      }
+
+      const result = await BranchService.assignBranchManager({
+        tenantId,
+        branchId: id,
+        staffId: dto.staffId,
+      });
+
+      await deleteByPattern(`branches:list:${tenantId}:*`).catch(() => {});
+      await deleteKeys(cacheKeys.branchDetail(tenantId, id)).catch(() => {});
+
+      res.status(200).json({
+        success: true,
+        message: "Branch manager updated successfully",
+        data: result,
+      });
+    } catch (error) {
+      res.status(error.message === "Branch not found" ? 404 : 400).json({
+        success: false,
+        message: error.message || "Failed to update branch manager",
       });
     }
   }

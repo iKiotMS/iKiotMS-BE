@@ -40,6 +40,7 @@ class StaffController {
 
       const result = await StaffService.getStaffList({
         tenantId: req.user.tenantId,
+        userId: req.user.userId,
         requesterId: req.user.userId,
         requesterRole: req.user.role,
         requesterBranchId: req.user.branchId,
@@ -67,10 +68,12 @@ class StaffController {
       const tenantId = req.user.tenantId;
       const userRole = req.user.role;
       const staffId = req.params.staffId;
+      const userId = req.user.userId;
       const data = this.getRequestData(req);
 
       const staff = await StaffService.updateStaff({
         tenantId,
+        userId,
         staffId,
         data,
         userRole,
@@ -83,16 +86,79 @@ class StaffController {
     }
   }
 
+  async updateAnnualLeaveDays(req, res) {
+    try {
+      const result = await StaffService.updateAnnualLeaveDays({
+        tenantId: req.user.tenantId,
+        requesterId: req.user.userId,
+        requesterRole: req.user.role,
+        requesterBranchId: req.user.branchId,
+        requesterWarehouseId: req.user.warehouseId,
+        staffId: req.params.staffId,
+        data: req.body,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        leaveBalance: result.leaveBalance,
+      });
+    } catch (error) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+        ...(error.errors && { errors: error.errors }),
+      });
+    }
+  }
+
+  async createLeaveBalance(req, res) {
+    try {
+      const result = await StaffService.createLeaveBalance({
+        tenantId: req.user.tenantId,
+        requesterId: req.user.userId,
+        requesterRole: req.user.role,
+        requesterBranchId: req.user.branchId,
+        requesterWarehouseId: req.user.warehouseId,
+        staffId: req.params.staffId,
+        data: req.body,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        leaveBalance: result.leaveBalance,
+      });
+    } catch (error) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+        ...(error.errors && { errors: error.errors }),
+      });
+    }
+  }
+
   async deleteStaff(req, res) {
     try {
       const tenantId = req.user.tenantId;
       const staffId = req.params.staffId;
+      const userId = req.user.userId;
+      const userRole = req.user.role;
+      const data = this.getRequestData(req);
 
-      const result = await StaffService.deleteStaff({ tenantId, staffId });
+      const result = await StaffService.deleteStaff({
+        tenantId,
+        userId,
+        userRole,
+        staffId,
+        replacementManagerId: data.replacementManagerId,
+      });
 
       res.status(200).json({ message: result.message, staff: result.data });
     } catch (error) {
-      return res.status(400).json({ error: error.message });
+      return res.status(error.statusCode || 400).json({ error: error.message });
     }
   }
 
@@ -100,10 +166,12 @@ class StaffController {
     try {
       const tenantId = req.user.tenantId;
       const staffId = req.params.staffId;
+      const userId = req.user.userId;
       const data = this.getRequestData(req);
 
       const result = await StaffService.createStaffAccount({
         tenantId,
+        userId,
         staffId,
         data,
       });
@@ -119,10 +187,12 @@ class StaffController {
     try {
       const tenantId = req.user.tenantId;
       const staffId = req.params.staffId;
+      const userId = req.user.userId;
       const data = this.getRequestData(req);
 
       const result = await StaffService.updateStaffAccountPassword({
         tenantId,
+        userId,
         staffId,
         data,
       });
@@ -138,15 +208,21 @@ class StaffController {
     try {
       const tenantId = req.user.tenantId;
       const staffId = req.params.staffId;
+      const userId = req.user.userId;
+      const userRole = req.user.role;
+      const data = this.getRequestData(req);
 
       const result = await StaffService.deactivateStaffAccount({
         tenantId,
+        userId,
+        userRole,
         staffId,
+        replacementManagerId: data.replacementManagerId,
       });
 
       res.status(200).json({ message: result.message, staff: result.data });
     } catch (error) {
-      return res.status(400).json({ error: error.message });
+      return res.status(error.statusCode || 400).json({ error: error.message });
     }
   }
 

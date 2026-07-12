@@ -28,8 +28,20 @@ const plans = [
   {
     planName: "Plus",
     planCode: "PLUS",
-    price: 0, // TODO: cập nhật giá
+    price: 99000, // VND/tháng
     billingCycle: "MONTHLY",
+    trialDays: 0,
+    maxBranches: 3,
+    maxUsers: 5,
+    maxProducts: 1000,
+    features: ALL_FEATURES,
+    isActive: true,
+  },
+  {
+    planName: "Plus Năm",
+    planCode: "PLUS_YEARLY",
+    price: 948000, // VND/năm (79.000đ/tháng, tiết kiệm 20% so với 99.000đ)
+    billingCycle: "YEARLY",
     trialDays: 0,
     maxBranches: 3,
     maxUsers: 5,
@@ -40,8 +52,20 @@ const plans = [
   {
     planName: "Pro",
     planCode: "PRO",
-    price: 0, // TODO: cập nhật giá
+    price: 299000, // VND/tháng
     billingCycle: "MONTHLY",
+    trialDays: 0,
+    maxBranches: -1, // unlimited
+    maxUsers: -1, // unlimited
+    maxProducts: -1, // unlimited
+    features: ALL_FEATURES,
+    isActive: true,
+  },
+  {
+    planName: "Pro Năm",
+    planCode: "PRO_YEARLY",
+    price: 2868000, // VND/năm (239.000đ/tháng, tiết kiệm 20% so với 299.000đ)
+    billingCycle: "YEARLY",
     trialDays: 0,
     maxBranches: -1, // unlimited
     maxUsers: -1, // unlimited

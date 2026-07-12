@@ -33,7 +33,7 @@ const options = {
       },
     },
   },
-  apis: ["./src/modules/**/*.js"],
+  apis: ["./src/modules/**/*.js", "./src/utils/**/*.js"],
 };
 
 const specs = swaggerJsdoc(options);
@@ -45,4 +45,4 @@ const setupSwagger = (app) => {
   );
 };
 
-module.exports = { setupSwagger };
+module.exports = { setupSwagger, specs };

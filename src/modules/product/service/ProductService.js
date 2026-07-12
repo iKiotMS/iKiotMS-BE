@@ -23,8 +23,14 @@ class ProductService {
       }
 
       try {
-        // 1. Validate SKU Uniqueness for all items
+        // 0. Validate SKU Uniqueness within the payload itself
         const skus = productData.items.map((item) => item.sku);
+        const uniqueSkus = new Set(skus);
+        if (uniqueSkus.size !== skus.length) {
+          throw new Error("Duplicate SKUs found in the request payload");
+        }
+
+        // 1. Validate SKU Uniqueness against Database
         const existingItems = await ProductItem.find({
           tenantId,
           sku: { $in: skus },
@@ -208,7 +214,8 @@ class ProductService {
     };
   }
 
-  async getProductById(tenantId, productId) {
+  async getProductById(tenantId, productId, query = {}) {
+    const { locationId, locationType } = query;
     const product = await Product.findOne({ _id: productId, tenantId }).lean();
     if (!product) {
       throw new Error("Product not found");
@@ -218,7 +225,12 @@ class ProductService {
 
     if (items.length > 0) {
       const itemIds = items.map((i) => i._id);
-      const inventories = await Inventory.find({ tenantId, productItemId: { $in: itemIds } }).lean();
+      
+      const invQuery = { tenantId, productItemId: { $in: itemIds } };
+      if (locationType) invQuery.locationType = locationType;
+      if (locationId) invQuery.locationId = locationId;
+
+      const inventories = await Inventory.find(invQuery).lean();
       
       const inventoryMap = {};
       inventories.forEach(inv => {

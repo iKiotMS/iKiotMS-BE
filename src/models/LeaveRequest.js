@@ -16,10 +16,15 @@ const leaveRequestSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
-    leaveType: {
-      type: String,
-      enum:["ANNUAL", "UNPAID","SICK","OTHER"],
-      trim: true,
+    paidLeaveDays: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    unpaidLeaveDays: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     startDate: {
       type: Date,
@@ -40,7 +45,11 @@ const leaveRequestSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    
+    handoverToUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   { timestamps: true },
 );
