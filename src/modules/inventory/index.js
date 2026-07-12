@@ -1,5 +1,6 @@
 const InventoryController = require("./controller/InventoryController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
+const { authorize } = require("../../middlewares/authorizationMiddleware");
 
 /**
  * @openapi
@@ -28,7 +29,7 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *       - name: isLowStock
  *         in: query
  *         schema: { type: boolean }
- *         description: Filter items with stock <= 10
+ *         description: Filter items at or below their own minStock threshold
  *       - name: search
  *         in: query
  *         schema: { type: string }
@@ -36,14 +37,53 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *     responses:
  *       200:
  *         description: List of inventory records
+ * /inventory/{id}/min-stock:
+ *   patch:
+ *     tags:
+ *       - Inventory
+ *     summary: Set the low-stock alert threshold for an inventory record
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [minStock]
+ *             properties:
+ *               minStock:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: 0 disables the low-stock alert for this item
+ *     responses:
+ *       200:
+ *         description: Threshold updated
+ *       404:
+ *         description: Inventory record not found
  */
 const registerInventoryModule = (app) => {
   const inventoryRoutes = [
     { method: "get", path: "/inventory", handler: InventoryController.getList.bind(InventoryController), protected: true },
+    {
+      method: "patch",
+      path: "/inventory/:id/min-stock",
+      handler: InventoryController.updateMinStock.bind(InventoryController),
+      protected: true,
+      authorize: ["update", "manage"],
+    },
   ];
 
   inventoryRoutes.forEach((route) => {
-    const handlers = route.protected ? [verifyJwt, route.handler] : [route.handler];
+    const handlers = [];
+    if (route.protected) handlers.push(verifyJwt);
+    if (route.authorize) handlers.push(authorize("inventory", route.authorize));
+    handlers.push(route.handler);
     app[route.method](route.path, ...handlers);
   });
 

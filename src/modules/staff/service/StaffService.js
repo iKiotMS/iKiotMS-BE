@@ -3,6 +3,7 @@ const BaseService = require("../../../common/services/baseService");
 const { STAFF_ROLES } = require("../../../constants/role");
 const { createStaffDTO, updateStaffDTO } = require("../dto/StaffDTO");
 const { validateRoleHierarchy } = require("../../../utils/permissionChecker");
+const NotificationService = require("../../../services/notificationService");
 const {
   buildKeywordFilter,
   buildStatusFilter,
@@ -498,6 +499,19 @@ class StaffService extends BaseService {
     await staff.save();
 
     const createdAccount = await this.getStaffAccountResponse(staff._id);
+
+    // Tài khoản vừa được kích hoạt — báo cho chính nhân viên đó.
+    // Không bao giờ đưa mật khẩu vào nội dung thông báo: nó được lưu vào DB và
+    // đẩy qua FCM, tức là rò ra hai nơi nằm ngoài tầm kiểm soát.
+    await NotificationService.notify({
+      tenantId,
+      recipientIds: [staff._id],
+      type: "STAFF_ACCOUNT_CREATED",
+      title: "Tài khoản của bạn đã được kích hoạt",
+      description: "Bạn đã có thể đăng nhập vào hệ thống iKiot.",
+      link: "/dashboard",
+      referenceId: staff._id,
+    });
 
     return {
       message: "Staff account created successfully",

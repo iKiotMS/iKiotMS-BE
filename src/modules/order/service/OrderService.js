@@ -10,6 +10,8 @@ const {
 } = require("../../../models");
 const sepayService = require("../../../services/sepayService");
 const { emitToRoom } = require("../../../services/socketService");
+const NotificationService = require("../../../services/notificationService");
+const InventoryService = require("../../inventory/service/InventoryService");
 const { attachUserName, USER_NAME_SELECT } = require("../../../utils/userName");
 
 const INSTANT_COMPLETE_METHODS = ["CASH", "BANK_TRANSFER", "MOMO", "VNPAY"];
@@ -76,6 +78,8 @@ class OrderService {
     // CashFlow row always means "sales revenue". Only SEPAY puts it in the QR.
     const orderRef = sepayService.generateOrderRef();
 
+    const lowStockCrossings = [];
+
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
@@ -105,11 +109,17 @@ class OrderService {
         { session },
       );
 
+      // Bán hàng cũng trừ kho, nên cũng phải theo dõi ngưỡng cảnh báo. Chỉ gom
+      // ở đây; cảnh báo được gửi sau khi transaction commit (xem bên dưới).
       for (const item of items) {
-        await Inventory.findOneAndUpdate(
+        const updated = await Inventory.findOneAndUpdate(
           { productItemId: item.productItemId, locationId: branchId, locationType: "branch" },
           { $inc: { stock: -item.quantity } },
-          { session },
+          { session, new: true },
+        );
+
+        lowStockCrossings.push(
+          InventoryService.lowStockCrossing(updated, -item.quantity),
         );
       }
 
@@ -133,6 +143,9 @@ class OrderService {
       }
 
       await session.commitTransaction();
+
+      // Sau commit: kho đã trừ thật, giờ mới cảnh báo mặt hàng vừa tụt ngưỡng.
+      await InventoryService.notifyLowStock(lowStockCrossings);
 
       let qrUrl;
       if (isSepay && tenant?.banking) {
@@ -433,6 +446,25 @@ class OrderService {
         status: order.status,
         paidAmount: transferAmount,
         paymentMethod: "SEPAY",
+      });
+
+      // Xác nhận từ SePay đến bất đồng bộ qua webhook — thu ngân có thể không
+      // còn nhìn màn hình, nên đây là chỗ push thật sự có giá trị. Báo cho nhân
+      // viên tạo đơn và quản lý chi nhánh.
+      const branchManagers = await NotificationService.managersOfLocation({
+        tenantId: order.tenantId,
+        locationId: order.branchId,
+        locationType: "branch",
+      });
+
+      await NotificationService.notify({
+        tenantId: order.tenantId,
+        recipientIds: [order.userId, ...branchManagers],
+        type: "ORDER_PAID",
+        title: "Khách đã thanh toán",
+        description: `Đơn hàng ${order.paymentReference} đã nhận được ${transferAmount.toLocaleString("vi-VN")}đ qua chuyển khoản.`,
+        link: `/sales/${order._id}`,
+        referenceId: order._id,
       });
 
       return order;

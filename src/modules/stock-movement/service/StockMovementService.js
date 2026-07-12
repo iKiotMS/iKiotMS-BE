@@ -1,8 +1,49 @@
 const mongoose = require("mongoose");
 const { StockMovementRequest, Supplier, Branch, Warehouse } = require("../../../models");
 const InventoryService = require("../../inventory/service/InventoryService");
+const NotificationService = require("../../../services/notificationService");
 
 class StockMovementService {
+  /**
+   * Gửi thông báo cho các bên liên quan tới một phiếu chuyển kho.
+   *
+   * Gọi SAU khi transaction đã commit — thông báo là kênh phụ, không được phép
+   * làm hỏng việc xuất/nhập kho. Người thực hiện hành động luôn bị loại khỏi
+   * danh sách nhận: không ai cần được báo về việc mình vừa làm.
+   *
+   * audience: "managers" (mặc định) báo quản lý địa điểm nhận, "creator" báo
+   * người tạo phiếu, "both" báo cả hai trong MỘT lần gửi — notify() tự dedupe
+   * nên người vừa là quản lý vừa là người tạo cũng chỉ nhận một thông báo.
+   */
+  async _notifyMovement(request, { actorId, type, title, description, audience = "managers" }) {
+    const { tenantId } = request;
+
+    const managers =
+      audience === "creator"
+        ? []
+        : await NotificationService.managersOfLocation({
+            tenantId,
+            locationId: request.toLocationId,
+            locationType: request.toLocationType,
+          });
+
+    const creator = audience === "managers" ? [] : [request.createdBy];
+
+    const filtered = [...creator, ...managers].filter(
+      (id) => String(id) !== String(actorId),
+    );
+
+    await NotificationService.notify({
+      tenantId,
+      recipientIds: filtered,
+      type,
+      title,
+      description,
+      link: `/stock-movements/${request._id}`,
+      referenceId: request._id,
+    });
+  }
+
   _checkLocationAuth(user, locationId, locationType) {
     if (user.role === "TENANT_OWNER") return true;
     if (user.role === "WAREHOUSE_MANAGER" && locationType === "warehouse" && user.warehouseId === locationId.toString()) return true;
@@ -84,6 +125,14 @@ class StockMovementService {
     });
     
     await request.save();
+
+    await this._notifyMovement(request, {
+      actorId: userId,
+      type: "STOCK_MOVEMENT_CREATED",
+      title: "Phiếu chuyển kho mới",
+      description: `Có phiếu ${movementType} mới cần bạn xử lý.`,
+    });
+
     return request;
   }
 
@@ -229,15 +278,22 @@ class StockMovementService {
          throw new Error(`Cannot ship from status ${request.status}`);
       }
 
+      // Gom các mặt hàng vừa tụt qua ngưỡng, nhưng chỉ gửi cảnh báo SAU commit.
+      const lowStockCrossings = [];
+
       if (request.movementType === "EXPORT" || request.movementType === "RETURN") {
         for (const item of request.details) {
-          await InventoryService.adjustStock(
+          const updated = await InventoryService.adjustStock(
             tenantId,
             request.fromLocationId,
             request.fromLocationType,
             item.productItemId,
             -item.quantity,
             session
+          );
+
+          lowStockCrossings.push(
+            InventoryService.lowStockCrossing(updated, -item.quantity),
           );
         }
       }
@@ -247,6 +303,16 @@ class StockMovementService {
 
       await session.commitTransaction();
       session.endSession();
+
+      await InventoryService.notifyLowStock(lowStockCrossings);
+
+      // Bên nhận cần biết hàng đang trên đường tới.
+      await this._notifyMovement(request, {
+        actorId: user.userId,
+        type: "STOCK_MOVEMENT_IN_TRANSIT",
+        title: "Hàng đang được chuyển tới",
+        description: "Một phiếu chuyển kho vừa được gửi đi, chờ bạn xác nhận nhận hàng.",
+      });
 
       return request;
     } catch (error) {
@@ -334,6 +400,15 @@ class StockMovementService {
 
       await session.commitTransaction();
       session.endSession();
+
+      // Người tạo phiếu cần biết hàng đã tới nơi.
+      await this._notifyMovement(request, {
+        actorId: user.userId,
+        type: "STOCK_MOVEMENT_RECEIVED",
+        title: "Phiếu chuyển kho đã được nhận",
+        description: "Bên nhận đã xác nhận nhận đủ hàng cho phiếu bạn tạo.",
+        audience: "creator",
+      });
 
       return request;
     } catch (error) {
@@ -431,6 +506,16 @@ class StockMovementService {
 
       await session.commitTransaction();
       session.endSession();
+
+      // Huỷ có thể do bên gửi HOẶC bên nhận thực hiện, nên báo cho cả hai phía
+      // trong một lần gửi. actorId lọc người bấm huỷ ra khỏi danh sách.
+      await this._notifyMovement(request, {
+        actorId: user.userId,
+        type: "STOCK_MOVEMENT_CANCELLED",
+        title: "Phiếu chuyển kho đã bị hủy",
+        description: "Một phiếu chuyển kho liên quan đến bạn đã bị hủy.",
+        audience: "both",
+      });
 
       return request;
     } catch (error) {

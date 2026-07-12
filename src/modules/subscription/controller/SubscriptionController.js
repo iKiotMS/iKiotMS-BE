@@ -2,6 +2,7 @@ const SubscriptionService = require("../service/SubscriptionService");
 const { Plan, SubscriptionInvoice } = require("../../../models");
 const sepayService = require("../../../services/sepayService");
 const { emitToRoom } = require("../../../services/socketService");
+const NotificationService = require("../../../services/notificationService");
 
 class SubscriptionController {
   async listPlans(req, res) {
@@ -286,6 +287,17 @@ class SubscriptionController {
         planId: subscription.planId,
         status: subscription.status,
         endDate: subscription.endDate,
+      });
+
+      const owners = await NotificationService.tenantOwners(invoice.tenantId);
+      await NotificationService.notify({
+        tenantId: invoice.tenantId,
+        recipientIds: owners,
+        type: "SUBSCRIPTION_ACTIVATED",
+        title: "Gói dịch vụ đã được kích hoạt",
+        description: "Thanh toán của bạn đã được xác nhận, gói dịch vụ đang hoạt động.",
+        link: "/pricing",
+        referenceId: invoice._id,
       });
 
       res

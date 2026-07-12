@@ -23,6 +23,7 @@ const { registerStatsModule } = require("./stats");
 const { registerAuditModule } = require("./audit");
 const { registerSystemNotificationModule } = require("./system-notification");
 const { registerTicketModule } = require("./ticket");
+const { registerNotificationModule } = require("./notification");
 
 function registerModules(app) {
   registerAuthModule(app);
@@ -50,6 +51,7 @@ function registerModules(app) {
   registerAuditModule(app);
   registerSystemNotificationModule(app);
   registerTicketModule(app);
+  registerNotificationModule(app);
 }
 
 module.exports = { registerModules };

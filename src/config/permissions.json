@@ -28,7 +28,7 @@
     "branches": ["create", "read", "update", "delete"],
     "warehouses": ["create", "read", "update", "delete"],
     "orders": ["read"],
-    "inventory": ["read"],
+    "inventory": ["read", "update"],
     "promotions": ["create", "read", "update", "delete"],
     "reports": ["read", "export"],
     "paysheets": ["create", "read", "update", "delete"],

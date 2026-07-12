@@ -2,6 +2,7 @@ const Ticket = require("../../../models/Ticket");
 const Tenant = require("../../../models/Tenant");
 const { createSystemNotification } = require("../../../services/systemNotificationService");
 const { emitToRoom } = require("../../../services/socketService");
+const NotificationService = require("../../../services/notificationService");
 
 class TicketController {
   // Tenant creates a ticket
@@ -192,6 +193,18 @@ class TicketController {
       // Broadcast to both room admin and the tenant's room
       emitToRoom("admin", "ticket-update", ticket);
       emitToRoom(`tenant:${ticket.tenantId}`, "ticket-update", ticket);
+
+      // Chủ cửa hàng đã gửi ticket rồi đóng máy chờ — push để họ biết có hồi âm.
+      const owners = await NotificationService.tenantOwners(ticket.tenantId);
+      await NotificationService.notify({
+        tenantId: ticket.tenantId,
+        recipientIds: owners,
+        type: "TICKET_REPLIED",
+        title: "Yêu cầu hỗ trợ đã được phản hồi",
+        description: `Bộ phận hỗ trợ đã trả lời ticket ${ticket.ticketId || ""}.`.trim(),
+        link: `/faqs`,
+        referenceId: ticket._id,
+      });
 
       res.status(200).json({ success: true, data: ticket });
     } catch (error) {
