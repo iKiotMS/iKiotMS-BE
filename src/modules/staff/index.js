@@ -65,8 +65,41 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         branchId:
  *           type: string
  *           example: 665abc1234567890abcdef12
+ *         firstName:
+ *           type: string
+ *           example: An
+ *           description: Stored as profile.firstName by the DTO.
+ *         lastName:
+ *           type: string
+ *           example: Nguyen
+ *           description: Stored as profile.lastName by the DTO.
+ *         avatarUrl:
+ *           type: string
+ *           example: https://example.com/avatar.png
+ *           description: Stored as profile.avatarUrl by the DTO.
+ *         dob:
+ *           type: string
+ *           format: date
+ *           example: 2001-04-20
+ *           description: Stored as profile.dob by the DTO.
+ *         taxNumber:
+ *           type: string
+ *           example: TAX123456
+ *           description: Stored as profile.taxNumber by the DTO.
  *         profile:
- *           $ref: '#/components/schemas/StaffProfile'
+ *           type: object
+ *           description: The create DTO reads only identificationId, address, and gender from this nested object.
+ *           properties:
+ *             identificationId:
+ *               type: string
+ *               example: "079201000001"
+ *             address:
+ *               type: string
+ *               example: Ho Chi Minh City
+ *             gender:
+ *               type: string
+ *               enum: [MALE, FEMALE, OTHER]
+ *               example: MALE
  *     UpdateStaffRequest:
  *       type: object
  *       properties:
@@ -137,6 +170,15 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *           type: string
  *           enum: [INACTIVE, DELETED]
  *           example: INACTIVE
+ *     UpdateAnnualLeaveDaysRequest:
+ *       type: object
+ *       required: [annualLeaveDays]
+ *       properties:
+ *         annualLeaveDays:
+ *           type: number
+ *           minimum: 0
+ *           example: 15
+ *           description: New annual leave entitlement. Backend preserves used days and recalculates remainingDays automatically.
  *     Staff:
  *       type: object
  *       properties:
@@ -171,6 +213,11 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *             - type: object
  *         profile:
  *           $ref: '#/components/schemas/StaffProfile'
+ *         leaveBalance:
+ *           type: object
+ *           properties:
+ *             annualLeaveDays: { type: number, example: 15 }
+ *             remainingDays: { type: number, example: 8 }
  *     Pagination:
  *       type: object
  *       properties:
@@ -395,6 +442,67 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         description: Forbidden
  *       404:
  *         description: Staff not found
+ * /staff/{staffId}/leave-balance:
+ *   post:
+ *     tags: [Staff]
+ *     summary: Initialize a staff member's annual leave balance
+ *     description: Sets annualLeaveDays and remainingDays to the same initial value. Because the User schema currently creates a default 12/12 balance, this endpoint may replace that unused default. It rejects initialization after any leave days have been used; use PATCH instead in that case.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: staffId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateAnnualLeaveDaysRequest'
+ *     responses:
+ *       201:
+ *         description: Leave balance initialized successfully
+ *       400:
+ *         description: Invalid annualLeaveDays
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden by role hierarchy or workplace scope
+ *       404:
+ *         description: Staff not found in the allowed scope
+ *       409:
+ *         description: Leave days were already used or the balance changed concurrently
+ *   patch:
+ *     tags: [Staff]
+ *     summary: Update a staff member's annual leave entitlement
+ *     description: Preserves the number of used leave days and atomically recalculates remainingDays. For example, changing 12 annual / 5 remaining to 15 annual produces 8 remaining. Rejects a new entitlement lower than the number of days already used.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: staffId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateAnnualLeaveDaysRequest'
+ *     responses:
+ *       200:
+ *         description: Annual leave entitlement and remaining balance updated successfully
+ *       400:
+ *         description: Invalid annualLeaveDays or entitlement is lower than used days
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden by role hierarchy or workplace scope
+ *       404:
+ *         description: Staff not found in the allowed scope
+ *       409:
+ *         description: Existing balance is inconsistent or changed concurrently
  * /staff/{staffId}/account:
  *   post:
  *     tags:
@@ -546,6 +654,20 @@ function registerStaffModule(app) {
     verifyJwt,
     authorize("staff", ["update"]),
     StaffController.updateStaff.bind(StaffController),
+  );
+
+  app.patch(
+    "/staff/:staffId/leave-balance",
+    verifyJwt,
+    authorize("staff", ["update"]),
+    StaffController.updateAnnualLeaveDays.bind(StaffController),
+  );
+
+  app.post(
+    "/staff/:staffId/leave-balance",
+    verifyJwt,
+    authorize("staff", ["update"]),
+    StaffController.createLeaveBalance.bind(StaffController),
   );
 
   app.post(
