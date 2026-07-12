@@ -3,8 +3,7 @@ const StockMovementService = require("../service/StockMovementService");
 class StockMovementController {
   async create(req, res) {
     try {
-      const { tenantId, userId } = req.user;
-      const request = await StockMovementService.create(tenantId, userId, req.body);
+      const request = await StockMovementService.create(req.user, req.body);
       res.status(201).json({
         success: true,
         message: "Stock movement request created successfully",
@@ -17,8 +16,7 @@ class StockMovementController {
 
   async updateDetails(req, res) {
     try {
-      const { tenantId, userId } = req.user;
-      const request = await StockMovementService.updateDetails(tenantId, req.params.id, req.body.details, userId);
+      const request = await StockMovementService.updateDetails(req.user, req.params.id, req.body.details);
       res.status(200).json({
         success: true,
         message: "Details updated successfully",
@@ -31,8 +29,7 @@ class StockMovementController {
 
   async open(req, res) {
     try {
-      const { tenantId, userId } = req.user;
-      const request = await StockMovementService.open(tenantId, req.params.id, userId);
+      const request = await StockMovementService.open(req.user, req.params.id);
       res.status(200).json({
         success: true,
         message: "Request marked as OPENING",
@@ -45,8 +42,7 @@ class StockMovementController {
 
   async close(req, res) {
     try {
-      const { tenantId, userId } = req.user;
-      const request = await StockMovementService.close(tenantId, req.params.id, userId);
+      const request = await StockMovementService.close(req.user, req.params.id);
       res.status(200).json({
         success: true,
         message: "Request marked as CLOSED",
@@ -59,8 +55,7 @@ class StockMovementController {
 
   async ship(req, res) {
     try {
-      const { tenantId, userId } = req.user;
-      const request = await StockMovementService.ship(tenantId, req.params.id, userId);
+      const request = await StockMovementService.ship(req.user, req.params.id);
       res.status(200).json({
         success: true,
         message: "Request marked as IN_TRANSIT",
@@ -73,8 +68,7 @@ class StockMovementController {
 
   async receive(req, res) {
     try {
-      const { tenantId, userId } = req.user;
-      const request = await StockMovementService.receive(tenantId, req.params.id, req.body, userId);
+      const request = await StockMovementService.receive(req.user, req.params.id, req.body);
       res.status(200).json({
         success: true,
         message: "Inventory updated and request marked as RECEIVED",
@@ -87,8 +81,7 @@ class StockMovementController {
 
   async approveAdjust(req, res) {
     try {
-      const { tenantId, userId } = req.user;
-      const request = await StockMovementService.approveAdjust(tenantId, req.params.id, userId);
+      const request = await StockMovementService.approveAdjust(req.user, req.params.id);
       res.status(200).json({
         success: true,
         message: "Adjustment approved and inventory updated",
@@ -101,8 +94,7 @@ class StockMovementController {
 
   async cancel(req, res) {
     try {
-      const { tenantId, userId } = req.user;
-      const request = await StockMovementService.cancel(tenantId, req.params.id, userId);
+      const request = await StockMovementService.cancel(req.user, req.params.id);
       res.status(200).json({
         success: true,
         message: "Request cancelled successfully",
@@ -115,8 +107,7 @@ class StockMovementController {
 
   async getList(req, res) {
     try {
-      const { tenantId } = req.user;
-      const result = await StockMovementService.getList(tenantId, req.query);
+      const result = await StockMovementService.getList(req.user, req.query);
       res.status(200).json({
         success: true,
         ...result,
@@ -128,8 +119,7 @@ class StockMovementController {
 
   async getDetail(req, res) {
     try {
-      const { tenantId } = req.user;
-      const request = await StockMovementService.getDetail(tenantId, req.params.id);
+      const request = await StockMovementService.getDetail(req.user, req.params.id);
       res.status(200).json({
         success: true,
         data: request,

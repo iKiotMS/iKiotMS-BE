@@ -76,6 +76,9 @@ const stockMovementRequestSchema = new mongoose.Schema(
           type: Number,
           required: true,
           min: [0, "Quantity cannot be negative"],
+
+          // Đơn IMPORT / EXPORT / RETURN : min phải >= 1
+          // Đơn ADJUST: min có thể là 0
         },
         importPrice: {
           type: Number,
@@ -85,6 +88,9 @@ const stockMovementRequestSchema = new mongoose.Schema(
           type: Number,
           min: [0, "Received quantity cannot be negative"],
         },
+
+        // Với đơn ADJUST: receivedQuantity = số lượng thực tế => sau nhập receivedQuatity thì cập nhật stock = receivedQuantity.
+
         note: String,
       },
     ],
