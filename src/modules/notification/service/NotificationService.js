@@ -2,11 +2,6 @@ const { User, Notification } = require("../../../models");
 const { sendToUsers } = require("../../../services/pushService");
 
 class NotificationService {
-  /**
-   * Hộp thư của một người dùng: noti gửi đích danh họ, cộng noti gửi cả tenant
-   * (recipientId = null). Không bao giờ trả noti hệ thống của SUPER_ADMIN —
-   * những cái đó có tenantId = null và đi qua /admin/system-notifications.
-   */
   buildInboxFilter(user) {
     return {
       tenantId: user.tenantId,

@@ -593,7 +593,7 @@ class WorkingScheduleService {
         title: "Bạn có lịch làm việc mới",
         description:
           "Quản lý vừa xếp ca cho bạn. Xem lịch làm việc để biết chi tiết.",
-        link: "/staffs/schedule",
+        link: "staffs/schedule",
       });
     } catch (error) {
       console.error(
