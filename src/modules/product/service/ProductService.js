@@ -126,6 +126,26 @@ class ProductService {
       filter.name = { $regex: search, $options: "i" };
     }
 
+    // Location Filter Logic
+    if (locationType || locationId) {
+      const invFilter = { tenantId };
+      if (locationType) invFilter.locationType = locationType;
+      if (locationId) invFilter.locationId = locationId;
+
+      const filterInventories = await Inventory.find(invFilter).lean();
+
+      const productItemIds = filterInventories.map((i) => i.productItemId);
+
+      const productItems = await ProductItem.find({
+        tenantId,
+        _id: { $in: productItemIds },
+      }).lean();
+
+      const productIds = productItems.map((pi) => pi.productId);
+
+      filter._id = { $in: productIds };
+    }
+
     const [data, total] = await Promise.all([
       Product.find(filter).skip(skip).limit(limit).lean(),
       Product.countDocuments(filter),
@@ -172,11 +192,12 @@ class ProductService {
 
         // Attach items to products
         data.forEach(product => {
-          const productItems = itemMap[product._id.toString()] || [];
-          product.totalStock = productItems.reduce((sum, item) => sum + item.stock, 0);
+          product.items = itemMap[product._id.toString()] || [];
+          product.totalStock = product.items.reduce((sum, item) => sum + item.stock, 0);
         });
       } else {
         data.forEach((product) => {
+          product.items = [];
           product.totalStock = 0;
         });
       }
@@ -194,7 +215,7 @@ class ProductService {
   }
 
   async getProductById(tenantId, productId, query = {}) {
-    const { locationId } = query;
+    const { locationId, locationType } = query;
     const product = await Product.findOne({ _id: productId, tenantId }).lean();
     if (!product) {
       throw new Error("Product not found");
@@ -205,8 +226,11 @@ class ProductService {
     if (items.length > 0) {
       const itemIds = items.map((i) => i._id);
       
-      // Fetch ALL inventories across the system for cross-branch visibility
-      const inventories = await Inventory.find({ tenantId, productItemId: { $in: itemIds } }).lean();
+      const invQuery = { tenantId, productItemId: { $in: itemIds } };
+      if (locationType) invQuery.locationType = locationType;
+      if (locationId) invQuery.locationId = locationId;
+
+      const inventories = await Inventory.find(invQuery).lean();
       
       const inventoryMap = {};
       inventories.forEach(inv => {
@@ -222,16 +246,7 @@ class ProductService {
       let totalStock = 0;
       items.forEach(item => {
         item.stockDetails = inventoryMap[item._id.toString()] || [];
-        
-        if (locationId) {
-          // If a specific location is requested, set local stock
-          const localInv = item.stockDetails.find(inv => inv.locationId.toString() === locationId.toString());
-          item.stock = localInv ? localInv.stock : 0;
-        } else {
-          // Otherwise, sum all branches
-          item.stock = item.stockDetails.reduce((sum, inv) => sum + inv.stock, 0);
-        }
-        
+        item.stock = item.stockDetails.reduce((sum, inv) => sum + inv.stock, 0);
         totalStock += item.stock;
       });
       
