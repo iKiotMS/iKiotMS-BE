@@ -591,7 +591,8 @@ class WorkingScheduleService {
         recipientIds: scheduledUserIds,
         type: "SCHEDULE_ASSIGNED",
         title: "Bạn có lịch làm việc mới",
-        description: "Quản lý vừa xếp ca cho bạn. Xem lịch làm việc để biết chi tiết.",
+        description:
+          "Quản lý vừa xếp ca cho bạn. Xem lịch làm việc để biết chi tiết.",
         link: "/calendar",
       });
     } catch (error) {
@@ -682,7 +683,7 @@ class WorkingScheduleService {
     }
 
     const now = new Date();
-    
+
     const schedule = await WorkingSchedule.findOne({
       tenantId,
       userId,
@@ -747,6 +748,7 @@ class WorkingScheduleService {
   async getBranchWorkingSchedules(
     tenantId,
     branchId,
+    userId,
     { page, recordPerPage, startDate, endDate, status, scheduleType } = {},
   ) {
     if (!branchId) {
@@ -755,7 +757,7 @@ class WorkingScheduleService {
       throw error;
     }
 
-    return this.getWorkingScheduleList(tenantId, {
+    const result = await this.getWorkingScheduleList(tenantId, {
       page,
       recordPerPage,
       branchId,
@@ -764,6 +766,18 @@ class WorkingScheduleService {
       status,
       scheduleType,
     });
+
+    return {
+      ...result,
+      data: result.data.map((schedule) => ({
+        ...schedule,
+        userId: Array.isArray(schedule.userId)
+          ? schedule.userId.filter(
+              (item) => String(item?._id || item) !== String(userId),
+            )
+          : schedule.userId,
+      })),
+    };
   }
 
   async getWarehouseWorkingSchedules(
@@ -777,7 +791,7 @@ class WorkingScheduleService {
       throw error;
     }
 
-    return this.getWorkingScheduleList(tenantId, {
+    const data = await this.getWorkingScheduleList(tenantId, {
       page,
       recordPerPage,
       warehouseId,
@@ -786,6 +800,18 @@ class WorkingScheduleService {
       status,
       scheduleType,
     });
+
+    return {
+      ...result,
+      data: result.data.map((schedule) => ({
+        ...schedule,
+        userId: Array.isArray(schedule.userId)
+          ? schedule.userId.filter(
+              (item) => String(item?._id || item) !== String(userId),
+            )
+          : schedule.userId,
+      })),
+    };
   }
 
   // Lấy chi tiết một lịch làm việc trong tenant hiện tại.
