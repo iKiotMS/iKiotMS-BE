@@ -149,6 +149,10 @@ const {
  *         name: id
  *         required: true
  *         schema: { type: string }
+ *       - in: query
+ *         name: locationId
+ *         schema: { type: string }
+ *         description: Optional. Filter to get the specific local stock for this branch/warehouse ID. If omitted, gets the system-wide stock sum.
  *     responses:
  *       200:
  *         description: Product details and its items
