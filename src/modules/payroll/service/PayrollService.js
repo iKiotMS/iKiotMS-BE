@@ -248,8 +248,7 @@ class PayrollService {
             amount =
               (basicPay.standardWorkingDaySalary ||
                 (basicPay.salaryPerPeriod || 0) /
-                  (basicPay.standardWorkingDays || 1)) *
-              allocation.dayFraction;
+                  (basicPay.standardWorkingDays || 1)) * allocation.dayFraction;
           } else if (basicPay.payType === "PAY_BY_SHIFT") {
             // Một ngày có thể có nhiều ca NORMAL; nghỉ có lương theo ca được trả
             // đúng tổng các ca đã xếp trong ngày đó, không bao gồm ca overtime.
@@ -388,10 +387,7 @@ class PayrollService {
         : payroll.basePay + leavePayroll.paidLeavePay;
     const basePay =
       basicPay.payType === "FIXED"
-        ? Math.min(
-            Number(basicPay.salaryPerPeriod || 0),
-            calculatedBasePay,
-          )
+        ? Math.min(Number(basicPay.salaryPerPeriod || 0), calculatedBasePay)
         : calculatedBasePay;
     const grossSalary = basePay + payroll.overtimePay;
     const bonus = 0;
@@ -588,36 +584,42 @@ class PayrollService {
     //remove all falsy value in paysheetIds: false, 0, -0, 0n, "", null, undefined, NaN
 
     const [paySheets, attendances, leaveRequests] = await Promise.all([
-        PaySheet.find({
-          _id: { $in: paySheetIds },
-          tenantId,
-          status: { $ne: "DELETED" },
-        }).lean(),
+      PaySheet.find({
+        _id: { $in: paySheetIds },
+        tenantId,
+        status: { $ne: "DELETED" },
+      }).lean(),
 
-        Attendance.find({
-          tenantId,
-          userId: { $in: targetUserIds },
-          workDate: { $gte: periodStart, $lte: periodEnd },
-        }).lean(),
+      Attendance.find({
+        tenantId,
+        userId: { $in: targetUserIds },
+        workDate: { $gte: periodStart, $lte: periodEnd },
+      }).lean(),
 
-        LeaveRequest.find({
-          tenantId,
-          userId: { $in: targetUserIds },
-          status: "APPROVED",
-          startDate: { $lte: periodEnd },
-          endDate: { $gte: periodStart },
-        }).lean(),
-      ]);
+      LeaveRequest.find({
+        tenantId,
+        userId: { $in: targetUserIds },
+        status: "APPROVED",
+        startDate: { $lte: periodEnd },
+        endDate: { $gte: periodStart },
+      }).lean(),
+    ]);
 
     // Với đơn vắt qua kỳ khác, payroll cần nhìn thấy lịch từ đầu đến cuối đơn
     // để biết các ngày paid đã được phân bổ trước kỳ hiện tại hay chưa.
     const scheduleRange = leaveRequests.reduce(
       (range, leaveRequest) => ({
         start: new Date(
-          Math.min(range.start.getTime(), new Date(leaveRequest.startDate).getTime()),
+          Math.min(
+            range.start.getTime(),
+            new Date(leaveRequest.startDate).getTime(),
+          ),
         ),
         end: new Date(
-          Math.max(range.end.getTime(), new Date(leaveRequest.endDate).getTime()),
+          Math.max(
+            range.end.getTime(),
+            new Date(leaveRequest.endDate).getTime(),
+          ),
         ),
       }),
       { start: periodStart, end: periodEnd },
@@ -1035,7 +1037,7 @@ class PayrollService {
     const filter = {
       tenantId,
       userId,
-      status: { $in: ["APPROVED", "PAID"] },
+      status: { $in: ["APPROVED", "PAID", "REVIEW"] },
     };
     const skip = (dto.page - 1) * dto.limit;
     const [data, total] = await Promise.all([
@@ -1070,7 +1072,7 @@ class PayrollService {
       _id: payslipId,
       tenantId,
       userId,
-      status: { $in: ["APPROVED", "PAID"] },
+      status: { $in: ["APPROVED", "PAID", "REVIEW"] },
     })
       .populate("payrollPeriodId", "name periodStart periodEnd status paidAt")
       .lean();
