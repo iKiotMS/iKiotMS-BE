@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { Promotion, PromotionLog, ProductItem, Product, Branch } = require("../../../models");
+const { Promotion, PromotionLog, ProductItem, Product, Branch, Order } = require("../../../models");
 const PricingEngine = require("./PricingEngine");
 
 function round(amount) {
@@ -247,7 +247,7 @@ class PromotionService {
     const skip = (page - 1) * recordPerPage;
     const filter = { tenantId, promotionId };
 
-    const [data, total] = await Promise.all([
+    const [logs, total] = await Promise.all([
       PromotionLog.find(filter)
         .skip(skip)
         .limit(Number(recordPerPage))
@@ -255,6 +255,20 @@ class PromotionService {
         .lean(),
       PromotionLog.countDocuments(filter),
     ]);
+
+    const orderIds = [...new Set(logs.filter((log) => log.orderId).map((log) => log.orderId.toString()))];
+    const orders = orderIds.length
+      ? await Order.find({ _id: { $in: orderIds } })
+          .select("paymentReference")
+          .lean()
+      : [];
+    const paymentReferenceById = new Map(orders.map((order) => [order._id.toString(), order.paymentReference]));
+
+    const data = logs.map((log) => {
+      const orderId = log.orderId ? log.orderId.toString() : null;
+      const paymentReference = orderId ? paymentReferenceById.get(orderId) || null : null;
+      return { ...log, paymentReference };
+    });
 
     return {
       data,
