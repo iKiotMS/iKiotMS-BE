@@ -215,7 +215,7 @@ class ProductService {
   }
 
   async getProductById(tenantId, productId, query = {}) {
-    const { locationId, locationType } = query;
+    const { locationId } = query;
     const product = await Product.findOne({ _id: productId, tenantId }).lean();
     if (!product) {
       throw new Error("Product not found");
@@ -226,11 +226,8 @@ class ProductService {
     if (items.length > 0) {
       const itemIds = items.map((i) => i._id);
       
-      const invQuery = { tenantId, productItemId: { $in: itemIds } };
-      if (locationType) invQuery.locationType = locationType;
-      if (locationId) invQuery.locationId = locationId;
-
-      const inventories = await Inventory.find(invQuery).lean();
+      // Fetch ALL inventories across the system for cross-branch visibility
+      const inventories = await Inventory.find({ tenantId, productItemId: { $in: itemIds } }).lean();
       
       const inventoryMap = {};
       inventories.forEach(inv => {
@@ -246,7 +243,16 @@ class ProductService {
       let totalStock = 0;
       items.forEach(item => {
         item.stockDetails = inventoryMap[item._id.toString()] || [];
-        item.stock = item.stockDetails.reduce((sum, inv) => sum + inv.stock, 0);
+        
+        if (locationId) {
+          // If a specific location is requested, set local stock
+          const localInv = item.stockDetails.find(inv => inv.locationId.toString() === locationId.toString());
+          item.stock = localInv ? localInv.stock : 0;
+        } else {
+          // Otherwise, sum all branches
+          item.stock = item.stockDetails.reduce((sum, inv) => sum + inv.stock, 0);
+        }
+        
         totalStock += item.stock;
       });
       
