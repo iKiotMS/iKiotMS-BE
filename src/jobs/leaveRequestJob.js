@@ -31,7 +31,7 @@ const expireOverduePendingRequest = async () => {
       title: "Đơn nghỉ phép đã hết hạn",
       description:
         "Đơn nghỉ phép của bạn đã quá ngày bắt đầu mà chưa được duyệt nên đã hết hiệu lực.",
-      link: `/leave-requests/${request._id}`,
+      link: `/staffs/schedule/leave-requests/${request._id}`,
       referenceId: request._id,
     });
   }

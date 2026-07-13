@@ -132,6 +132,19 @@ function registerNotificationModule(app) {
     NotificationController.markAsRead.bind(NotificationController),
   );
 
+  // Đăng ký "delete-all" trước "/:id" để không bị bắt nhầm
+  app.delete(
+    "/notifications",
+    verifyJwt,
+    NotificationController.deleteAllNotifications.bind(NotificationController),
+  );
+
+  app.delete(
+    "/notifications/:id",
+    verifyJwt,
+    NotificationController.deleteNotification.bind(NotificationController),
+  );
+
   app.post(
     "/notifications/device-token",
     verifyJwt,

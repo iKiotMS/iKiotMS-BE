@@ -11,7 +11,9 @@ const {
 
 function startOfTodayUTC() {
   const d = new Date();
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  return new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
 }
 
 /**
@@ -28,7 +30,7 @@ async function notifyStatusChange(subscriptions, { type, title, description }) {
       type,
       title,
       description,
-      link: "/pricing",
+      link: "/settings/billing",
       referenceId: sub._id,
     });
   }
@@ -81,7 +83,8 @@ async function runSubscriptionStatusCheck() {
   await notifyStatusChange(toExpire, {
     type: "SUBSCRIPTION_EXPIRED",
     title: "Gói dịch vụ đã hết hạn",
-    description: "Gói dịch vụ đã hết hạn và hết thời gian gia hạn. Vui lòng thanh toán để khôi phục.",
+    description:
+      "Gói dịch vụ đã hết hạn và hết thời gian gia hạn. Vui lòng thanh toán để khôi phục.",
   });
 }
 
@@ -114,7 +117,7 @@ async function sendExpiryReminders() {
         type: "SUBSCRIPTION_EXPIRING",
         title: "Gói dịch vụ sắp hết hạn",
         description: `Gói ${sub.planId?.planName || "dịch vụ"} của bạn sẽ hết hạn sau ${days} ngày. Gia hạn để không bị gián đoạn.`,
-        link: "/pricing",
+        link: "/settings/billing",
         referenceId: sub._id,
       });
 
@@ -128,9 +131,7 @@ async function sendExpiryReminders() {
           daysLeft: days,
           endDate: sub.endDate,
         });
-        console.log(
-          `[SubscriptionJob] Sent ${days}-day reminder → ${email}`,
-        );
+        console.log(`[SubscriptionJob] Sent ${days}-day reminder → ${email}`);
       } catch (err) {
         console.error(
           `[SubscriptionJob] Failed to send reminder → ${email}:`,

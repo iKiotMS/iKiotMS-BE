@@ -233,7 +233,7 @@ class TicketController {
         title: "Yêu cầu hỗ trợ đã được phản hồi",
         description:
           `Bộ phận hỗ trợ đã trả lời ticket ${ticket.title || ""}.`.trim(),
-        link: `/faqs`,
+        link: `/tickets`,
         referenceId: ticket._id,
       });
 

@@ -166,9 +166,7 @@ class LeaveRequestService extends BaseService {
       return;
     }
 
-    const error = new Error(
-      "Bạn không có quyền xem yêu cầu nghỉ phép này",
-    );
+    const error = new Error("Bạn không có quyền xem yêu cầu nghỉ phép này");
     error.statusCode = 403;
     throw error;
   }
@@ -414,9 +412,7 @@ class LeaveRequestService extends BaseService {
     }
 
     if (this.sameId(manager.userId, handoverToUserId)) {
-      const error = new Error(
-        "Quản lý không thể bàn giao lịch cho chính mình",
-      );
+      const error = new Error("Quản lý không thể bàn giao lịch cho chính mình");
       error.statusCode = 400;
       throw error;
     }
@@ -431,7 +427,9 @@ class LeaveRequestService extends BaseService {
       .lean();
 
     if (!handoverUser) {
-      const error = new Error("Không tìm thấy nhân viên nhận bàn giao hoặc tài khoản không hoạt động");
+      const error = new Error(
+        "Không tìm thấy nhân viên nhận bàn giao hoặc tài khoản không hoạt động",
+      );
       error.statusCode = 404;
       throw error;
     }
@@ -440,7 +438,9 @@ class LeaveRequestService extends BaseService {
       manager.role === "BRANCH_MANAGER" &&
       !this.sameId(handoverUser.branchId, manager.branchId)
     ) {
-      const error = new Error("Nhân viên nhận bàn giao phải thuộc cùng chi nhánh");
+      const error = new Error(
+        "Nhân viên nhận bàn giao phải thuộc cùng chi nhánh",
+      );
       error.statusCode = 400;
       throw error;
     }
@@ -613,7 +613,7 @@ class LeaveRequestService extends BaseService {
       type: "LEAVE_REQUEST_CREATED",
       title: "Đơn nghỉ phép mới",
       description: `${requesterName} đã gửi đơn nghỉ phép chờ bạn duyệt.`,
-      link: `/leave-requests/${createdLeaveRequest?._id}`,
+      link: `/staffs/schedule/leave-requests/${createdLeaveRequest?._id}`,
       referenceId: createdLeaveRequest?._id,
     });
 
@@ -741,7 +741,8 @@ class LeaveRequestService extends BaseService {
             throw error;
           }
 
-          const totalApprovedDays = updateDTO.paidLeaveDays + updateDTO.unpaidLeaveDays;
+          const totalApprovedDays =
+            updateDTO.paidLeaveDays + updateDTO.unpaidLeaveDays;
           const totalLeaveDays = this.calculateLeaveDays(
             currentLeaveRequest.startDate,
             currentLeaveRequest.endDate,
@@ -820,7 +821,7 @@ class LeaveRequestService extends BaseService {
         : `Đơn nghỉ phép của bạn đã bị từ chối.${
             leaveRequest?.reviewNote ? ` Lý do: ${leaveRequest.reviewNote}` : ""
           }`,
-      link: `/leave-requests/${leaveRequestId}`,
+      link: `/staffs/schedule/leave-requests/${leaveRequestId}`,
       referenceId: leaveRequestId,
     });
 
@@ -858,7 +859,9 @@ class LeaveRequestService extends BaseService {
     }
 
     if (userId && leaveRequest.userId.toString() !== userId.toString()) {
-      let error = new Error("Bạn chỉ có thể hủy yêu cầu nghỉ phép của chính mình");
+      let error = new Error(
+        "Bạn chỉ có thể hủy yêu cầu nghỉ phép của chính mình",
+      );
       error.statusCode = 403;
       throw error;
     }
@@ -892,7 +895,8 @@ class LeaveRequestService extends BaseService {
     try {
       await session.withTransaction(async () => {
         if (
-          leaveRequest.status === "APPROVED" && leaveRequest.paidLeaveDays > 0
+          leaveRequest.status === "APPROVED" &&
+          leaveRequest.paidLeaveDays > 0
         ) {
           await User.updateOne(
             { _id: leaveRequest.userId, tenantId },
@@ -940,7 +944,7 @@ class LeaveRequestService extends BaseService {
         type: "LEAVE_REQUEST_CANCELLED",
         title: "Đơn nghỉ phép đã bị hủy",
         description: `${requesterName} đã hủy đơn nghỉ phép.`,
-        link: `/leave-requests/${leaveRequestId}`,
+        link: `/staffs/schedule/leave-requests/${leaveRequestId}`,
         referenceId: leaveRequestId,
       });
     } catch (error) {

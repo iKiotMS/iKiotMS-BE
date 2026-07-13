@@ -2,11 +2,6 @@ const { User, Notification } = require("../../../models");
 const { sendToUsers } = require("../../../services/pushService");
 
 class NotificationService {
-  /**
-   * Hộp thư của một người dùng: noti gửi đích danh họ, cộng noti gửi cả tenant
-   * (recipientId = null). Không bao giờ trả noti hệ thống của SUPER_ADMIN —
-   * những cái đó có tenantId = null và đi qua /admin/system-notifications.
-   */
   buildInboxFilter(user) {
     return {
       tenantId: user.tenantId,
@@ -71,6 +66,24 @@ class NotificationService {
     );
 
     return { updated: result.modifiedCount };
+  }
+
+  async deleteNotification(user, notificationId) {
+    const deleted = await Notification.findOneAndDelete({
+      _id: notificationId,
+      ...this.buildInboxFilter(user),
+    }).lean();
+
+    if (!deleted) {
+      throw new Error("Notification not found");
+    }
+
+    return deleted;
+  }
+
+  async deleteAllNotifications(user) {
+    const result = await Notification.deleteMany(this.buildInboxFilter(user));
+    return { deleted: result.deletedCount };
   }
 
   /**

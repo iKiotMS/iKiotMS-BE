@@ -25,7 +25,15 @@ const VALID_TRANSITIONS = {
 
 class OrderService {
   async createOrder(tenantId, userId, dto) {
-    const { customerId, branchId, paymentMethod, items, grandTotal, customerPay, note } = dto;
+    const {
+      customerId,
+      branchId,
+      paymentMethod,
+      items,
+      grandTotal,
+      customerPay,
+      note,
+    } = dto;
 
     let customer;
     if (customerId) {
@@ -41,20 +49,27 @@ class OrderService {
             name: "Khách vãng lai",
             gender: "OTHER",
             isDeleted: false,
-          }
+          },
         },
-        { upsert: true, new: true, lean: true }
+        { upsert: true, new: true, lean: true },
       );
     }
 
     const [branch, tenant] = await Promise.all([
       Branch.findOne({ _id: branchId, tenantId }).lean(),
-      paymentMethod === "SEPAY" ? Tenant.findById(tenantId).select("+banking.sepayWebhookApiKey").lean() : null,
+      paymentMethod === "SEPAY"
+        ? Tenant.findById(tenantId).select("+banking.sepayWebhookApiKey").lean()
+        : null,
     ]);
     if (!branch) throw new Error("Branch not found");
 
-    if (paymentMethod === "SEPAY" && (!tenant?.banking?.accountNumber || !tenant?.banking?.bankName)) {
-      throw new Error("Tenant has not configured banking information for SEPAY payment");
+    if (
+      paymentMethod === "SEPAY" &&
+      (!tenant?.banking?.accountNumber || !tenant?.banking?.bankName)
+    ) {
+      throw new Error(
+        "Tenant has not configured banking information for SEPAY payment",
+      );
     }
 
     for (const item of items) {
@@ -66,14 +81,19 @@ class OrderService {
           locationType: "branch",
         }).lean(),
       ]);
-      if (!productItem) throw new Error(`Product item not found: ${item.productItemId}`);
+      if (!productItem)
+        throw new Error(`Product item not found: ${item.productItemId}`);
       if (!inventory || inventory.stock < item.quantity) {
-        throw new Error(`Insufficient stock for: ${productItem.sku || item.productItemId}`);
+        throw new Error(
+          `Insufficient stock for: ${productItem.sku || item.productItemId}`,
+        );
       }
     }
 
     const isSepay = paymentMethod === "SEPAY";
-    const status = INSTANT_COMPLETE_METHODS.includes(paymentMethod) ? "COMPLETED" : "PENDING";
+    const status = INSTANT_COMPLETE_METHODS.includes(paymentMethod)
+      ? "COMPLETED"
+      : "PENDING";
     // Every order gets an ORD ref regardless of payment method, so an ORD prefix on a
     // CashFlow row always means "sales revenue". Only SEPAY puts it in the QR.
     const orderRef = sepayService.generateOrderRef();
@@ -94,7 +114,10 @@ class OrderService {
             paymentReference: orderRef,
             grandTotal,
             customerPay,
-            change: customerPay != null ? Math.max(0, customerPay - grandTotal) : undefined,
+            change:
+              customerPay != null
+                ? Math.max(0, customerPay - grandTotal)
+                : undefined,
             note,
             status,
             items: items.map((item) => ({
@@ -113,7 +136,11 @@ class OrderService {
       // ở đây; cảnh báo được gửi sau khi transaction commit (xem bên dưới).
       for (const item of items) {
         const updated = await Inventory.findOneAndUpdate(
-          { productItemId: item.productItemId, locationId: branchId, locationType: "branch" },
+          {
+            productItemId: item.productItemId,
+            locationId: branchId,
+            locationType: "branch",
+          },
           { $inc: { stock: -item.quantity } },
           { session, new: true },
         );
@@ -149,7 +176,11 @@ class OrderService {
 
       let qrUrl;
       if (isSepay && tenant?.banking) {
-        qrUrl = sepayService.buildTenantQrUrl(tenant.banking, grandTotal, orderRef);
+        qrUrl = sepayService.buildTenantQrUrl(
+          tenant.banking,
+          grandTotal,
+          orderRef,
+        );
       }
 
       return { order, qrUrl };
@@ -162,8 +193,17 @@ class OrderService {
   }
 
   async getOrders(tenantId, query) {
-    const { page, limit, status, paymentMethod, customerId, branchId, search, fromDate, toDate } =
-      query;
+    const {
+      page,
+      limit,
+      status,
+      paymentMethod,
+      customerId,
+      branchId,
+      search,
+      fromDate,
+      toDate,
+    } = query;
     const skip = (page - 1) * limit;
     const filter = { tenantId };
 
@@ -227,7 +267,9 @@ class OrderService {
     if (!order) throw new Error("Order not found");
 
     if (!VALID_TRANSITIONS[order.status]?.includes(newStatus)) {
-      throw new Error(`Cannot transition order from ${order.status} to ${newStatus}`);
+      throw new Error(
+        `Cannot transition order from ${order.status} to ${newStatus}`,
+      );
     }
 
     const session = await mongoose.startSession();
@@ -318,7 +360,8 @@ class OrderService {
       status: "PENDING",
       paymentMethod: "SEPAY",
     }).lean();
-    if (!pending) throw new Error("Order not found or no longer awaiting SePay payment");
+    if (!pending)
+      throw new Error("Order not found or no longer awaiting SePay payment");
 
     const customerPay = dto.customerPay ?? pending.grandTotal;
     if (customerPay < pending.grandTotal) {
@@ -382,7 +425,12 @@ class OrderService {
     }
   }
 
-  async completeSepayOrder(tenantId, paymentReference, sepayTransactionId, transferAmount) {
+  async completeSepayOrder(
+    tenantId,
+    paymentReference,
+    sepayTransactionId,
+    transferAmount,
+  ) {
     const pending = await Order.findOne({
       paymentReference,
       status: "PENDING",
@@ -463,7 +511,7 @@ class OrderService {
         type: "ORDER_PAID",
         title: "Khách đã thanh toán",
         description: `Đơn hàng ${order.paymentReference} đã nhận được ${transferAmount.toLocaleString("vi-VN")}đ qua chuyển khoản.`,
-        link: `/sales/${order._id}`,
+        link: `/sales/invoices`,
         referenceId: order._id,
       });
 
