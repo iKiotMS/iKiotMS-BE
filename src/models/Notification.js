@@ -44,6 +44,7 @@ const notificationSchema = new mongoose.Schema(
         "SUBSCRIPTION_EXPIRED",
         // Nhân sự
         "SCHEDULE_ASSIGNED",
+        "PAYSLIP_REVIEW",
         "PAYSLIP_APPROVED",
         "PAYSLIP_PAID",
         "STAFF_ACCOUNT_CREATED",

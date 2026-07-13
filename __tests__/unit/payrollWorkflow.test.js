@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const PayrollPeriod = require("../../src/models/PayrollPeriod");
 const Payslip = require("../../src/models/Payslip");
 const PayrollService = require("../../src/modules/payroll/service/PayrollService");
+const NotificationService = require("../../src/services/notificationService");
 
 describe("Payroll draft editing and status workflow", () => {
   afterEach(() => {
@@ -69,6 +70,14 @@ describe("Payroll draft editing and status workflow", () => {
     jest.spyOn(Payslip, "countDocuments").mockResolvedValue(2);
     jest.spyOn(Payslip, "updateMany").mockResolvedValue({ modifiedCount: 2 });
     jest.spyOn(mongoose, "startSession").mockResolvedValue(session);
+    const notificationQuery = {
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([
+        { _id: "payslip-1", userId: "employee-1" },
+      ]),
+    };
+    jest.spyOn(Payslip, "find").mockReturnValue(notificationQuery);
+    jest.spyOn(NotificationService, "notify").mockResolvedValue({ notified: 1 });
 
     await PayrollService.changePayrollPeriodStatus({
       tenantId,
@@ -78,6 +87,13 @@ describe("Payroll draft editing and status workflow", () => {
       actionData: {},
     });
     expect(payrollPeriod.status).toBe("REVIEW");
+    expect(NotificationService.notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientIds: ["employee-1"],
+        type: "PAYSLIP_REVIEW",
+        referenceId: "payslip-1",
+      }),
+    );
 
     await PayrollService.changePayrollPeriodStatus({
       tenantId,
@@ -123,7 +139,7 @@ describe("Payroll draft editing and status workflow", () => {
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  test("lists only the authenticated employee's approved or paid payslips", async () => {
+  test("lists only the authenticated employee's review or finalized payslips", async () => {
     const tenantId = new mongoose.Types.ObjectId();
     const userId = new mongoose.Types.ObjectId();
     const query = {};
@@ -144,11 +160,36 @@ describe("Payroll draft editing and status workflow", () => {
     expect(Payslip.find).toHaveBeenCalledWith({
       tenantId,
       userId,
-      status: { $in: ["APPROVED", "PAID"] },
+      status: { $in: ["APPROVED", "PAID", "REVIEW"] },
     });
     expect(result).toMatchObject({
       data: [{ status: "APPROVED" }],
       pagination: { total: 1 },
     });
+  });
+
+  test("allows own REVIEW payslip detail but keeps DRAFT outside the query", async () => {
+    const tenantId = new mongoose.Types.ObjectId();
+    const userId = new mongoose.Types.ObjectId();
+    const payslipId = new mongoose.Types.ObjectId();
+    const query = {
+      populate: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ _id: payslipId, status: "REVIEW" }),
+    };
+    jest.spyOn(Payslip, "findOne").mockReturnValue(query);
+
+    const result = await PayrollService.getMyPayslip({
+      tenantId,
+      userId,
+      payslipId,
+    });
+
+    expect(Payslip.findOne).toHaveBeenCalledWith({
+      _id: payslipId,
+      tenantId,
+      userId,
+      status: { $in: ["APPROVED", "PAID", "REVIEW"] },
+    });
+    expect(result.status).toBe("REVIEW");
   });
 });

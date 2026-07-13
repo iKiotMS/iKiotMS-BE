@@ -1079,7 +1079,7 @@ class PayrollService {
       .populate("payrollPeriodId", "name periodStart periodEnd status paidAt")
       .lean();
     if (!payslip) {
-      const error = new Error("Không tìm thấy phiếu lương đã được công bố");
+      const error = new Error("Không tìm thấy phiếu lương có thể xem");
       error.statusCode = 404;
       throw error;
     }
@@ -1260,13 +1260,36 @@ class PayrollService {
       await session.endSession();
     }
 
-    // Chỉ báo cho nhân viên ở hai mốc họ thật sự quan tâm: lương được duyệt và
-    // lương đã trả. Các bước nội bộ (SUBMIT, RETURN_TO_DRAFT) không cần làm phiền.
+    // REVIEW là cửa sổ để nhân viên kiểm tra phiếu tạm tính và phản hồi trước
+    // khi APPROVED chốt số liệu. Mỗi lần re-submit từ DRAFT đều gửi lại thông báo
+    // để nhân viên biết phiên bản đã chỉnh sửa có thể được kiểm tra lại.
+    // RETURN_TO_DRAFT không gửi noti và bộ lọc my-payslips tự ẩn phiếu DRAFT.
     //
     // Bọc try/catch: notify() tự nuốt lỗi của nó, nhưng truy vấn Payslip.find
     // bên dưới thì không. Kỳ lương đã được chốt và commit ở trên rồi — không thể
     // để việc gửi thông báo thất bại kéo theo cả thao tác chốt lương.
-    if (action === "APPROVE" || action === "MARK_PAID") {
+    const notificationByAction = {
+      SUBMIT: {
+        type: "PAYSLIP_REVIEW",
+        title: "Phiếu lương tạm tính đang chờ kiểm tra",
+        description:
+          "Phiếu lương tạm tính đã sẵn sàng. Vui lòng kiểm tra và phản hồi trước khi được duyệt.",
+      },
+      APPROVE: {
+        type: "PAYSLIP_APPROVED",
+        title: "Phiếu lương đã được duyệt",
+        description: "Phiếu lương kỳ này đã được duyệt.",
+      },
+      MARK_PAID: {
+        type: "PAYSLIP_PAID",
+        title: "Lương đã được thanh toán",
+        description:
+          "Lương kỳ này đã được chi trả. Xem chi tiết phiếu lương của bạn.",
+      },
+    };
+    const notification = notificationByAction[action];
+
+    if (notification) {
       try {
         const payslips = await Payslip.find({
           tenantId,
@@ -1275,19 +1298,11 @@ class PayrollService {
           .select("_id userId")
           .lean();
 
-        const paid = action === "MARK_PAID";
-
         for (const payslip of payslips) {
           await NotificationService.notify({
             tenantId,
             recipientIds: [payslip.userId],
-            type: paid ? "PAYSLIP_PAID" : "PAYSLIP_APPROVED",
-            title: paid
-              ? "Lương đã được thanh toán"
-              : "Phiếu lương đã được duyệt",
-            description: paid
-              ? "Lương kỳ này đã được chi trả. Xem chi tiết phiếu lương của bạn."
-              : "Phiếu lương kỳ này đã được duyệt.",
+            ...notification,
             link: `/staffs/payroll/${payslip._id}`,
             referenceId: payslip._id,
           });
