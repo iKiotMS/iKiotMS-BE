@@ -3,7 +3,8 @@ const NotificationService = require("../../../services/notificationService");
 
 class InventoryService {
   async getInventories(tenantId, queryParams) {
-    const { page, limit, locationId, locationType, isLowStock, search } = queryParams;
+    const { page, limit, locationId, locationType, isLowStock, search } =
+      queryParams;
     const skip = (page - 1) * limit;
 
     const filter = { tenantId };
@@ -93,7 +94,14 @@ class InventoryService {
     await Inventory.insertMany(inventoryDocs, { session });
   }
 
-  async adjustStock(tenantId, locationId, locationType, productItemId, amount, session) {
+  async adjustStock(
+    tenantId,
+    locationId,
+    locationType,
+    productItemId,
+    amount,
+    session,
+  ) {
     if (!amount) return null;
 
     // Trả về document SAU khi cập nhật để bên gọi phát hiện được việc tụt qua
@@ -101,7 +109,7 @@ class InventoryService {
     return Inventory.findOneAndUpdate(
       { tenantId, locationId, locationType, productItemId },
       { $inc: { stock: amount } },
-      { upsert: true, new: true, runValidators: true, session }
+      { upsert: true, new: true, runValidators: true, session },
     );
   }
 
@@ -157,12 +165,15 @@ class InventoryService {
           type: "INVENTORY_LOW_STOCK",
           title: "Cảnh báo tồn kho thấp",
           description: `${label} chỉ còn ${inventory.stock} (ngưỡng ${inventory.minStock}). Cân nhắc nhập thêm.`,
-          link: "/inventory",
+          link: "/products",
           referenceId: inventory._id,
         });
       }
     } catch (error) {
-      console.error("[InventoryService] Không gửi được cảnh báo tồn kho:", error.message);
+      console.error(
+        "[InventoryService] Không gửi được cảnh báo tồn kho:",
+        error.message,
+      );
     }
   }
 }

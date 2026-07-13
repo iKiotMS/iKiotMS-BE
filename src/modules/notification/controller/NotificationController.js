@@ -80,6 +80,24 @@ class NotificationController {
     }
   }
 
+  async deleteNotification(request, response) {
+    try {
+      await NotificationService.deleteNotification(request.user, request.params.id);
+      return response.json({ success: true, message: "Đã xóa thông báo" });
+    } catch (error) {
+      return handleError(error, response);
+    }
+  }
+
+  async deleteAllNotifications(request, response) {
+    try {
+      const data = await NotificationService.deleteAllNotifications(request.user);
+      return response.json({ success: true, message: "Đã xóa tất cả thông báo", data });
+    } catch (error) {
+      return handleError(error, response);
+    }
+  }
+
   async registerDeviceToken(request, response) {
     try {
       const dto = new DeviceTokenDTO(request.body);

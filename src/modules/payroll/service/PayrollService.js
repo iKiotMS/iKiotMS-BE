@@ -890,10 +890,11 @@ class PayrollService {
     // tenantId is kept in the match even though period IDs are globally unique,
     // so this financial total remains explicitly tenant-scoped.
     const periodIds = data.map((p) => p._id);
+    const tenantObjectId = new mongoose.Types.ObjectId(tenantId.toString());
     const costAgg = await Payslip.aggregate([
       {
         $match: {
-          tenantId,
+          tenantId: tenantObjectId,
           payrollPeriodId: { $in: periodIds },
         },
       },
@@ -957,7 +958,8 @@ class PayrollService {
     // Aggregation pipelines do not apply Mongoose's automatic string-to-ObjectId
     // casting, so normalize the path ID before sharing this filter with aggregate.
     const payrollPeriodId = new mongoose.Types.ObjectId(periodId.toString());
-    const payslipFilter = { tenantId, payrollPeriodId };
+    const tenantObjectId = new mongoose.Types.ObjectId(tenantId.toString());
+    const payslipFilter = { tenantId: tenantObjectId, payrollPeriodId };
     const skip = (dto.page - 1) * dto.limit;
     const [payslips, total, costAgg] = await Promise.all([
       Payslip.find(payslipFilter)
@@ -1284,7 +1286,7 @@ class PayrollService {
             description: paid
               ? "Lương kỳ này đã được chi trả. Xem chi tiết phiếu lương của bạn."
               : "Phiếu lương kỳ này đã được duyệt.",
-            link: `/payroll/${payslip._id}`,
+            link: `/staffs/payroll/${payslip._id}`,
             referenceId: payslip._id,
           });
         }
