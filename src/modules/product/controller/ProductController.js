@@ -2,6 +2,7 @@ const ProductService = require("../service/ProductService");
 const CreateProductRequestDTO = require("../dto/CreateProductRequestDTO");
 const UpdateProductRequestDTO = require("../dto/UpdateProductRequestDTO");
 const ProductQueryDTO = require("../dto/ProductQueryDTO");
+const ProductSearchQueryDTO = require("../dto/ProductSearchQueryDTO");
 const CreateProductItemRequestDTO = require("../dto/CreateProductItemRequestDTO");
 const UpdateProductItemRequestDTO = require("../dto/UpdateProductItemRequestDTO");
 
@@ -78,6 +79,42 @@ class ProductController {
       res.status(500).json({
         success: false,
         message: "Failed to retrieve products",
+      });
+    }
+  }
+
+  async search(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res
+          .status(403)
+          .json({ success: false, message: "Tenant context missing" });
+      }
+
+      const queryDTO = new ProductSearchQueryDTO(req.query);
+      const validation = queryDTO.validate();
+
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid query parameters",
+          errors: validation.errors,
+        });
+      }
+
+      const result = await ProductService.searchProducts(tenantId, queryDTO);
+
+      res.status(200).json({
+        success: true,
+        data: result.data,
+        pagination: result.pagination,
+      });
+    } catch (error) {
+      console.error("Search products error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to search products",
       });
     }
   }

@@ -95,6 +95,9 @@ const {
  *         name: categoryId
  *         schema: { type: string }
  *       - in: query
+ *         name: supplierId
+ *         schema: { type: string }
+ *       - in: query
  *         name: status
  *         schema: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
  *       - in: query
@@ -123,6 +126,49 @@ const {
  *                       totalStock: { type: number, description: "Total stock of this product at the specified location" }
  *                 pagination:
  *                   type: object
+ * /products/search:
+ *   get:
+ *     tags: [Products]
+ *     summary: Cross-branch product search (name, code, SKU, or barcode)
+ *     description: >
+ *       Matches a single query against product name (substring) and item
+ *       code/SKU/barcode (prefix), returning full multi-location stock
+ *       breakdown per result so the caller can see availability across
+ *       every branch/warehouse, not just the currently active one.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema: { type: string, minLength: 2 }
+ *         description: Search text (min 2 characters). Matches name (substring) or code/SKU/barcode (prefix).
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, maximum: 50 }
+ *       - in: query
+ *         name: categoryId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: supplierId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
+ *       - in: query
+ *         name: locationId
+ *         schema: { type: string }
+ *         description: Restrict results to products with stock at this branch/warehouse ID.
+ *       - in: query
+ *         name: locationType
+ *         schema: { type: string, enum: [branch, warehouse] }
+ *     responses:
+ *       200:
+ *         description: List of matching products with full per-branch stock breakdown
+ *       400:
+ *         description: Invalid query parameters (e.g. q shorter than 2 characters)
  * /products/{id}:
  *   get:
  *     tags: [Products]
@@ -161,6 +207,10 @@ const {
  *             type: object
  *             properties:
  *               name: { type: string }
+ *               brandId: { type: string }
+ *               categoryId: { type: string }
+ *               categoryName: { type: string }
+ *               supplierId: { type: string }
  *               status: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
  *               images:
  *                 type: array
@@ -301,6 +351,13 @@ const registerProductModule = (app) => {
     "/products",
     verifyJwt,
     ProductController.getList.bind(ProductController),
+  );
+  // Must be registered before "/products/:id" — otherwise Express matches
+  // this path as id="search".
+  app.get(
+    "/products/search",
+    verifyJwt,
+    ProductController.search.bind(ProductController),
   );
   app.get(
     "/products/:id",
