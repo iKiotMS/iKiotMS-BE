@@ -107,7 +107,7 @@ const {
  *         description: Filter by location type (e.g. all branches, or all warehouses)
  *     responses:
  *       200:
- *         description: List of products with variants and stock
+ *         description: List of products with their total local stock
  *         content:
  *           application/json:
  *             schema:
@@ -120,22 +120,7 @@ const {
  *                     type: object
  *                     properties:
  *                       name: { type: string }
- *                       totalStock: { type: number, description: "Total stock across all items and locations" }
- *                       items:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             sku: { type: string }
- *                             stock: { type: number, description: "Total stock of this specific variant across allowed locations" }
- *                             stockDetails:
- *                               type: array
- *                               items:
- *                                 type: object
- *                                 properties:
- *                                   locationId: { type: string }
- *                                   locationType: { type: string }
- *                                   stock: { type: number }
+ *                       totalStock: { type: number, description: "Total stock of this product at the specified location" }
  *                 pagination:
  *                   type: object
  * /products/{id}:

@@ -126,26 +126,6 @@ class ProductService {
       filter.name = { $regex: search, $options: "i" };
     }
 
-    // Location Filter Logic
-    if (locationType || locationId) {
-      const invFilter = { tenantId };
-      if (locationType) invFilter.locationType = locationType;
-      if (locationId) invFilter.locationId = locationId;
-
-      const filterInventories = await Inventory.find(invFilter).lean();
-
-      const productItemIds = filterInventories.map((i) => i.productItemId);
-
-      const productItems = await ProductItem.find({
-        tenantId,
-        _id: { $in: productItemIds },
-      }).lean();
-
-      const productIds = productItems.map((pi) => pi.productId);
-
-      filter._id = { $in: productIds };
-    }
-
     const [data, total] = await Promise.all([
       Product.find(filter).skip(skip).limit(limit).lean(),
       Product.countDocuments(filter),
@@ -192,12 +172,11 @@ class ProductService {
 
         // Attach items to products
         data.forEach(product => {
-          product.items = itemMap[product._id.toString()] || [];
-          product.totalStock = product.items.reduce((sum, item) => sum + item.stock, 0);
+          const productItems = itemMap[product._id.toString()] || [];
+          product.totalStock = productItems.reduce((sum, item) => sum + item.stock, 0);
         });
       } else {
         data.forEach((product) => {
-          product.items = [];
           product.totalStock = 0;
         });
       }
