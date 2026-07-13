@@ -1,6 +1,10 @@
 const mongoose = require("mongoose");
-const { Product, ProductItem, Inventory } = require("../../../models");
+const { Product, ProductItem, Inventory, Supplier } = require("../../../models");
 const InventoryService = require("../../inventory/service/InventoryService");
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 class ProductService {
   async createProduct(tenantId, productData, subscription) {
@@ -43,7 +47,18 @@ class ProductService {
           );
         }
 
-        // 2. Create the base Product
+        // 2. Validate Supplier ownership (if provided)
+        if (productData.supplierId) {
+          const supplier = await Supplier.findOne({
+            _id: productData.supplierId,
+            tenantId,
+          }).session(session);
+          if (!supplier) {
+            throw new Error("Supplier not found");
+          }
+        }
+
+        // 3. Create the base Product
         const product = new Product({
           tenantId,
           name: productData.name,
@@ -57,7 +72,7 @@ class ProductService {
 
         await product.save({ session });
 
-        // 3. Create ProductItems (variants)
+        // 4. Create ProductItems (variants)
         const productItemsData = productData.items.map((item) => ({
           ...item,
           tenantId,
@@ -69,7 +84,7 @@ class ProductService {
           session,
         });
 
-        // 4. Initialize Stock
+        // 5. Initialize Stock
         for (let i = 0; i < insertedItems.length; i++) {
           const itemDto = productData.items[i];
           if (itemDto.initialStock && itemDto.initialStock.length > 0) {
@@ -102,6 +117,7 @@ class ProductService {
       limit,
       search,
       categoryId,
+      supplierId,
       status,
       locationId,
       locationType,
@@ -120,6 +136,10 @@ class ProductService {
 
     if (categoryId) {
       filter.categoryId = categoryId;
+    }
+
+    if (supplierId) {
+      filter.supplierId = supplierId;
     }
 
     if (search) {
@@ -214,6 +234,148 @@ class ProductService {
     };
   }
 
+  // Cross-branch search: match a single query against product name (substring)
+  // and item code/sku/barcode (prefix), with cross-branch stock visibility.
+  async searchProducts(tenantId, query) {
+    const {
+      q,
+      page,
+      limit,
+      categoryId,
+      supplierId,
+      status,
+      locationId,
+      locationType,
+    } = query;
+    const skip = (page - 1) * limit;
+    const empty = { data: [], pagination: { total: 0, page, limit, totalPages: 0 } };
+
+    const filter = { tenantId };
+
+    if (status) {
+      filter.status = status;
+    } else {
+      filter.status = { $ne: "DISCONTINUED" };
+    }
+
+    if (categoryId) filter.categoryId = categoryId;
+    if (supplierId) filter.supplierId = supplierId;
+
+    if (q) {
+      const escQ = escapeRegex(q);
+      const [itemMatches, nameMatches] = await Promise.all([
+        ProductItem.find({
+          tenantId,
+          $or: [
+            { productCode: { $regex: "^" + escQ, $options: "i" } },
+            { sku: { $regex: "^" + escQ, $options: "i" } },
+            { barcode: { $regex: "^" + escQ, $options: "i" } },
+          ],
+        })
+          .select("productId")
+          .lean(),
+        Product.find({ tenantId, name: { $regex: escQ, $options: "i" } })
+          .select("_id")
+          .lean(),
+      ]);
+
+      const matchedIds = new Set([
+        ...itemMatches.map((i) => i.productId.toString()),
+        ...nameMatches.map((p) => p._id.toString()),
+      ]);
+
+      if (matchedIds.size === 0) return empty;
+      filter._id = { $in: Array.from(matchedIds) };
+    }
+
+    // Branch filter narrows the result set to products with stock at that location.
+    if (locationId) {
+      const invMatch = { tenantId, locationId };
+      if (locationType) invMatch.locationType = locationType;
+      const invRows = await Inventory.find(invMatch)
+        .select("productItemId")
+        .lean();
+      if (invRows.length === 0) return empty;
+
+      const stockedItems = await ProductItem.find({
+        tenantId,
+        _id: { $in: invRows.map((r) => r.productItemId) },
+      })
+        .select("productId")
+        .lean();
+      const stockedProductIds = new Set(
+        stockedItems.map((i) => i.productId.toString()),
+      );
+
+      if (filter._id) {
+        const intersected = filter._id.$in.filter((id) =>
+          stockedProductIds.has(id.toString()),
+        );
+        if (intersected.length === 0) return empty;
+        filter._id = { $in: intersected };
+      } else {
+        if (stockedProductIds.size === 0) return empty;
+        filter._id = { $in: Array.from(stockedProductIds) };
+      }
+    }
+
+    const [data, total] = await Promise.all([
+      Product.find(filter).skip(skip).limit(limit).lean(),
+      Product.countDocuments(filter),
+    ]);
+
+    if (data.length > 0) {
+      const productIds = data.map((p) => p._id);
+      const items = await ProductItem.find({
+        tenantId,
+        productId: { $in: productIds },
+      }).lean();
+
+      const inventories = items.length
+        ? await Inventory.find({
+            tenantId,
+            productItemId: { $in: items.map((i) => i._id) },
+          }).lean()
+        : [];
+
+      const inventoryMap = {};
+      inventories.forEach((inv) => {
+        const id = inv.productItemId.toString();
+        if (!inventoryMap[id]) inventoryMap[id] = [];
+        inventoryMap[id].push({
+          locationId: inv.locationId,
+          locationType: inv.locationType,
+          stock: inv.stock,
+        });
+      });
+
+      const itemMap = {};
+      items.forEach((item) => {
+        const pId = item.productId.toString();
+        if (!itemMap[pId]) itemMap[pId] = [];
+        item.stockDetails = inventoryMap[item._id.toString()] || [];
+        item.stock = item.stockDetails.reduce((sum, inv) => sum + inv.stock, 0);
+        itemMap[pId].push(item);
+      });
+
+      data.forEach((product) => {
+        const productItems = itemMap[product._id.toString()] || [];
+        product.items = productItems;
+        product.totalStock = productItems.reduce((sum, item) => sum + item.stock, 0);
+      });
+    }
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   async getProductById(tenantId, productId, query = {}) {
     const { locationId, locationType } = query;
     const product = await Product.findOne({ _id: productId, tenantId }).lean();
@@ -262,6 +424,16 @@ class ProductService {
   }
 
   async updateProduct(tenantId, productId, updateData) {
+    if (updateData.supplierId) {
+      const supplier = await Supplier.findOne({
+        _id: updateData.supplierId,
+        tenantId,
+      }).lean();
+      if (!supplier) {
+        throw new Error("Supplier not found");
+      }
+    }
+
     const product = await Product.findOneAndUpdate(
       { _id: productId, tenantId },
       { $set: updateData },

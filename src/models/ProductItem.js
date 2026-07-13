@@ -84,4 +84,7 @@ productItemSchema.index(
   { unique: true, sparse: true },
 );
 
+productItemSchema.index({ tenantId: 1, productCode: 1 });
+productItemSchema.index({ tenantId: 1, barcode: 1 });
+
 module.exports = mongoose.model("ProductItem", productItemSchema);
