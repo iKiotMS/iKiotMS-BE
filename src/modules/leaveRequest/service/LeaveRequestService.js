@@ -773,6 +773,51 @@ class LeaveRequestService extends BaseService {
           throw error;
         }
 
+        if (this.sameId(currentLeaveRequest.userId, data.approvedBy)) {
+          const error = new Error(
+            "Bạn không thể tự duyệt hoặc từ chối yêu cầu nghỉ phép của chính mình",
+          );
+          error.statusCode = 403;
+          throw error;
+        }
+
+        const reviewer = await User.findOne({
+          _id: data.approvedBy,
+          tenantId,
+        })
+          .select("role")
+          .session(session)
+          .lean();
+        const requester = await User.findOne({
+          _id: currentLeaveRequest.userId,
+          tenantId,
+        })
+          .select("role")
+          .session(session)
+          .lean();
+
+        if (!reviewer || !requester) {
+          const error = new Error(
+            "Không tìm thấy người duyệt hoặc người gửi yêu cầu",
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+
+        const isCrossManagerReview =
+          (reviewer.role === "BRANCH_MANAGER" &&
+            requester.role === "WAREHOUSE_MANAGER") ||
+          (reviewer.role === "WAREHOUSE_MANAGER" &&
+            requester.role === "BRANCH_MANAGER");
+
+        if (isCrossManagerReview) {
+          const error = new Error(
+            "Quản lý chi nhánh và quản lý kho không thể duyệt hoặc từ chối yêu cầu nghỉ phép của nhau",
+          );
+          error.statusCode = 403;
+          throw error;
+        }
+
         if (currentLeaveRequest.status !== "PENDING") {
           let error = new Error("Chỉ có thể duyệt yêu cầu đang chờ xử lý");
           error.statusCode = 400;
