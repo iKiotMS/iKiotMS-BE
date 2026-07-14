@@ -129,6 +129,56 @@ class LeaveRequestService extends BaseService {
     return leaveRequests;
   }
 
+  async getMyLeaveRequestsPerDay({ tenantId, userId, filter }) {
+    const query = { tenantId, userId };
+    if (filter.status) query.status = filter.status;
+    if (filter.keyword) {
+      query.reason = { $regex: this.escapeRegex(filter.keyword), $options: "i" };
+    }
+    if (filter.startDate) query.endDate = { $gte: this.toUtcDay(filter.startDate) };
+    if (filter.endDate) query.startDate = { $lt: this.addUtcDay(this.toUtcDay(filter.endDate)) };
+
+    const requests = await LeaveRequest.find(query)
+      .select("userId approvedBy paidLeaveDays unpaidLeaveDays startDate endDate status reason reviewNote handoverToUserId createdAt updatedAt")
+      .populate({
+        path: "userId",
+        select: "branchId warehouseId profile email",
+        populate: [
+          { path: "branchId", select: "name" },
+          { path: "warehouseId", select: "name" },
+        ],
+      })
+      .sort({ startDate: -1 })
+      .lean();
+
+    const rangeStart = filter.startDate ? this.toUtcDay(filter.startDate) : null;
+    const rangeEnd = filter.endDate ? this.toUtcDay(filter.endDate) : null;
+    const dayItems = [];
+
+    requests.forEach((request) => {
+      const firstDay = this.toUtcDay(request.startDate);
+      const lastDay = this.toUtcDay(request.endDate);
+      for (let day = firstDay; day <= lastDay; day = this.addUtcDay(day)) {
+        if ((rangeStart && day < rangeStart) || (rangeEnd && day > rangeEnd)) continue;
+        dayItems.push({ ...request, date: new Date(day) });
+      }
+    });
+
+    dayItems.sort((left, right) => right.date - left.date);
+    return dayItems;
+  }
+
+  toUtcDay(value) {
+    const date = new Date(value);
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  }
+
+  addUtcDay(value) {
+    const nextDay = new Date(value);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    return nextDay;
+  }
+
   sameId(left, right) {
     return left?.toString() === right?.toString();
   }

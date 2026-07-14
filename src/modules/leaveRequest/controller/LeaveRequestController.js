@@ -2,6 +2,7 @@ const LeaveRequestService = require("../service/LeaveRequestService");
 const mongoose = require("mongoose");
 const { LeaveRequest, User } = require("../../../models");
 const { validateRoleHierarchy } = require("../../../utils/permissionChecker");
+const LeaveRequestPerDayQueryDTO = require("../dto/LeaveRequestPerDayQueryDTO");
 
 class LeaveRequestController {
   handleError(res, error, fallbackMessage = "Thao tác yêu cầu nghỉ phép thất bại") {
@@ -232,6 +233,33 @@ class LeaveRequestController {
         error,
         "Lấy lịch sử nghỉ phép cá nhân thất bại",
       );
+    }
+  }
+
+  async getPersonalHistoryPerDay(req, res) {
+    try {
+      const queryDTO = new LeaveRequestPerDayQueryDTO(req.query);
+      const validation = queryDTO.validate();
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: validation.errors,
+        });
+      }
+
+      const leaveRequests = await LeaveRequestService.getMyLeaveRequestsPerDay({
+        tenantId: req.user.tenantId,
+        userId: req.user.userId,
+        filter: queryDTO,
+      });
+      return res.status(200).json({
+        success: true,
+        message: "Lấy lịch sử nghỉ phép cá nhân theo ngày thành công",
+        data: leaveRequests,
+      });
+    } catch (error) {
+      return this.handleError(res, error, "Lấy lịch sử nghỉ phép cá nhân theo ngày thất bại");
     }
   }
 
