@@ -24,7 +24,6 @@ const {
  *               brandId: { type: string }
  *               categoryId: { type: string }
  *               categoryName: { type: string }
- *               supplierId: { type: string }
  *               status: { type: string, enum: [ACTIVE, INACTIVE], default: ACTIVE }
  *               images:
  *                 type: array
@@ -123,32 +122,19 @@ const {
  *                     type: object
  *                     properties:
  *                       name: { type: string }
- *                       totalStock: { type: number, description: "Total stock across all items and locations" }
- *                       items:
+ *                       brandId: { type: string, nullable: true }
+ *                       categoryId: { type: string, nullable: true }
+ *                       brandName: { type: string, nullable: true }
+ *                       categoryName: { type: string, nullable: true }
+ *                       status: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
+ *                       images:
  *                         type: array
  *                         items:
  *                           type: object
  *                           properties:
- *                             sku: { type: string }
- *                             stock: { type: number, description: "Total stock of this specific variant across allowed locations" }
- *                             stockDetails:
- *                               type: array
- *                               items:
- *                                 type: object
- *                                 properties:
- *                                   locationId: { type: string }
- *                                   locationType: { type: string }
- *                                   stock: { type: number }
- *                             suppliers:
- *                               type: array
- *                               description: "List of suppliers this variant has been imported from"
- *                               items:
- *                                 type: object
- *                                 properties:
- *                                   _id: { type: string }
- *                                   supplierName: { type: string }
- *                                   email: { type: string }
- *                                   phoneNumber: { type: string }
+ *                             url: { type: string }
+ *                             isThumbnail: { type: boolean }
+ *                       totalStock: { type: number, description: "Total stock across all items and locations" }
  *                 pagination:
  *                   type: object
  * /products/search:
@@ -231,7 +217,6 @@ const {
  *               brandId: { type: string }
  *               categoryId: { type: string }
  *               categoryName: { type: string }
- *               supplierId: { type: string }
  *               status: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
  *               images:
  *                 type: array
@@ -360,6 +345,33 @@ const {
  *         description: Cannot delete item because active inventory exists
  *       404:
  *         description: Product item not found
+ * 
+ * /products/items/{itemId}/suppliers:
+ *   post:
+ *     tags: [Products]
+ *     summary: Add a supplier to a product item
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               supplierId: { type: string }
+ *     responses:
+ *       200:
+ *         description: Supplier added successfully
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Supplier or Product item not found
  */
 const registerProductModule = (app) => {
   app.post(
@@ -412,6 +424,11 @@ const registerProductModule = (app) => {
     "/products/items/:itemId/delete",
     verifyJwt,
     ProductController.deleteItem.bind(ProductController),
+  );
+  app.post(
+    "/products/items/:itemId/suppliers",
+    verifyJwt,
+    ProductController.addSupplierToItem.bind(ProductController),
   );
 
   console.log("✓ Product module registered");

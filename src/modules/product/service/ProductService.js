@@ -47,16 +47,7 @@ class ProductService {
           );
         }
 
-        // 2. Validate Supplier ownership (if provided)
-        if (productData.supplierId) {
-          const supplier = await Supplier.findOne({
-            _id: productData.supplierId,
-            tenantId,
-          }).session(session);
-          if (!supplier) {
-            throw new Error("Supplier not found");
-          }
-        }
+        // 2. Removed supplier validation since supplier is on ProductItem level
 
         // 3. Create the base Product
         const product = new Product({
@@ -65,7 +56,6 @@ class ProductService {
           brandId: productData.brandId,
           categoryId: productData.categoryId,
           categoryName: productData.categoryName,
-          supplierId: productData.supplierId,
           status: productData.status,
           images: productData.images,
         });
@@ -139,7 +129,16 @@ class ProductService {
     }
 
     if (supplierId) {
-      filter.supplierId = supplierId;
+      const supplierItems = await ProductItem.find({
+        tenantId,
+        suppliers: supplierId,
+      })
+        .select("productId")
+        .lean();
+      const supplierProductIds = new Set(
+        supplierItems.map((i) => i.productId.toString())
+      );
+      filter._id = { $in: Array.from(supplierProductIds) };
     }
 
     if (search) {
@@ -161,22 +160,44 @@ class ProductService {
         _id: { $in: productItemIds },
       }).lean();
 
-      const productIds = productItems.map((pi) => pi.productId);
+      const locationProductIds = new Set(
+        productItems.map((pi) => pi.productId.toString())
+      );
 
-      filter._id = { $in: productIds };
+      if (filter._id) {
+        const intersected = filter._id.$in.filter((id) =>
+          locationProductIds.has(id.toString())
+        );
+        filter._id = { $in: intersected };
+      } else {
+        filter._id = { $in: Array.from(locationProductIds) };
+      }
     }
 
-    const [data, total] = await Promise.all([
-      Product.find(filter).skip(skip).limit(limit).lean(),
+    let [data, total] = await Promise.all([
+      Product.find(filter)
+        .populate("brandId", "name")
+        .skip(skip)
+        .limit(limit)
+        .lean(),
       Product.countDocuments(filter),
     ]);
+
+    // Format brandName
+    data = data.map(product => ({
+      ...product,
+      brandName: product.brandId?.name || null,
+      brandId: product.brandId?._id || product.brandId,
+    }));
 
     if (data.length > 0) {
       const productIds = data.map((p) => p._id);
       const items = await ProductItem.find({
         tenantId,
         productId: { $in: productIds },
-      }).lean();
+      })
+        .select("-suppliers")
+        .lean();
 
       if (items.length > 0) {
         const itemIds = items.map((i) => i._id);
@@ -210,14 +231,13 @@ class ProductService {
           itemMap[pId].push(item);
         });
 
-        // Attach items to products
+        // Compute totalStock without attaching items
         data.forEach(product => {
-          product.items = itemMap[product._id.toString()] || [];
-          product.totalStock = product.items.reduce((sum, item) => sum + item.stock, 0);
+          const productItems = itemMap[product._id.toString()] || [];
+          product.totalStock = productItems.reduce((sum, item) => sum + item.stock, 0);
         });
       } else {
         data.forEach((product) => {
-          product.items = [];
           product.totalStock = 0;
         });
       }
@@ -259,7 +279,20 @@ class ProductService {
     }
 
     if (categoryId) filter.categoryId = categoryId;
-    if (supplierId) filter.supplierId = supplierId;
+    
+    if (supplierId) {
+      const supplierItems = await ProductItem.find({
+        tenantId,
+        suppliers: supplierId,
+      })
+        .select("productId")
+        .lean();
+      const supplierProductIds = new Set(
+        supplierItems.map((i) => i.productId.toString())
+      );
+      if (supplierProductIds.size === 0) return empty;
+      filter._id = { $in: Array.from(supplierProductIds) };
+    }
 
     if (q) {
       const escQ = escapeRegex(q);
@@ -285,7 +318,16 @@ class ProductService {
       ]);
 
       if (matchedIds.size === 0) return empty;
-      filter._id = { $in: Array.from(matchedIds) };
+
+      if (filter._id) {
+        const intersected = filter._id.$in.filter((id) =>
+          matchedIds.has(id.toString())
+        );
+        if (intersected.length === 0) return empty;
+        filter._id = { $in: intersected };
+      } else {
+        filter._id = { $in: Array.from(matchedIds) };
+      }
     }
 
     // Branch filter narrows the result set to products with stock at that location.
@@ -329,7 +371,9 @@ class ProductService {
       const items = await ProductItem.find({
         tenantId,
         productId: { $in: productIds },
-      }).lean();
+      })
+        .select("-suppliers")
+        .lean();
 
       const inventories = items.length
         ? await Inventory.find({
@@ -426,16 +470,6 @@ class ProductService {
   }
 
   async updateProduct(tenantId, productId, updateData) {
-    if (updateData.supplierId) {
-      const supplier = await Supplier.findOne({
-        _id: updateData.supplierId,
-        tenantId,
-      }).lean();
-      if (!supplier) {
-        throw new Error("Supplier not found");
-      }
-    }
-
     const product = await Product.findOneAndUpdate(
       { _id: productId, tenantId },
       { $set: updateData },
@@ -539,6 +573,26 @@ class ProductService {
       { $set: updateData },
       { new: true },
     );
+
+    if (!productItem) {
+      throw new Error("Product item not found");
+    }
+
+    return productItem;
+  }
+
+  async addSupplierToItem(tenantId, itemId, supplierId) {
+    // Check if supplier exists
+    const supplierExists = await Supplier.exists({ _id: supplierId, tenantId });
+    if (!supplierExists) {
+      throw new Error("Supplier not found");
+    }
+
+    const productItem = await ProductItem.findOneAndUpdate(
+      { _id: itemId, tenantId },
+      { $addToSet: { suppliers: supplierId } },
+      { new: true }
+    ).populate("suppliers", "supplierName email phoneNumber").lean();
 
     if (!productItem) {
       throw new Error("Product item not found");
