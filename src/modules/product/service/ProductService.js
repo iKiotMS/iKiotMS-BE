@@ -47,16 +47,7 @@ class ProductService {
           );
         }
 
-        // 2. Validate Supplier ownership (if provided)
-        if (productData.supplierId) {
-          const supplier = await Supplier.findOne({
-            _id: productData.supplierId,
-            tenantId,
-          }).session(session);
-          if (!supplier) {
-            throw new Error("Supplier not found");
-          }
-        }
+        // 2. Removed supplier validation since supplier is on ProductItem level
 
         // 3. Create the base Product
         const product = new Product({
@@ -65,7 +56,6 @@ class ProductService {
           brandId: productData.brandId,
           categoryId: productData.categoryId,
           categoryName: productData.categoryName,
-          supplierId: productData.supplierId,
           status: productData.status,
           images: productData.images,
         });
@@ -139,7 +129,16 @@ class ProductService {
     }
 
     if (supplierId) {
-      filter.supplierId = supplierId;
+      const supplierItems = await ProductItem.find({
+        tenantId,
+        suppliers: supplierId,
+      })
+        .select("productId")
+        .lean();
+      const supplierProductIds = new Set(
+        supplierItems.map((i) => i.productId.toString())
+      );
+      filter._id = { $in: Array.from(supplierProductIds) };
     }
 
     if (search) {
@@ -161,9 +160,18 @@ class ProductService {
         _id: { $in: productItemIds },
       }).lean();
 
-      const productIds = productItems.map((pi) => pi.productId);
+      const locationProductIds = new Set(
+        productItems.map((pi) => pi.productId.toString())
+      );
 
-      filter._id = { $in: productIds };
+      if (filter._id) {
+        const intersected = filter._id.$in.filter((id) =>
+          locationProductIds.has(id.toString())
+        );
+        filter._id = { $in: intersected };
+      } else {
+        filter._id = { $in: Array.from(locationProductIds) };
+      }
     }
 
     const [data, total] = await Promise.all([
@@ -259,7 +267,20 @@ class ProductService {
     }
 
     if (categoryId) filter.categoryId = categoryId;
-    if (supplierId) filter.supplierId = supplierId;
+    
+    if (supplierId) {
+      const supplierItems = await ProductItem.find({
+        tenantId,
+        suppliers: supplierId,
+      })
+        .select("productId")
+        .lean();
+      const supplierProductIds = new Set(
+        supplierItems.map((i) => i.productId.toString())
+      );
+      if (supplierProductIds.size === 0) return empty;
+      filter._id = { $in: Array.from(supplierProductIds) };
+    }
 
     if (q) {
       const escQ = escapeRegex(q);
@@ -285,7 +306,16 @@ class ProductService {
       ]);
 
       if (matchedIds.size === 0) return empty;
-      filter._id = { $in: Array.from(matchedIds) };
+
+      if (filter._id) {
+        const intersected = filter._id.$in.filter((id) =>
+          matchedIds.has(id.toString())
+        );
+        if (intersected.length === 0) return empty;
+        filter._id = { $in: intersected };
+      } else {
+        filter._id = { $in: Array.from(matchedIds) };
+      }
     }
 
     // Branch filter narrows the result set to products with stock at that location.
@@ -426,16 +456,6 @@ class ProductService {
   }
 
   async updateProduct(tenantId, productId, updateData) {
-    if (updateData.supplierId) {
-      const supplier = await Supplier.findOne({
-        _id: updateData.supplierId,
-        tenantId,
-      }).lean();
-      if (!supplier) {
-        throw new Error("Supplier not found");
-      }
-    }
-
     const product = await Product.findOneAndUpdate(
       { _id: productId, tenantId },
       { $set: updateData },

@@ -4,7 +4,6 @@ class CreateProductRequestDTO {
     this.brandId = data.brandId;
     this.categoryId = data.categoryId;
     this.categoryName = data.categoryName;
-    this.supplierId = data.supplierId;
     this.status = data.status || "ACTIVE";
     this.images = Array.isArray(data.images) ? data.images : [];
     this.items = data.items || [];

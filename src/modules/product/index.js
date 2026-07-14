@@ -24,7 +24,6 @@ const {
  *               brandId: { type: string }
  *               categoryId: { type: string }
  *               categoryName: { type: string }
- *               supplierId: { type: string }
  *               status: { type: string, enum: [ACTIVE, INACTIVE], default: ACTIVE }
  *               images:
  *                 type: array
@@ -231,7 +230,6 @@ const {
  *               brandId: { type: string }
  *               categoryId: { type: string }
  *               categoryName: { type: string }
- *               supplierId: { type: string }
  *               status: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
  *               images:
  *                 type: array

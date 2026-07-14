@@ -5,7 +5,6 @@ class UpdateProductRequestDTO {
     if (data.brandId !== undefined) this.brandId = data.brandId;
     if (data.categoryId !== undefined) this.categoryId = data.categoryId;
     if (data.categoryName !== undefined) this.categoryName = data.categoryName;
-    if (data.supplierId !== undefined) this.supplierId = data.supplierId;
     if (data.status !== undefined) this.status = data.status;
     if (data.images !== undefined) this.images = data.images;
   }
