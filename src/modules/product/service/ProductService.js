@@ -383,7 +383,9 @@ class ProductService {
       throw new Error("Product not found");
     }
 
-    const items = await ProductItem.find({ productId, tenantId }).lean();
+    const items = await ProductItem.find({ productId, tenantId })
+      .populate("suppliers", "supplierName email phoneNumber")
+      .lean();
 
     if (items.length > 0) {
       const itemIds = items.map((i) => i._id);
