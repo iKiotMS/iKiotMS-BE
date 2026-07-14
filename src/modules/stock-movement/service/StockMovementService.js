@@ -68,10 +68,16 @@ class StockMovementService {
       if (!payload.fromSupplierId) throw new Error("fromSupplierId is required for IMPORT");
       if (!payload.toLocationId || !payload.toLocationType) throw new Error("toLocation is required for IMPORT");
       if (payload.details) {
-        payload.details.forEach(item => {
+        for (const item of payload.details) {
           if (!item.importPrice || item.importPrice <= 0) throw new Error("importPrice must be > 0 for IMPORT");
           if (!item.quantity || item.quantity <= 0) throw new Error("quantity must be > 0 for IMPORT");
-        });
+
+          const productItem = await mongoose.model("ProductItem").findOne({ _id: item.productItemId, tenantId }).lean();
+          if (!productItem) throw new Error("Product item not found");
+          if (item.importPrice > productItem.retailPrice) {
+            throw new Error(`Import price cannot be greater than retail price (${productItem.retailPrice}) for product item ${productItem.sku}`);
+          }
+        }
       }
     } else if (movementType === "EXPORT" || movementType === "RETURN") {
       if (!payload.toLocationId || !payload.toLocationType) throw new Error("toLocation is required");
@@ -206,6 +212,12 @@ class StockMovementService {
           for (const item of details) {
             if (!item.importPrice || item.importPrice <= 0) throw new Error("importPrice must be > 0 for IMPORT");
             if (!item.quantity || item.quantity <= 0) throw new Error("quantity must be > 0 for IMPORT");
+
+            const productItem = await mongoose.model("ProductItem").findOne({ _id: item.productItemId, tenantId }).lean();
+            if (!productItem) throw new Error("Product item not found");
+            if (item.importPrice > productItem.retailPrice) {
+              throw new Error(`Import price cannot be greater than retail price (${productItem.retailPrice}) for product item ${productItem.sku}`);
+            }
           }
         }
 
