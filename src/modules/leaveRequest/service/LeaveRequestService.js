@@ -103,7 +103,7 @@ class LeaveRequestService extends BaseService {
 
   async getLeaveRequests({ tenantId, filter, page, recordPerPage }) {
     const selectedFields =
-      "userId paidLeaveDays unpaidLeaveDays startDate endDate status reason";
+      "userId approvedBy paidLeaveDays unpaidLeaveDays startDate endDate status reason reviewNote handoverToUserId createdAt updatedAt";
     const populatedFields = {
       path: "userId",
       select: "branchId warehouseId profile email",
