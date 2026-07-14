@@ -28,6 +28,7 @@
     "branches": ["create", "read", "update", "delete"],
     "warehouses": ["create", "read", "update", "delete"],
     "orders": ["read"],
+    "cash_drawers": ["open", "read", "report", "finalize"],
     "inventory": ["read", "update"],
     "promotions": ["create", "read", "update", "delete", "calculate", "apply"],
     "reports": ["read", "export"],
@@ -46,6 +47,7 @@
     "products": ["read"],
     "branches": ["read", "update"],
     "orders": ["create", "read", "update"],
+    "cash_drawers": ["open", "read", "report", "finalize"],
     "inventory": ["read", "update"],
     "promotions": ["read", "calculate", "apply"],
     "reports": ["read"],
@@ -74,6 +76,7 @@
   "STAFF": {
     "products": ["read"],
     "orders": ["create", "read", "pay_offline"],
+    "cash_drawers": ["read_own", "report"],
     "inventory": ["read"],
     "branches": ["read"],
     "promotions": ["read", "calculate", "apply"],

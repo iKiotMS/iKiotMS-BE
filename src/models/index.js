@@ -16,6 +16,7 @@ module.exports = {
   Inventory: require("./Inventory"),
   Order: require("./Order"),
   CashFlow: require("./CashFlow"),
+  CashDrawerSession: require("./CashDrawerSession"),
   StockMovementRequest: require("./StockMovementRequest"),
   Promotion: require("./Promotion"),
   PromotionLog: require("./PromotionLog"),
