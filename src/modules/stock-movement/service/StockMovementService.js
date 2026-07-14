@@ -84,9 +84,13 @@ class StockMovementService {
       }
       if (!payload.fromLocationId || !payload.fromLocationType) throw new Error("fromLocation is required");
       if (payload.details) {
-        payload.details.forEach(item => {
+        for (const item of payload.details) {
           if (!item.quantity || item.quantity <= 0) throw new Error("quantity must be > 0");
-        });
+          if (item.importPrice === undefined || item.importPrice === null) {
+            const productItem = await mongoose.model("ProductItem").findOne({ _id: item.productItemId, tenantId }).lean();
+            item.importPrice = productItem ? (productItem.costPrice || 0) : 0;
+          }
+        }
       }
     } else if (movementType === "ADJUST") {
       if (role !== "TENANT_OWNER") {
@@ -117,11 +121,17 @@ class StockMovementService {
       status = "PENDING";
     }
 
+    let totalPrice = 0;
+    if (movementType !== "ADJUST" && payload.details) {
+      totalPrice = payload.details.reduce((sum, item) => sum + (item.quantity * (item.importPrice || 0)), 0);
+    }
+
     const request = new StockMovementRequest({
       ...payload,
       tenantId,
       createdBy: userId,
       status,
+      totalPrice,
     });
     
     await request.save();
@@ -178,6 +188,10 @@ class StockMovementService {
           if (item.quantity > currentStock) {
             throw new Error(`Quantity ${item.quantity} exceeds available stock ${currentStock} at source location`);
           }
+          if (item.importPrice === undefined || item.importPrice === null) {
+            const productItem = await mongoose.model("ProductItem").findOne({ _id: item.productItemId, tenantId }).lean();
+            item.importPrice = productItem ? (productItem.costPrice || 0) : 0;
+          }
         }
       } else {
         // IMPORT and ADJUST
@@ -217,6 +231,9 @@ class StockMovementService {
       }
 
       request.details = details;
+      if (request.movementType !== "ADJUST") {
+        request.totalPrice = details.reduce((sum, item) => sum + (item.quantity * (item.importPrice || 0)), 0);
+      }
       await request.save({ session });
 
       await session.commitTransaction();
