@@ -51,8 +51,19 @@ const payrollPeriodSchema = new mongoose.Schema(
       ref: "User",
     },
     paidAt: Date,
+    paymentMethod: {
+      type: String,
+      enum: ["CASH", "BANK_TRANSFER", "MOMO", "VNPAY", "SEPAY"],
+    },
+    // External bank/receipt code supplied by the user.
     paymentReference: { type: String, trim: true },
     paymentNote: { type: String, trim: true },
+    cashFlowId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CashFlow",
+    },
+    // Internal immutable code (PAYR...) copied from CashFlow for quick display.
+    cashFlowReference: { type: String, trim: true },
   },
   { timestamps: true },
 );

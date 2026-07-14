@@ -86,7 +86,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   get:
  *     tags: [Stats]
  *     summary: Income vs expense from CashFlow
- *     description: Totals of INCOME and EXPENSE plus net. Filter by `flow` (reference prefix) to isolate a money-flow — e.g. ORD = sales, SUP = supplier payments.
+ *     description: Totals of INCOME and EXPENSE plus net. Filter by `flow` (reference prefix) to isolate a money-flow — ORD = sales, SUP = supplier payments, PAYR = payroll payments.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - $ref: '#/components/parameters/StatsFromDate'
@@ -94,8 +94,8 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       - $ref: '#/components/parameters/StatsBranchId'
  *       - in: query
  *         name: flow
- *         schema: { type: string, enum: [ORD, SUP] }
- *         description: Reference prefix — ORD (sales), SUP (supplier payments).
+ *         schema: { type: string, enum: [ORD, SUP, PAYR] }
+ *         description: Reference prefix — ORD (sales), SUP (supplier payments), PAYR (payroll expenses).
  *       - in: query
  *         name: flowType
  *         schema: { type: string, enum: [INCOME, EXPENSE] }

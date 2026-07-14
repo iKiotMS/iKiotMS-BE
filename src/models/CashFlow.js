@@ -33,6 +33,10 @@ const cashFlowSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Supplier",
     },
+    payrollPeriodId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PayrollPeriod",
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -58,6 +62,16 @@ cashFlowSchema.index({ tenantId: 1, branchId: 1, createdAt: -1 });
 cashFlowSchema.index(
   { orderId: 1, flowType: 1 },
   { unique: true, partialFilterExpression: { orderId: { $exists: true } } },
+);
+
+// MARK_PAID is a whole-period action: one payroll period must produce exactly
+// one expense row, including when two requests race at the same time.
+cashFlowSchema.index(
+  { payrollPeriodId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { payrollPeriodId: { $exists: true } },
+  },
 );
 
 module.exports = mongoose.model("CashFlow", cashFlowSchema);

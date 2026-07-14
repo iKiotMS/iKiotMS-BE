@@ -442,6 +442,10 @@ const PayrollController = require("./controller/PayrollController");
  *                       periodStart: { type: string, format: date-time }
  *                       periodEnd: { type: string, format: date-time }
  *                       status: { type: string, enum: [DRAFT, REVIEW, APPROVED, PAID, CANCELLED] }
+ *                       paymentMethod: { type: string, enum: [CASH, BANK_TRANSFER, MOMO, VNPAY, SEPAY] }
+ *                       paymentReference: { type: string, description: External bank or receipt reference supplied when marking paid. }
+ *                       cashFlowId: { type: string, description: Linked CashFlow expense ID after payment. }
+ *                       cashFlowReference: { type: string, example: PAYR9F2A1B3C4D, description: Server-generated internal payroll expense code. }
  *                       totalCost:
  *                         type: number
  *                         example: 125000000
@@ -486,6 +490,10 @@ const PayrollController = require("./controller/PayrollController");
  *                         periodStart: { type: string, format: date-time }
  *                         periodEnd: { type: string, format: date-time }
  *                         status: { type: string, enum: [DRAFT, REVIEW, APPROVED, PAID, CANCELLED] }
+ *                         paymentMethod: { type: string, enum: [CASH, BANK_TRANSFER, MOMO, VNPAY, SEPAY] }
+ *                         paymentReference: { type: string, description: External bank or receipt reference supplied when marking paid. }
+ *                         cashFlowId: { type: string, description: Linked CashFlow expense ID after payment. }
+ *                         cashFlowReference: { type: string, example: PAYR9F2A1B3C4D, description: Server-generated internal payroll expense code. }
  *                         totalCost:
  *                           type: number
  *                           example: 125000000
@@ -610,14 +618,31 @@ const PayrollController = require("./controller/PayrollController");
  * /payroll/my-payslips:
  *   get:
  *     tags: [Payroll]
- *     summary: List the authenticated employee's published payslips
- *     description: Only APPROVED and PAID payslips belonging to the authenticated user are returned.
+ *     summary: List the authenticated employee's visible payslips
+ *     description: Returns only the caller's REVIEW, APPROVED, and PAID payslips. REVIEW is provisional and read-only so the employee can verify it before approval. A payslip returned to DRAFT is hidden again.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: page, schema: { type: integer, default: 1 } }
  *       - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }
  *     responses:
- *       200: { description: Employee payslip list returned }
+ *       200:
+ *         description: Employee payslip list returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id: { type: string }
+ *                       status: { type: string, enum: [REVIEW, APPROVED, PAID] }
+ *                       netSalary: { type: number }
+ *                       payrollPeriodId: { type: object }
+ *                 pagination: { type: object }
  *       400: { description: Invalid pagination }
  *       401: { description: Unauthorized }
  *       403: { description: User cannot read own payslips }
@@ -625,21 +650,36 @@ const PayrollController = require("./controller/PayrollController");
  * /payroll/my-payslips/{payslipId}:
  *   get:
  *     tags: [Payroll]
- *     summary: Get one published payslip belonging to the authenticated employee
+ *     summary: Get one visible payslip belonging to the authenticated employee
+ *     description: REVIEW payslips are provisional and read-only. APPROVED and PAID payslips are finalized. DRAFT payslips are not visible to employees.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: payslipId, required: true, schema: { type: string } }
  *     responses:
- *       200: { description: Employee payslip returned }
+ *       200:
+ *         description: Employee payslip returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     _id: { type: string }
+ *                     status: { type: string, enum: [REVIEW, APPROVED, PAID] }
+ *                     netSalary: { type: number }
  *       400: { description: Invalid payslip ID }
  *       401: { description: Unauthorized }
  *       403: { description: User cannot read own payslips }
- *       404: { description: Published payslip not found or does not belong to the user }
+ *       404: { description: Visible payslip not found or does not belong to the user }
  *
  * /payroll/periods/{periodId}/mark-paid:
  *   post:
  *     tags: [Payroll]
  *     summary: Mark an approved payroll period as paid
+ *     description: Atomically creates one tenant-level CashFlow EXPENSE for the full net salary, generates an internal PAYR reference, and changes the period and all payslips from APPROVED to PAID.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: periodId, required: true, schema: { type: string } }
@@ -649,15 +689,39 @@ const PayrollController = require("./controller/PayrollController");
  *           schema:
  *             type: object
  *             properties:
- *               paymentReference: { type: string }
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: [CASH]
+ *                 default: CASH
+ *                 description: Payroll payment is currently recorded as CASH; the server also defaults to CASH when omitted.
+ *               paymentReference: { type: string, description: Optional external bank or receipt reference. The internal PAYR code is generated by the server. }
  *               paymentNote: { type: string }
  *     responses:
- *       200: { description: Status changed from APPROVED to PAID }
+ *       200:
+ *         description: Payroll marked paid and CashFlow expense recorded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     _id: { type: string }
+ *                     status: { type: string, enum: [PAID] }
+ *                     paidAt: { type: string, format: date-time }
+ *                     paymentMethod: { type: string }
+ *                     paymentReference: { type: string, description: External payment reference. }
+ *                     cashFlowId: { type: string }
+ *                     cashFlowReference: { type: string, example: PAYR9F2A1B3C4D }
  *       400: { description: Invalid payment information }
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden }
  *       404: { description: Payroll period not found }
- *       409: { description: Invalid current status }
+ *       409: { description: Invalid current status or CashFlow already recorded }
+ *       422: { description: Payroll period has no positive amount to pay }
  *
  * /payroll/paysheets:
  *   post:
