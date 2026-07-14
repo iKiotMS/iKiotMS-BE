@@ -1,5 +1,6 @@
 class CreateProductItemRequestDTO {
   constructor(data) {
+    this.productName = data.productName;
     this.productCode = data.productCode;
     this.sku = data.sku;
     this.retailPrice = data.retailPrice;
@@ -15,6 +16,10 @@ class CreateProductItemRequestDTO {
 
   validate() {
     const errors = [];
+
+    if (!this.productName || typeof this.productName !== "string") {
+      errors.push("Product name is required and must be a string");
+    }
 
     if (!this.productCode || typeof this.productCode !== "string") {
       errors.push("Product code is required and must be a string");

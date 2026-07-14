@@ -67,7 +67,7 @@ class ProductService {
           ...item,
           tenantId,
           productId: product._id,
-          productName: productData.name,
+          productName: item.productName,
         }));
 
         const insertedItems = await ProductItem.insertMany(productItemsData, {
@@ -530,7 +530,7 @@ class ProductService {
         ...itemData,
         tenantId,
         productId,
-        productName: product.name,
+        productName: itemData.productName,
       });
 
       await productItem.save({ session });

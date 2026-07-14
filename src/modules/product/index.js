@@ -36,8 +36,9 @@ const {
  *                 type: array
  *                 items:
  *                   type: object
- *                   required: [productCode, sku, retailPrice, costPrice]
+ *                   required: [productName, productCode, sku, retailPrice, costPrice]
  *                   properties:
+ *                     productName: { type: string }
  *                     productCode: { type: string }
  *                     sku: { type: string }
  *                     barcode: { type: string }
@@ -264,8 +265,9 @@ const {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [productCode, sku, retailPrice, costPrice]
+ *             required: [productName, productCode, sku, retailPrice, costPrice]
  *             properties:
+ *               productName: { type: string }
  *               productCode: { type: string }
  *               sku: { type: string }
  *               barcode: { type: string }
