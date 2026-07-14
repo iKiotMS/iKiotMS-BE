@@ -441,7 +441,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Forbidden
+ *         description: Forbidden. Users cannot approve their own request, and branch and warehouse managers cannot approve each other's requests.
  *       404:
  *         description: Leave request not found
  *
@@ -473,7 +473,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Forbidden
+ *         description: Forbidden. Users cannot reject their own request, and branch and warehouse managers cannot reject each other's requests.
  *       404:
  *         description: Leave request not found
  *
