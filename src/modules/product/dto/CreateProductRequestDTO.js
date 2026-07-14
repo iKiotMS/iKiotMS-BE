@@ -20,6 +20,7 @@ class CreateProductRequestDTO {
       errors.push("At least one product item (variant) is required");
     } else {
       this.items.forEach((item, index) => {
+        if (!item.productName) errors.push(`Item[${index}]: productName is required`);
         if (!item.productCode) errors.push(`Item[${index}]: productCode is required`);
         if (!item.sku) errors.push(`Item[${index}]: sku is required`);
         if (item.retailPrice === undefined || item.retailPrice < 0) {
