@@ -139,6 +139,16 @@ const {
  *                                   locationId: { type: string }
  *                                   locationType: { type: string }
  *                                   stock: { type: number }
+ *                             suppliers:
+ *                               type: array
+ *                               description: "List of suppliers this variant has been imported from"
+ *                               items:
+ *                                 type: object
+ *                                 properties:
+ *                                   _id: { type: string }
+ *                                   supplierName: { type: string }
+ *                                   email: { type: string }
+ *                                   phoneNumber: { type: string }
  *                 pagination:
  *                   type: object
  * /products/search:

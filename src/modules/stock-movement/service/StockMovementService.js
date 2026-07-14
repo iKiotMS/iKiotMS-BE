@@ -389,6 +389,20 @@ class StockMovementService {
         );
       }
 
+      if (request.movementType === "IMPORT" && request.fromSupplierId) {
+        const receivedProductItemIds = request.details
+          .filter(reqItem => reqItem.receivedQuantity > 0)
+          .map(reqItem => reqItem.productItemId);
+
+        if (receivedProductItemIds.length > 0) {
+          await mongoose.model("ProductItem").updateMany(
+            { _id: { $in: receivedProductItemIds }, tenantId },
+            { $addToSet: { suppliers: request.fromSupplierId } },
+            { session }
+          );
+        }
+      }
+
       request.status = "RECEIVED";
       await request.save({ session });
 

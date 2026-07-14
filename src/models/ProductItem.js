@@ -59,6 +59,12 @@ const productItemSchema = new mongoose.Schema(
       min: [0, "VAT cannot be negative"],
       max: [100, "VAT cannot exceed 100"],
     },
+    suppliers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Supplier",
+      },
+    ],
     productDetails: [
       {
         id: {
