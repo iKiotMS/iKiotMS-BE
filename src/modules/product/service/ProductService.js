@@ -174,17 +174,30 @@ class ProductService {
       }
     }
 
-    const [data, total] = await Promise.all([
-      Product.find(filter).skip(skip).limit(limit).lean(),
+    let [data, total] = await Promise.all([
+      Product.find(filter)
+        .populate("brandId", "name")
+        .skip(skip)
+        .limit(limit)
+        .lean(),
       Product.countDocuments(filter),
     ]);
+
+    // Format brandName
+    data = data.map(product => ({
+      ...product,
+      brandName: product.brandId?.name || null,
+      brandId: product.brandId?._id || product.brandId,
+    }));
 
     if (data.length > 0) {
       const productIds = data.map((p) => p._id);
       const items = await ProductItem.find({
         tenantId,
         productId: { $in: productIds },
-      }).lean();
+      })
+        .select("-suppliers")
+        .lean();
 
       if (items.length > 0) {
         const itemIds = items.map((i) => i._id);
@@ -218,14 +231,13 @@ class ProductService {
           itemMap[pId].push(item);
         });
 
-        // Attach items to products
+        // Compute totalStock without attaching items
         data.forEach(product => {
-          product.items = itemMap[product._id.toString()] || [];
-          product.totalStock = product.items.reduce((sum, item) => sum + item.stock, 0);
+          const productItems = itemMap[product._id.toString()] || [];
+          product.totalStock = productItems.reduce((sum, item) => sum + item.stock, 0);
         });
       } else {
         data.forEach((product) => {
-          product.items = [];
           product.totalStock = 0;
         });
       }
@@ -359,7 +371,9 @@ class ProductService {
       const items = await ProductItem.find({
         tenantId,
         productId: { $in: productIds },
-      }).lean();
+      })
+        .select("-suppliers")
+        .lean();
 
       const inventories = items.length
         ? await Inventory.find({
