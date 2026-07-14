@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const CashFlow = require("../../src/models/CashFlow");
 const PayrollPeriod = require("../../src/models/PayrollPeriod");
 const Payslip = require("../../src/models/Payslip");
 const PayrollService = require("../../src/modules/payroll/service/PayrollService");
@@ -58,7 +59,9 @@ describe("Payroll draft editing and status workflow", () => {
     const tenantId = new mongoose.Types.ObjectId();
     const periodId = new mongoose.Types.ObjectId();
     const currentUserId = new mongoose.Types.ObjectId();
+    const cashFlowId = new mongoose.Types.ObjectId();
     const payrollPeriod = {
+      name: "Kỳ lương 07/2026",
       status: "DRAFT",
       save: jest.fn().mockResolvedValue(undefined),
     };
@@ -77,6 +80,11 @@ describe("Payroll draft editing and status workflow", () => {
       ]),
     };
     jest.spyOn(Payslip, "find").mockReturnValue(notificationQuery);
+    const aggregateQuery = {
+      session: jest.fn().mockResolvedValue([{ totalCost: 25000000 }]),
+    };
+    jest.spyOn(Payslip, "aggregate").mockReturnValue(aggregateQuery);
+    jest.spyOn(CashFlow, "create").mockResolvedValue([{ _id: cashFlowId }]);
     jest.spyOn(NotificationService, "notify").mockResolvedValue({ notified: 1 });
 
     await PayrollService.changePayrollPeriodStatus({
@@ -110,15 +118,33 @@ describe("Payroll draft editing and status workflow", () => {
       periodId,
       action: "MARK_PAID",
       actionData: {
-        paymentReference: "PAY-2026-07",
+        paymentReference: "VCB-2026-07",
         paymentNote: "Chuyển khoản",
       },
     });
     expect(payrollPeriod).toMatchObject({
       status: "PAID",
-      paymentReference: "PAY-2026-07",
+      paymentMethod: "CASH",
+      paymentReference: "VCB-2026-07",
       paymentNote: "Chuyển khoản",
+      cashFlowId,
+      cashFlowReference: expect.stringMatching(/^PAYR[A-F0-9]{10}$/),
     });
+    expect(CashFlow.create).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          tenantId,
+          payrollPeriodId: periodId,
+          createdBy: currentUserId,
+          flowType: "EXPENSE",
+          amount: 25000000,
+          paymentMethod: "CASH",
+          paymentReference: payrollPeriod.cashFlowReference,
+          description: "Thanh toán Kỳ lương 07/2026",
+        }),
+      ],
+      { session },
+    );
     expect(Payslip.updateMany).toHaveBeenNthCalledWith(
       3,
       { tenantId, payrollPeriodId: periodId },

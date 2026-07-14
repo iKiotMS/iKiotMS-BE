@@ -1,6 +1,7 @@
 class PayrollPeriodActionDTO {
   constructor(data = {}) {
     this.reason = data.reason;
+    this.paymentMethod = data.paymentMethod;
     this.paymentReference = data.paymentReference;
     this.paymentNote = data.paymentNote;
   }
@@ -10,6 +11,13 @@ class PayrollPeriodActionDTO {
 
     if (action === "RETURN_TO_DRAFT" && !this.reason?.trim()) {
       errors.reason = "Lý do trả lại bản nháp là bắt buộc";
+    }
+    if (
+      action === "MARK_PAID" &&
+      this.paymentMethod !== undefined &&
+      this.paymentMethod !== "CASH"
+    ) {
+      errors.paymentMethod = "Thanh toán lương hiện chỉ hỗ trợ CASH";
     }
     if (
       this.paymentReference !== undefined &&
