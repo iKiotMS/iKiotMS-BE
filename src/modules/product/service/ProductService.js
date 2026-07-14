@@ -581,6 +581,26 @@ class ProductService {
     return productItem;
   }
 
+  async addSupplierToItem(tenantId, itemId, supplierId) {
+    // Check if supplier exists
+    const supplierExists = await Supplier.exists({ _id: supplierId, tenantId });
+    if (!supplierExists) {
+      throw new Error("Supplier not found");
+    }
+
+    const productItem = await ProductItem.findOneAndUpdate(
+      { _id: itemId, tenantId },
+      { $addToSet: { suppliers: supplierId } },
+      { new: true }
+    ).populate("suppliers", "supplierName email phoneNumber").lean();
+
+    if (!productItem) {
+      throw new Error("Product item not found");
+    }
+
+    return productItem;
+  }
+
   async deleteProductItem(tenantId, itemId) {
     // Check if there is any inventory with stock > 0 for this item
     const activeInventoryCount = await Inventory.countDocuments({
