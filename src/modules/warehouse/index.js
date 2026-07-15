@@ -194,6 +194,7 @@ const registerWarehouseModule = (app) => {
   app.patch(
     "/warehouses/:id/manager",
     verifyJwt,
+    authorize("warehouses", "assign_manager"),
     WarehouseController.assignManager.bind(WarehouseController),
   );
 

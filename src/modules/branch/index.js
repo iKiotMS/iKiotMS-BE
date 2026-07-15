@@ -205,6 +205,7 @@ const registerBranchModule = (app) => {
   app.patch(
     "/branches/:id/manager",
     verifyJwt,
+    authorize("branches", "assign_manager"),
     BranchController.assignManager.bind(BranchController),
   );
 
