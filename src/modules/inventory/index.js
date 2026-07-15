@@ -66,6 +66,44 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Threshold updated
  *       404:
  *         description: Inventory record not found
+ * 
+ * /inventory:
+ *   post:
+ *     tags:
+ *       - Inventory
+ *     summary: Add a product item to a location with 0 stock
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [locationId, locationType, productItemId]
+ *             properties:
+ *               locationId: { type: string }
+ *               locationType: { type: string, enum: [branch, warehouse] }
+ *               productItemId: { type: string }
+ *     responses:
+ *       201:
+ *         description: Product added to location successfully
+ * 
+ * /inventory/{id}:
+ *   delete:
+ *     tags:
+ *       - Inventory
+ *     summary: Remove a product item from a location (only if stock is 0)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Product removed from location successfully
  */
 const registerInventoryModule = (app) => {
   const inventoryRoutes = [
@@ -77,12 +115,34 @@ const registerInventoryModule = (app) => {
       protected: true,
       authorize: ["update", "manage"],
     },
+    {
+      method: "post",
+      path: "/inventory",
+      handler: InventoryController.addProductToLocation.bind(InventoryController),
+      protected: true,
+      roles: ["TENANT_OWNER", "WAREHOUSE_MANAGER"],
+    },
+    {
+      method: "delete",
+      path: "/inventory/:id",
+      handler: InventoryController.removeProductFromLocation.bind(InventoryController),
+      protected: true,
+      roles: ["TENANT_OWNER", "WAREHOUSE_MANAGER"],
+    },
   ];
 
   inventoryRoutes.forEach((route) => {
     const handlers = [];
     if (route.protected) handlers.push(verifyJwt);
     if (route.authorize) handlers.push(authorize("inventory", route.authorize));
+    if (route.roles) {
+      handlers.push((req, res, next) => {
+        if (!route.roles.includes(req.user.role)) {
+          return res.status(403).json({ success: false, message: "Role not authorized for this action" });
+        }
+        next();
+      });
+    }
     handlers.push(route.handler);
     app[route.method](route.path, ...handlers);
   });
