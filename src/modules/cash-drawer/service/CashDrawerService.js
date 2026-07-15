@@ -29,6 +29,44 @@ class CashDrawerService {
   }
 
   scopedBranchId(actor, requestedBranchId, required = true) {
+    const managedBranchIds =
+      actor.role === "STAFF" && actor.managedScheduleAccess?.temporary
+        ? actor.managedScheduleAccess.branchIds || []
+        : [];
+
+    if (managedBranchIds.length) {
+      if (requestedBranchId) {
+        if (
+          !managedBranchIds.some(
+            (branchId) => String(branchId) === String(requestedBranchId),
+          )
+        ) {
+          throw appError(
+            "You cannot access a cash drawer outside your managed schedule",
+            403,
+          );
+        }
+        return requestedBranchId;
+      }
+
+      if (!required) return null;
+
+      if (
+        actor.branchId &&
+        managedBranchIds.some(
+          (branchId) => String(branchId) === String(actor.branchId),
+        )
+      ) {
+        return actor.branchId;
+      }
+
+      if (managedBranchIds.length === 1) return managedBranchIds[0];
+
+      throw appError("branchId is required", 400, {
+        branchId: "branchId is required when managing multiple branches",
+      });
+    }
+
     if (["BRANCH_MANAGER", "STAFF"].includes(actor.role)) {
       if (!actor.branchId) throw appError("User has no branch assigned", 403);
       if (
@@ -69,11 +107,17 @@ class CashDrawerService {
   sessionScope(actor, sessionId) {
     this.ensureObjectId(sessionId, "sessionId");
     const filter = { _id: sessionId, tenantId: actor.tenantId };
-    if (["BRANCH_MANAGER", "STAFF"].includes(actor.role)) {
+    const managedBranchIds =
+      actor.role === "STAFF" && actor.managedScheduleAccess?.temporary
+        ? actor.managedScheduleAccess.branchIds || []
+        : [];
+    if (managedBranchIds.length) {
+      filter.branchId = { $in: managedBranchIds };
+    } else if (["BRANCH_MANAGER", "STAFF"].includes(actor.role)) {
       if (!actor.branchId) throw appError("User has no branch assigned", 403);
       filter.branchId = actor.branchId;
     }
-    if (actor.role === "STAFF") {
+    if (actor.role === "STAFF" && !managedBranchIds.length) {
       filter.$or = [
         { currentStaffId: actor.userId },
         { "shiftLogs.staffId": actor.userId },
@@ -126,12 +170,16 @@ class CashDrawerService {
   async current({ actor, branchId }) {
     const scopedBranchId = this.scopedBranchId(actor, branchId);
     this.ensureObjectId(scopedBranchId, "branchId");
+    const managedBranchIds =
+      actor.role === "STAFF" && actor.managedScheduleAccess?.temporary
+        ? actor.managedScheduleAccess.branchIds || []
+        : [];
     const drawer = await this.populateDetail(
       CashDrawerSession.findOne({
         tenantId: actor.tenantId,
         branchId: scopedBranchId,
         status: "OPEN",
-        ...(actor.role === "STAFF"
+        ...(actor.role === "STAFF" && !managedBranchIds.length
           ? { currentStaffId: actor.userId }
           : {}),
       }),
@@ -150,13 +198,19 @@ class CashDrawerService {
 
   async list({ actor, dto }) {
     const branchId = this.scopedBranchId(actor, dto.branchId, false);
+    const managedBranchIds =
+      actor.role === "STAFF" && actor.managedScheduleAccess?.temporary
+        ? actor.managedScheduleAccess.branchIds || []
+        : [];
     const filter = { tenantId: actor.tenantId };
     if (branchId) {
       this.ensureObjectId(branchId, "branchId");
       filter.branchId = branchId;
+    } else if (managedBranchIds.length) {
+      filter.branchId = { $in: managedBranchIds };
     }
     if (dto.status) filter.status = dto.status;
-    if (actor.role === "STAFF") {
+    if (actor.role === "STAFF" && !managedBranchIds.length) {
       filter.$or = [
         { currentStaffId: actor.userId },
         { "shiftLogs.staffId": actor.userId },
@@ -203,7 +257,33 @@ class CashDrawerService {
     if (String(drawer.currentStaffId) !== String(actor.userId)) {
       throw appError("Only the current staff member can submit a shift log", 403);
     }
-    if (dto.nextStaffId) {
+
+    const lastLog = drawer.shiftLogs.at(-1);
+    const lastLogType = lastLog?.type || "END";
+    if (dto.type === "START") {
+      const isFirstShift = !lastLog;
+      const isAssignedAfterHandover =
+        lastLogType === "END" &&
+        lastLog?.nextStaffId &&
+        String(lastLog.nextStaffId) === String(actor.userId);
+      if (!isFirstShift && !isAssignedAfterHandover) {
+        throw appError(
+          "The current shift has already started or was not assigned by a handover",
+          409,
+        );
+      }
+    } else if (
+      !lastLog ||
+      lastLogType !== "START" ||
+      String(lastLog.staffId) !== String(actor.userId)
+    ) {
+      throw appError(
+        "The current staff member must submit a START shift log first",
+        409,
+      );
+    }
+
+    if (dto.type === "END" && dto.nextStaffId) {
       if (String(dto.nextStaffId) === String(actor.userId)) {
         throw appError("nextStaffId must be another user", 400);
       }
@@ -217,6 +297,7 @@ class CashDrawerService {
     const update = {
       $push: {
         shiftLogs: {
+          type: dto.type,
           staffId: actor.userId,
           amount: dto.amount,
           nextStaffId: dto.nextStaffId,
@@ -224,7 +305,7 @@ class CashDrawerService {
           loggedAt: new Date(),
         },
       },
-      ...(dto.nextStaffId
+      ...(dto.type === "END" && dto.nextStaffId
         ? { $set: { currentStaffId: dto.nextStaffId } }
         : {}),
     };
@@ -255,6 +336,7 @@ class CashDrawerService {
     const lastLog = drawer.shiftLogs.at(-1);
     if (
       !lastLog ||
+      (lastLog.type && lastLog.type !== "END") ||
       String(lastLog.staffId) !== String(drawer.currentStaffId) ||
       lastLog.nextStaffId
     ) {

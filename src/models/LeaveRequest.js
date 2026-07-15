@@ -50,6 +50,12 @@ const leaveRequestSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    handoverScheduleIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "WorkingSchedule",
+      },
+    ],
   },
   { timestamps: true },
 );

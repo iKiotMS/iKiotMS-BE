@@ -39,6 +39,12 @@ const cashDrawerSessionSchema = new mongoose.Schema(
     },
     shiftLogs: [
       {
+        type: {
+          type: String,
+          enum: ["START", "END"],
+          default: "END",
+          required: true,
+        },
         staffId: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "User",

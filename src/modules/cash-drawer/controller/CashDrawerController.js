@@ -11,6 +11,7 @@ class CashDrawerController {
       userId: req.user.userId,
       role: req.user.role,
       branchId: req.user.branchId,
+      managedScheduleAccess: req.user.managedScheduleAccess,
     };
   }
 
