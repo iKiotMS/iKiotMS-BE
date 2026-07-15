@@ -59,7 +59,9 @@
     
   },
   "WAREHOUSE_MANAGER": {
-    "products": ["read"],
+    "products": ["create", "read", "update", "delete"],
+    "categories": ["create", "read", "update", "delete"],
+    "brands": ["create", "read", "update", "delete"],
     "warehouses": ["read", "update"],
     "inventory": ["read", "update", "manage"],
     "stock_movement": ["create", "read", "update", "approve", "receive", "cancel"],
