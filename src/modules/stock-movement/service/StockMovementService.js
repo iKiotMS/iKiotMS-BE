@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const { StockMovementRequest, Supplier, Branch, Warehouse, CashFlow } = require("../../../models");
+const { REFERENCE_PREFIX } = require("../../../constants/referencePrefix");
+const { generateReference } = require("../../../utils/referenceGenerator");
 const InventoryService = require("../../inventory/service/InventoryService");
 const NotificationService = require("../../../services/notificationService");
 const ManagedScheduleAccessService = require("../../../services/managedScheduleAccessService");
@@ -572,22 +574,24 @@ class StockMovementService {
         throw new Error("Cannot receive an empty order. Received quantity must be > 0 for at least one item.");
       }
 
-      if (
-        request.movementType === "IMPORT" &&
-        totalImportCost > 0 &&
-        request.toLocationType === "branch"
-      ) {
-        // Auto-create CashFlow expense for Branch
+      if (request.movementType === "IMPORT" && totalImportCost > 0) {
+
+        const locationField =
+          request.toLocationType === "warehouse"
+            ? { warehouseId: request.toLocationId }
+            : { branchId: request.toLocationId };
+
         await CashFlow.create(
           [
             {
               tenantId,
-              branchId: request.toLocationId,
+              ...locationField,
               supplierId: request.fromSupplierId,
               createdBy: user.userId,
               flowType: "EXPENSE",
               amount: totalImportCost,
               paymentMethod: "CASH",
+              paymentReference: generateReference(REFERENCE_PREFIX.SUPPLIER),
               description: `Tự động tạo phiếu chi thanh toán nhập hàng - Phiếu ${request._id}`,
             },
           ],

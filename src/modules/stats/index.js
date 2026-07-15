@@ -28,6 +28,11 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       name: branchId
  *       schema: { type: string }
  *       description: Optional branch filter (TENANT_OWNER only; ignored for managers).
+ *     StatsWarehouseId:
+ *       in: query
+ *       name: warehouseId
+ *       schema: { type: string }
+ *       description: Optional warehouse filter for cashflow endpoints (TENANT_OWNER only; ignored for managers). Takes precedence over branchId when both are given.
  * /stats/overview:
  *   get:
  *     tags: [Stats]
@@ -92,6 +97,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       - $ref: '#/components/parameters/StatsFromDate'
  *       - $ref: '#/components/parameters/StatsToDate'
  *       - $ref: '#/components/parameters/StatsBranchId'
+ *       - $ref: '#/components/parameters/StatsWarehouseId'
  *       - in: query
  *         name: flow
  *         schema: { type: string, enum: [ORD, SUP, PAYR] }
@@ -112,6 +118,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       - $ref: '#/components/parameters/StatsFromDate'
  *       - $ref: '#/components/parameters/StatsToDate'
  *       - $ref: '#/components/parameters/StatsBranchId'
+ *       - $ref: '#/components/parameters/StatsWarehouseId'
  *       - in: query
  *         name: flow
  *         schema: { type: string, enum: [ORD, SUP, PAYR] }
@@ -156,6 +163,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - $ref: '#/components/parameters/StatsBranchId'
+ *       - $ref: '#/components/parameters/StatsWarehouseId'
  *       - in: query
  *         name: lowStockThreshold
  *         schema: { type: integer, minimum: 0, default: 10 }

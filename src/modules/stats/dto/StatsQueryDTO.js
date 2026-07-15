@@ -18,6 +18,7 @@ class StatsQueryDTO {
     this.rawFrom = query.fromDate;
     this.rawTo = query.toDate;
     this.branchId = query.branchId || undefined;
+    this.warehouseId = query.warehouseId || undefined;
     this.groupBy = query.groupBy;
     this.flow = query.flow ? String(query.flow).toUpperCase() : undefined;
     this.flowType = query.flowType ? String(query.flowType).toUpperCase() : undefined;

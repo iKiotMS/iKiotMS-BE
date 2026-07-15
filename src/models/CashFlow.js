@@ -25,6 +25,10 @@ const cashFlowSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Branch",
     },
+    warehouseId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Warehouse",
+    },
     orderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Order",
@@ -58,6 +62,7 @@ const cashFlowSchema = new mongoose.Schema(
 
 cashFlowSchema.index({ tenantId: 1, createdAt: -1 });
 cashFlowSchema.index({ tenantId: 1, branchId: 1, createdAt: -1 });
+cashFlowSchema.index({ tenantId: 1, warehouseId: 1, createdAt: -1 });
 
 cashFlowSchema.index(
   { orderId: 1, flowType: 1 },
