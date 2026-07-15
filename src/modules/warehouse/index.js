@@ -2,6 +2,7 @@ const WarehouseController = require("./controller/WarehouseController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
 const { cacheResponse } = require("../../middlewares/cacheMiddleware");
 const { cacheKeys } = require("../../utils/cacheHelpers");
+const { authorize } = require("../../middlewares/authorizationMiddleware");
 
 /**
  * @openapi
