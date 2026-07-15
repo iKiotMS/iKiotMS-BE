@@ -332,7 +332,7 @@ const {
  *   delete:
  *     tags: [Products]
  *     summary: Hard delete a product item
- *     description: Fails if the item has active inventory stock > 0
+ *     description: Fails if the item is still linked to any location (even if stock is 0). You must remove it from all locations first.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -344,7 +344,7 @@ const {
  *       200:
  *         description: Product item deleted
  *       400:
- *         description: Cannot delete item because active inventory exists
+ *         description: Cannot delete item because it is still linked to locations
  *       404:
  *         description: Product item not found
  * 

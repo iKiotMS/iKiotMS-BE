@@ -597,16 +597,15 @@ class ProductService {
   }
 
   async deleteProductItem(tenantId, itemId) {
-    // Check if there is any inventory with stock > 0 for this item
-    const activeInventoryCount = await Inventory.countDocuments({
+    // Check if there is any inventory linked to this item
+    const inventoryCount = await Inventory.countDocuments({
       tenantId,
       productItemId: itemId,
-      stock: { $gt: 0 },
     });
 
-    if (activeInventoryCount > 0) {
+    if (inventoryCount > 0) {
       throw new Error(
-        "Cannot delete product item: Active inventory exists with stock > 0",
+        "Cannot delete product item: Product is still linked to one or more locations. Please remove it from all locations first.",
       );
     }
 
@@ -623,10 +622,7 @@ class ProductService {
         throw new Error("Product item not found");
       }
 
-      // Also clean up zero-stock inventory records associated with this item
-      await Inventory.deleteMany({ tenantId, productItemId: itemId }).session(
-        session,
-      );
+
 
       await session.commitTransaction();
       session.endSession();
