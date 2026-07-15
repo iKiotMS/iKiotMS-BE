@@ -88,6 +88,65 @@ describe("Cash drawer handover log", () => {
     ).rejects.toMatchObject({ statusCode: 409 });
   });
 
+  test("records a START report in the existing shiftLogs array", async () => {
+    const tenantId = "507f1f77bcf86cd799439011";
+    const staffId = "507f1f77bcf86cd799439012";
+    const branchId = "507f1f77bcf86cd799439013";
+    const sessionId = "507f1f77bcf86cd799439014";
+    const updatedAt = new Date("2026-07-15T01:00:00.000Z");
+    jest.spyOn(CashDrawerSession, "findOne").mockResolvedValue({
+      _id: sessionId,
+      branchId,
+      currentStaffId: staffId,
+      shiftLogs: [],
+      updatedAt,
+    });
+    jest
+      .spyOn(CashDrawerSession, "findOneAndUpdate")
+      .mockResolvedValue({ _id: sessionId });
+
+    await CashDrawerService.submitShiftLog({
+      actor: { tenantId, userId: staffId, role: "STAFF", branchId },
+      sessionId,
+      dto: new ShiftLogDTO({ type: "START", amount: 500_000 }),
+    });
+
+    expect(CashDrawerSession.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ currentStaffId: staffId, updatedAt }),
+      expect.objectContaining({
+        $push: {
+          shiftLogs: expect.objectContaining({
+            type: "START",
+            staffId,
+            amount: 500_000,
+          }),
+        },
+      }),
+      { new: true, runValidators: true },
+    );
+  });
+
+  test("requires a START report before an END report", async () => {
+    const tenantId = "507f1f77bcf86cd799439011";
+    const staffId = "507f1f77bcf86cd799439012";
+    const branchId = "507f1f77bcf86cd799439013";
+    const sessionId = "507f1f77bcf86cd799439014";
+    jest.spyOn(CashDrawerSession, "findOne").mockResolvedValue({
+      _id: sessionId,
+      branchId,
+      currentStaffId: staffId,
+      shiftLogs: [],
+    });
+
+    await expect(
+      CashDrawerService.submitShiftLog({
+        actor: { tenantId, userId: staffId, role: "STAFF", branchId },
+        sessionId,
+        dto: new ShiftLogDTO({ amount: 500_000 }),
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
   test("grants only handover-log permissions", () => {
     expect(permissions.BRANCH_MANAGER.cash_drawers).toEqual([
       "open",
