@@ -612,6 +612,7 @@ class LeaveRequestService extends BaseService {
               handoverToUserId: leaveRequest.handoverToUserId,
               session,
             });
+            leaveRequest.handoverScheduleIds = affectedScheduleIds;
           } else {
             leaveRequest.handoverToUserId = null;
           }
@@ -623,23 +624,9 @@ class LeaveRequestService extends BaseService {
         createdLeaveRequest = createdLeaveRequests[0];
 
         if (affectedScheduleIds.length > 0) {
-          await WorkingSchedule.updateMany(
-            {
-              _id: { $in: affectedScheduleIds },
-              tenantId,
-              managedBy: userId,
-            },
-            {
-              $set: {
-                managedBy: leaveRequest.handoverToUserId,
-              },
-            },
-            { session },
-          );
-
           handover = {
             required: true,
-            reassignedSchedules: affectedScheduleIds.length,
+            reassignedSchedules: 0,
             handoverToUserId: leaveRequest.handoverToUserId,
           };
         }
@@ -792,7 +779,7 @@ class LeaveRequestService extends BaseService {
           _id: currentLeaveRequest.userId,
           tenantId,
         })
-          .select("role")
+          .select("role branchId warehouseId")
           .session(session)
           .lean();
 
@@ -889,11 +876,67 @@ class LeaveRequestService extends BaseService {
               throw error;
             }
           }
+
+          if (
+            ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(requester.role)
+          ) {
+            const scheduleFilter = this.buildManagedScheduleFilter({
+              tenantId,
+              managerId: currentLeaveRequest.userId,
+              startDate: currentLeaveRequest.startDate,
+              endDate: currentLeaveRequest.endDate,
+            });
+
+            const affectedSchedules = await WorkingSchedule.find(scheduleFilter)
+              .select("_id")
+              .session(session)
+              .lean();
+
+            const affectedScheduleIds = affectedSchedules.map(
+              (schedule) => schedule._id,
+            );
+            currentLeaveRequest.handoverScheduleIds = affectedScheduleIds;
+
+            if (affectedScheduleIds.length > 0) {
+              await this.validateScheduleHandoverTarget({
+                tenantId,
+                manager: {
+                  userId: currentLeaveRequest.userId,
+                  role: requester.role,
+                  branchId: requester.branchId,
+                  warehouseId: requester.warehouseId,
+                },
+                handoverToUserId: currentLeaveRequest.handoverToUserId,
+                session,
+              });
+
+              await WorkingSchedule.updateMany(
+                {
+                  _id: { $in: affectedScheduleIds },
+                  tenantId,
+                  managedBy: currentLeaveRequest.userId,
+                  status: "SCHEDULED",
+                },
+                {
+                  $set: {
+                    managedBy: currentLeaveRequest.handoverToUserId,
+                  },
+                },
+                { session },
+              );
+            }
+          }
+        }
+
+        const leaveRequestUpdateData = updateDTO.toUpdateData();
+        if (data.status === "APPROVED") {
+          leaveRequestUpdateData.handoverScheduleIds =
+            currentLeaveRequest.handoverScheduleIds || [];
         }
 
         leaveRequest = await LeaveRequest.findOneAndUpdate(
           { _id: leaveRequestId, tenantId },
-          { $set: updateDTO.toUpdateData() },
+          { $set: leaveRequestUpdateData },
           { new: true, runValidators: true, session },
         )
           .select("-__v")
@@ -998,6 +1041,26 @@ class LeaveRequestService extends BaseService {
             {
               $inc: {
                 "leaveBalance.remainingDays": leaveRequest.paidLeaveDays,
+              },
+            },
+            { session },
+          );
+        }
+
+        if (
+          leaveRequest.handoverToUserId &&
+          leaveRequest.handoverScheduleIds?.length > 0
+        ) {
+          await WorkingSchedule.updateMany(
+            {
+              _id: { $in: leaveRequest.handoverScheduleIds },
+              tenantId,
+              managedBy: leaveRequest.handoverToUserId,
+              status: "SCHEDULED",
+            },
+            {
+              $set: {
+                managedBy: null,
               },
             },
             { session },

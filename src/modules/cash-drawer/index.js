@@ -10,6 +10,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       type: object
  *       properties:
  *         _id: { type: string }
+ *         type: { type: string, enum: [START, END], default: END }
  *         staffId: { type: string }
  *         amount: { type: integer, minimum: 0 }
  *         nextStaffId: { type: string, nullable: true }
@@ -83,7 +84,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         application/json:
  *           schema: { $ref: '#/components/schemas/CashDrawerError' }
  *     CashDrawerForbidden:
- *       description: Insufficient permission or cross-branch access
+ *       description: Insufficient permission, no active managed working schedule, or access outside the scheduled branch
  *       content:
  *         application/json:
  *           schema: { $ref: '#/components/schemas/CashDrawerError' }
@@ -106,6 +107,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  * /cash-drawer-sessions:
  *   post:
  *     summary: Open the branch cash drawer log for the business day
+ *     description: Managers may open a drawer normally. A STAFF user may open one only while they are managedBy an active SCHEDULED working schedule and only for a branch represented by users in that schedule.
  *     tags: [Cash Drawer]
  *     security:
  *       - bearerAuth: []
@@ -134,6 +136,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       500: { $ref: '#/components/responses/CashDrawerServerError' }
  *   get:
  *     summary: List cash drawer log history without nested shift logs
+ *     description: STAFF normally sees only their own drawer history. While managedBy an active working schedule, STAFF may read drawer history for branches represented by users in that schedule.
  *     tags: [Cash Drawer]
  *     security:
  *       - bearerAuth: []
@@ -170,6 +173,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  * /cash-drawer-sessions/current:
  *   get:
  *     summary: Get the current open cash drawer log including shift logs
+ *     description: STAFF normally sees their own current drawer. Temporary manager scope is available only while startAt <= now < endAt for an active managed schedule.
  *     tags: [Cash Drawer]
  *     security:
  *       - bearerAuth: []
@@ -193,6 +197,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  * /cash-drawer-sessions/{id}:
  *   get:
  *     summary: Get a cash drawer log including shift logs
+ *     description: STAFF normally reads only sessions involving them. During an active managed schedule they may read sessions in the scheduled branch scope.
  *     tags: [Cash Drawer]
  *     security:
  *       - bearerAuth: []
@@ -215,7 +220,8 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *
  * /cash-drawer-sessions/{id}/shift-logs:
  *   post:
- *     summary: Log the amount left at shift end and optionally hand over to the next staff member
+ *     summary: Log the amount counted at shift start or shift end
+ *     description: The current staff member records START before END. END may hand the drawer to the next staff member. Omitting type is backward-compatible and means END. Managed schedule access does not bypass the currentStaffId check.
  *     tags: [Cash Drawer]
  *     security:
  *       - bearerAuth: []
@@ -232,12 +238,16 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *             type: object
  *             required: [amount]
  *             properties:
+ *               type:
+ *                 type: string
+ *                 enum: [START, END]
+ *                 default: END
  *               amount: { type: integer, minimum: 0 }
  *               nextStaffId: { type: string }
  *               note: { type: string }
  *     responses:
  *       201:
- *         description: Shift log recorded
+ *         description: Shift start or end log recorded
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/CashDrawerResponse' }
@@ -251,6 +261,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  * /cash-drawer-sessions/{id}/finalize:
  *   post:
  *     summary: Log the amount retrieved by the manager and close the business day
+ *     description: Managers may finalize normally. A STAFF user may finalize only during an active managed schedule and only within its scheduled branch scope.
  *     tags: [Cash Drawer]
  *     security:
  *       - bearerAuth: []

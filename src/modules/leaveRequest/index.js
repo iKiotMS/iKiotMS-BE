@@ -7,6 +7,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  * /leave-requests:
  *   post:
  *     summary: Create a new personal leave request
+ *     description: Creates a PENDING request. Manager schedule managedBy values are not changed until the request is APPROVED.
  *     tags: [Leave Requests]
  *     security:
  *       - bearerAuth: []
@@ -317,6 +318,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  * /leave-requests/{id}/cancel:
  *   post:
  *     summary: Cancel a personal leave request before the leave date arrives
+ *     description: Cancelling a manager leave request clears managedBy only on its recorded handover schedules that are currently assigned to the handover user. The former branch or warehouse manager is not assigned again.
  *     tags: [Leave Requests]
  *     security:
  *       - bearerAuth: []
@@ -408,6 +410,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  * /leave-requests/{id}/approve:
  *   post:
  *     summary: Approve a pending leave request
+ *     description: For a manager leave request, approval assigns managedBy to the selected handover user for affected scheduled shifts and records those schedule IDs for safe cancellation.
  *     tags: [Leave Requests]
  *     security:
  *       - bearerAuth: []

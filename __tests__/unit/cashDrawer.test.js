@@ -26,6 +26,7 @@ describe("Cash drawer handover log", () => {
 
   test("stores opening, shift handover, and manager final logs", () => {
     expect(CashDrawerSession.schema.path("openingAmount")).toBeDefined();
+    expect(CashDrawerSession.schema.path("shiftLogs").schema.path("type")).toBeDefined();
     expect(CashDrawerSession.schema.path("shiftLogs").schema.path("amount")).toBeDefined();
     expect(CashDrawerSession.schema.path("shiftLogs").schema.path("nextStaffId")).toBeDefined();
     expect(CashDrawerSession.schema.path("finalLog.amount")).toBeDefined();
@@ -51,6 +52,17 @@ describe("Cash drawer handover log", () => {
       isValid: true,
       errors: {},
     });
+    expect(new ShiftLogDTO({ type: "START", amount: 100_000 }).validate()).toEqual({
+      isValid: true,
+      errors: {},
+    });
+    expect(
+      new ShiftLogDTO({
+        type: "START",
+        amount: 100_000,
+        nextStaffId: "staff",
+      }).validate(),
+    ).toMatchObject({ isValid: false, errors: { nextStaffId: expect.any(String) } });
     expect(new FinalizeCashDrawerDTO({ finalAmount: 200_000 }).validate()).toEqual({
       isValid: true,
       errors: {},
@@ -76,6 +88,65 @@ describe("Cash drawer handover log", () => {
     ).rejects.toMatchObject({ statusCode: 409 });
   });
 
+  test("records a START report in the existing shiftLogs array", async () => {
+    const tenantId = "507f1f77bcf86cd799439011";
+    const staffId = "507f1f77bcf86cd799439012";
+    const branchId = "507f1f77bcf86cd799439013";
+    const sessionId = "507f1f77bcf86cd799439014";
+    const updatedAt = new Date("2026-07-15T01:00:00.000Z");
+    jest.spyOn(CashDrawerSession, "findOne").mockResolvedValue({
+      _id: sessionId,
+      branchId,
+      currentStaffId: staffId,
+      shiftLogs: [],
+      updatedAt,
+    });
+    jest
+      .spyOn(CashDrawerSession, "findOneAndUpdate")
+      .mockResolvedValue({ _id: sessionId });
+
+    await CashDrawerService.submitShiftLog({
+      actor: { tenantId, userId: staffId, role: "STAFF", branchId },
+      sessionId,
+      dto: new ShiftLogDTO({ type: "START", amount: 500_000 }),
+    });
+
+    expect(CashDrawerSession.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ currentStaffId: staffId, updatedAt }),
+      expect.objectContaining({
+        $push: {
+          shiftLogs: expect.objectContaining({
+            type: "START",
+            staffId,
+            amount: 500_000,
+          }),
+        },
+      }),
+      { new: true, runValidators: true },
+    );
+  });
+
+  test("requires a START report before an END report", async () => {
+    const tenantId = "507f1f77bcf86cd799439011";
+    const staffId = "507f1f77bcf86cd799439012";
+    const branchId = "507f1f77bcf86cd799439013";
+    const sessionId = "507f1f77bcf86cd799439014";
+    jest.spyOn(CashDrawerSession, "findOne").mockResolvedValue({
+      _id: sessionId,
+      branchId,
+      currentStaffId: staffId,
+      shiftLogs: [],
+    });
+
+    await expect(
+      CashDrawerService.submitShiftLog({
+        actor: { tenantId, userId: staffId, role: "STAFF", branchId },
+        sessionId,
+        dto: new ShiftLogDTO({ amount: 500_000 }),
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
   test("grants only handover-log permissions", () => {
     expect(permissions.BRANCH_MANAGER.cash_drawers).toEqual([
       "open",
@@ -84,6 +155,32 @@ describe("Cash drawer handover log", () => {
       "finalize",
     ]);
     expect(permissions.STAFF.cash_drawers).toEqual(["read_own", "report"]);
+  });
+
+  test("scopes temporary managed staff to scheduled branches", () => {
+    const actor = {
+      tenantId: "507f1f77bcf86cd799439011",
+      userId: "507f1f77bcf86cd799439012",
+      role: "STAFF",
+      managedScheduleAccess: {
+        temporary: true,
+        branchIds: ["507f1f77bcf86cd799439013"],
+        warehouseIds: [],
+      },
+    };
+
+    expect(
+      CashDrawerService.scopedBranchId(
+        actor,
+        "507f1f77bcf86cd799439013",
+      ),
+    ).toBe("507f1f77bcf86cd799439013");
+    expect(() =>
+      CashDrawerService.scopedBranchId(
+        actor,
+        "507f1f77bcf86cd799439014",
+      ),
+    ).toThrow("outside your managed schedule");
   });
 
   test("documents all routes and response schemas", () => {
