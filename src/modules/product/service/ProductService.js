@@ -119,9 +119,6 @@ class ProductService {
 
     if (status) {
       filter.status = status;
-    } else {
-      // By default, do not return discontinued products
-      filter.status = { $ne: "DISCONTINUED" };
     }
 
     if (categoryId) {
@@ -274,8 +271,6 @@ class ProductService {
 
     if (status) {
       filter.status = status;
-    } else {
-      filter.status = { $ne: "DISCONTINUED" };
     }
 
     if (categoryId) filter.categoryId = categoryId;
