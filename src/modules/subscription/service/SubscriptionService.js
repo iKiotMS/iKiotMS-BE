@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const {
   Subscription,
   Tenant,
@@ -355,13 +356,24 @@ class SubscriptionService {
         ? `Renewed ${plan.planCode} via SePay (ref: ${invoice.paymentReference})`
         : `Upgraded to ${plan.planCode} via SePay (ref: ${invoice.paymentReference})`,
     });
-    await subscription.save();
 
     invoice.status = "PAID";
     invoice.paidAt = new Date();
     invoice.transactionRef =
       sepayPayload.referenceCode ?? String(sepayPayload.id);
-    await invoice.save();
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+    try {
+      await subscription.save({ session });
+      await invoice.save({ session });
+      await session.commitTransaction();
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
+    } finally {
+      session.endSession();
+    }
 
     return subscription;
   }

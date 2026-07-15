@@ -88,7 +88,7 @@ class SystemNotificationController {
       }
 
       const list = await Notification.find({
-        type: { $in: ["SYSTEM_TRANSACTION", "SYSTEM_TENANT_CREATED", "SYSTEM_TICKET_CREATED"] },
+        type: { $in: ["SYSTEM_TRANSACTION", "SYSTEM_TENANT_CREATED", "SYSTEM_TICKET_CREATED", "SYSTEM_TENANT_BANK_UPDATED"] },
       })
         .sort({ createdAt: -1 })
         .limit(100)
@@ -129,7 +129,7 @@ class SystemNotificationController {
 
       await Notification.updateMany(
         {
-          type: { $in: ["SYSTEM_TRANSACTION", "SYSTEM_TENANT_CREATED", "SYSTEM_TICKET_CREATED"] },
+          type: { $in: ["SYSTEM_TRANSACTION", "SYSTEM_TENANT_CREATED", "SYSTEM_TICKET_CREATED", "SYSTEM_TENANT_BANK_UPDATED"] },
           isRead: false,
         },
         { isRead: true }
@@ -151,7 +151,7 @@ class SystemNotificationController {
       const { id } = req.params;
       const deleted = await Notification.findOneAndDelete({
         _id: id,
-        type: { $in: ["SYSTEM_TRANSACTION", "SYSTEM_TENANT_CREATED", "SYSTEM_TICKET_CREATED"] },
+        type: { $in: ["SYSTEM_TRANSACTION", "SYSTEM_TENANT_CREATED", "SYSTEM_TICKET_CREATED", "SYSTEM_TENANT_BANK_UPDATED"] },
       });
 
       if (!deleted) {
@@ -172,7 +172,7 @@ class SystemNotificationController {
       }
 
       const result = await Notification.deleteMany({
-        type: { $in: ["SYSTEM_TRANSACTION", "SYSTEM_TENANT_CREATED", "SYSTEM_TICKET_CREATED"] },
+        type: { $in: ["SYSTEM_TRANSACTION", "SYSTEM_TENANT_CREATED", "SYSTEM_TICKET_CREATED", "SYSTEM_TENANT_BANK_UPDATED"] },
       });
 
       res.status(200).json({ success: true, message: "Deleted all", deleted: result.deletedCount });

@@ -21,6 +21,7 @@ const notificationSchema = new mongoose.Schema(
         "SYSTEM_TRANSACTION",
         "SYSTEM_TENANT_CREATED",
         "SYSTEM_TICKET_CREATED",
+        "SYSTEM_TENANT_BANK_UPDATED",
 
         // --- Noti cấp tenant (mới) — luôn kèm tenantId, thường kèm recipientId ---
         // Nghỉ phép
@@ -38,6 +39,8 @@ const notificationSchema = new mongoose.Schema(
         "INVENTORY_LOW_STOCK",
         // Bán hàng
         "ORDER_PAID",
+        // Thanh toán / Ngân hàng
+        "SEPAY_LINKED",
         // Gói dịch vụ
         "SUBSCRIPTION_ACTIVATED",
         "SUBSCRIPTION_EXPIRING",
