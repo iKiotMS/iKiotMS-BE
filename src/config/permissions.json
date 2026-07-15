@@ -50,7 +50,7 @@
     "orders": ["create", "read", "update"],
     "cash_drawers": ["open", "read", "report", "finalize"],
     "inventory": ["read", "update"],
-    "promotions": ["read", "calculate", "apply"],
+    "promotions": ["create", "read", "update", "delete", "calculate", "apply"],
     "reports": ["read"],
     "paysheets": ["create", "read", "update", "delete"],
     "stock_movement": ["create", "read", "update", "approve", "receive", "cancel"],
