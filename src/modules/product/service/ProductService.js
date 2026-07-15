@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { Product, ProductItem, Inventory, Supplier } = require("../../../models");
+const { Product, ProductItem, Inventory, Supplier, Order, StockMovementRequest } = require("../../../models");
 const InventoryService = require("../../inventory/service/InventoryService");
 
 function escapeRegex(str) {
@@ -487,6 +487,50 @@ class ProductService {
   }
 
   async softDeleteProduct(tenantId, productId) {
+    // 1. Get all product item IDs for this product
+    const productItems = await ProductItem.find({ tenantId, productId })
+      .select("_id")
+      .lean();
+    const itemIds = productItems.map((item) => item._id);
+
+    if (itemIds.length > 0) {
+      // 2. Constraint: Check Inventory for any stock > 0
+      const activeInventoryCount = await Inventory.countDocuments({
+        tenantId,
+        productItemId: { $in: itemIds },
+        stock: { $gt: 0 },
+      });
+      if (activeInventoryCount > 0) {
+        throw new Error(
+          "Cannot discontinue product: There are still items in stock.",
+        );
+      }
+
+      // 3. Constraint: Check StockMovementRequest for pending movements
+      const pendingMovementsCount = await StockMovementRequest.countDocuments({
+        tenantId,
+        "details.productItemId": { $in: itemIds },
+        status: { $in: ["DRAFT", "PENDING", "OPENING", "IN_TRANSIT"] },
+      });
+      if (pendingMovementsCount > 0) {
+        throw new Error(
+          "Cannot discontinue product: Product is currently involved in pending stock movements.",
+        );
+      }
+
+      // 4. Constraint: Check Order for pending orders
+      const pendingOrdersCount = await Order.countDocuments({
+        tenantId,
+        "items.productItemId": { $in: itemIds },
+        status: "PENDING",
+      });
+      if (pendingOrdersCount > 0) {
+        throw new Error(
+          "Cannot discontinue product: Product is in pending customer orders.",
+        );
+      }
+    }
+
     // Soft delete product by setting status to DISCONTINUED
     const product = await Product.findOneAndUpdate(
       { _id: productId, tenantId },
