@@ -134,6 +134,62 @@ class StatsService {
     };
   }
 
+  async getCashflowList(user, { fromDate, toDate, branchId, flow, flowType, paymentMethod, page, limit }) {
+    const scope = this._branchFilter(user, branchId);
+    const match = {
+      tenantId: toObjectId(user.tenantId),
+      ...scope,
+      createdAt: this._dateRange(fromDate, toDate),
+    };
+    if (flowType) match.flowType = flowType;
+    if (paymentMethod) match.paymentMethod = paymentMethod;
+    if (flow) match.paymentReference = referenceMatcher(flow);
+
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      CashFlow.find(match)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("branchId", "name")
+        .populate("supplierId", "name")
+        .populate("createdBy", "profile.firstName profile.lastName")
+        .lean(),
+      CashFlow.countDocuments(match),
+    ]);
+
+    const fullName = (u) => {
+      if (!u?.profile) return null;
+      const name = `${u.profile.firstName || ""} ${u.profile.lastName || ""}`.trim();
+      return name || null;
+    };
+
+    const data = items.map((c) => ({
+      _id: c._id,
+      flowType: c.flowType,
+      amount: c.amount,
+      paymentMethod: c.paymentMethod || null,
+      description: c.description || null,
+      paymentReference: c.paymentReference || null,
+      branchName: c.branchId?.name || null,
+      supplierName: c.supplierId?.name || null,
+      createdByName: fullName(c.createdBy),
+      orderId: c.orderId || null,
+      createdAt: c.createdAt,
+    }));
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
   async getRevenueByStaff(user, { fromDate, toDate, branchId }) {
     const scope = this._branchFilter(user, branchId);
     const rows = await Order.aggregate([
