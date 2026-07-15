@@ -18,7 +18,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       properties:
  *         _id: { type: string }
  *         tenantId: { type: string }
- *         branchId: { type: string, nullable: true, description: "null = applies to all branches" }
+ *         branchIds: { type: array, items: { type: string }, description: "empty = applies to all branches" }
  *         promoName: { type: string }
  *         description: { type: string }
  *         discountType: { type: string, enum: [PERCENT, FIXED_AMOUNT] }
@@ -56,7 +56,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *             type: object
  *             required: [promoName, discountType, discountValue, applicableRule, startDate, endDate]
  *             properties:
- *               branchId: { type: string, nullable: true }
+ *               branchIds: { type: array, items: { type: string }, description: "empty/omitted = applies to all branches" }
  *               promoName: { type: string }
  *               description: { type: string }
  *               discountType: { type: string, enum: [PERCENT, FIXED_AMOUNT] }
@@ -96,6 +96,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       - in: query
  *         name: branchId
  *         schema: { type: string }
+ *         description: Show promotions whose branchIds includes this branch (plus tenant-wide ones for BRANCH_MANAGER/STAFF)
  *     responses:
  *       200:
  *         description: List of promotions

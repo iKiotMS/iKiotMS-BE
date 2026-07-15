@@ -700,6 +700,39 @@ class ProductService {
       throw error;
     }
   }
+
+  // Flat list of ProductItems (SKUs) for pickers that need to reference a specific
+  // variant — e.g. the promotion "applicableRule.productItemIds" scope. GET /products
+  // deliberately doesn't attach `items` per product (see getProducts above), so callers
+  // that need SKU-level options use this instead of fetching every product's detail.
+  async listAllProductItems(tenantId, { limit, search, branchIds } = {}) {
+    const filter = { tenantId };
+    if (search) {
+      const regex = new RegExp(escapeRegex(search), "i");
+      filter.$or = [{ sku: regex }, { productName: regex }, { productCode: regex }];
+    }
+
+    // Scope to items stocked at one of the given branches (e.g. a promotion's
+    // branch-specific product picker) instead of every product in the tenant.
+    if (Array.isArray(branchIds) && branchIds.length > 0) {
+      const inventories = await Inventory.find({
+        tenantId,
+        locationType: "branch",
+        locationId: { $in: branchIds },
+      })
+        .select("productItemId")
+        .lean();
+      filter._id = { $in: inventories.map((inv) => inv.productItemId) };
+    }
+
+    const cappedLimit = Math.min(Math.max(parseInt(limit, 10) || 200, 1), 500);
+
+    return ProductItem.find(filter)
+      .select("productId productName productCode sku")
+      .sort({ productName: 1 })
+      .limit(cappedLimit)
+      .lean();
+  }
 }
 
 module.exports = new ProductService();

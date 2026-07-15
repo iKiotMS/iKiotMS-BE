@@ -120,6 +120,36 @@ class ProductController {
     }
   }
 
+  async listItems(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res
+          .status(403)
+          .json({ success: false, message: "Tenant context missing" });
+      }
+
+      const { limit, search, branchIds } = req.query;
+      const parsedBranchIds =
+        typeof branchIds === "string" && branchIds.length > 0
+          ? branchIds.split(",").filter(Boolean)
+          : undefined;
+      const items = await ProductService.listAllProductItems(tenantId, {
+        limit,
+        search,
+        branchIds: parsedBranchIds,
+      });
+
+      res.status(200).json({ success: true, data: items });
+    } catch (error) {
+      console.error("List product items error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to retrieve product items",
+      });
+    }
+  }
+
   async getDetail(req, res) {
     try {
       const tenantId = req.user.tenantId;

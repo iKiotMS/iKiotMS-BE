@@ -4,7 +4,9 @@ const STATUSES = ["ACTIVE", "INACTIVE"];
 
 class UpdatePromotionRequestDTO {
   constructor(data = {}) {
-    if (data.branchId !== undefined) this.branchId = data.branchId;
+    if (data.branchIds !== undefined) {
+      this.branchIds = Array.isArray(data.branchIds) ? data.branchIds : [];
+    }
     if (data.promoName !== undefined) this.promoName = data.promoName;
     if (data.description !== undefined) this.description = data.description;
     if (data.discountType !== undefined) this.discountType = data.discountType;
@@ -51,6 +53,13 @@ class UpdatePromotionRequestDTO {
 
     if (this.minOrderValue !== undefined && this.minOrderValue < 0) {
       errors.push("minOrderValue cannot be negative");
+    }
+
+    if (
+      this.branchIds !== undefined &&
+      this.branchIds.some((id) => typeof id !== "string" || !id.trim())
+    ) {
+      errors.push("branchIds must contain only non-empty branch ID strings");
     }
 
     if (this.applicableRule !== undefined) {

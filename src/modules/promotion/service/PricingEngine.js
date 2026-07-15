@@ -34,14 +34,20 @@ function isWithinDateRange(promotion, now) {
 /**
  * Filters the tenant's candidate promotions down to the ones eligible for this cart.
  * cartContext: { branchId, customerId?, subtotal, items: [{productItemId, categoryId, quantity, unitPrice, lineTotal}] }
+ * customerUsageCounts: { [promotionId]: number } — how many times cartContext.customerId
+ * has already used each promotion (pre-fetched by the caller from PromotionLog, since this
+ * module intentionally stays DB-free). Only needs entries for promotions that actually set
+ * usageLimitPerCustomer; missing entries are treated as 0.
  */
-function filterApplicablePromotions(promotions, cartContext, now = new Date()) {
+function filterApplicablePromotions(promotions, cartContext, now = new Date(), customerUsageCounts = {}) {
   return promotions.filter((promotion) => {
     if (promotion.status !== "ACTIVE") return false;
     if (!isWithinDateRange(promotion, now)) return false;
+    // Empty/missing branchIds = applies tenant-wide. Non-empty = only at those branches.
     if (
-      promotion.branchId != null &&
-      String(promotion.branchId) !== String(cartContext.branchId)
+      promotion.branchIds &&
+      promotion.branchIds.length > 0 &&
+      !promotion.branchIds.some((id) => String(id) === String(cartContext.branchId))
     ) {
       return false;
     }
@@ -52,10 +58,12 @@ function filterApplicablePromotions(promotions, cartContext, now = new Date()) {
     ) {
       return false;
     }
-    // A per-customer usage cap is meaningless without knowing who the customer is —
-    // exclude rather than silently skip the check for anonymous/walk-in carts.
-    if (promotion.usageLimitPerCustomer != null && !cartContext.customerId) {
-      return false;
+    if (promotion.usageLimitPerCustomer != null) {
+      // A per-customer usage cap is meaningless without knowing who the customer is —
+      // exclude rather than silently skip the check for anonymous/walk-in carts.
+      if (!cartContext.customerId) return false;
+      const usedByCustomer = customerUsageCounts[String(promotion._id)] || 0;
+      if (usedByCustomer >= promotion.usageLimitPerCustomer) return false;
     }
     return getMatchedItems(promotion, cartContext.items).length > 0;
   });
