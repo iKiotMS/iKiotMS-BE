@@ -1,5 +1,6 @@
 const SupplierController = require("./controller/SupplierController");
 const { verifyJwt } = require("../../middlewares/authMiddleware");
+const { authorize } = require("../../middlewares/authorizationMiddleware");
 
 /**
  * @openapi
@@ -134,12 +135,12 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Payment recorded successfully
  */
 const registerSupplierModule = (app) => {
-  app.post("/suppliers", verifyJwt, SupplierController.create.bind(SupplierController));
-  app.get("/suppliers", verifyJwt, SupplierController.getList.bind(SupplierController));
-  app.get("/suppliers/:id", verifyJwt, SupplierController.getDetail.bind(SupplierController));
-  app.patch("/suppliers/:id", verifyJwt, SupplierController.update.bind(SupplierController));
-  app.delete("/suppliers/:id", verifyJwt, SupplierController.delete.bind(SupplierController));
-  app.post("/suppliers/:id/payments", verifyJwt, SupplierController.payDebt.bind(SupplierController));
+  app.post("/suppliers", verifyJwt, authorize("suppliers", "create"), SupplierController.create.bind(SupplierController));
+  app.get("/suppliers", verifyJwt, authorize("suppliers", "read"), SupplierController.getList.bind(SupplierController));
+  app.get("/suppliers/:id", verifyJwt, authorize("suppliers", "read"), SupplierController.getDetail.bind(SupplierController));
+  app.patch("/suppliers/:id", verifyJwt, authorize("suppliers", "update"), SupplierController.update.bind(SupplierController));
+  app.delete("/suppliers/:id", verifyJwt, authorize("suppliers", "delete"), SupplierController.delete.bind(SupplierController));
+  app.post("/suppliers/:id/payments", verifyJwt, authorize("suppliers", "update"), SupplierController.payDebt.bind(SupplierController));
 
   console.log("✓ Supplier module registered");
 };
