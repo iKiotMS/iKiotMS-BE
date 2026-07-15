@@ -23,6 +23,41 @@ const VALID_TRANSITIONS = {
   RETURNED: [],
 };
 
+function buildOrderCashFlowRows(order, { paymentMethod, createdBy, incomeDescription }) {
+  const changeAmount = order.change ?? 0;
+  const isCashChange =
+    paymentMethod === "CASH" && changeAmount > 0 && order.customerPay != null;
+
+  const base = {
+    tenantId: order.tenantId,
+    branchId: order.branchId,
+    createdBy,
+    paymentMethod,
+    paymentReference: order.paymentReference,
+  };
+
+  const rows = [
+    {
+      ...base,
+      orderId: order._id,
+      flowType: "INCOME",
+      amount: isCashChange ? order.customerPay : order.grandTotal,
+      description: incomeDescription,
+    },
+  ];
+
+  if (isCashChange) {
+    rows.push({
+      ...base,
+      flowType: "EXPENSE",
+      amount: changeAmount,
+      description: `Tiền thối cho đơn ${order.paymentReference}`,
+    });
+  }
+
+  return rows;
+}
+
 class OrderService {
   async createOrder(tenantId, userId, dto) {
     const {
@@ -151,22 +186,12 @@ class OrderService {
       }
 
       if (status === "COMPLETED") {
-        await CashFlow.create(
-          [
-            {
-              tenantId,
-              branchId,
-              orderId: order._id,
-              createdBy: userId,
-              flowType: "INCOME",
-              amount: grandTotal,
-              paymentMethod,
-              paymentReference: order.paymentReference,
-              description: `Order ${order._id}`,
-            },
-          ],
-          { session },
-        );
+        const cashFlowRows = buildOrderCashFlowRows(order, {
+          paymentMethod,
+          createdBy: userId,
+          incomeDescription: `Order ${order._id}`,
+        });
+        await CashFlow.create(cashFlowRows, { session, ordered: true });
       }
 
       await session.commitTransaction();
@@ -318,13 +343,6 @@ class OrderService {
       }
 
       if (newStatus === "RETURNED") {
-        const income = await CashFlow.findOne({
-          orderId: order._id,
-          flowType: "INCOME",
-        })
-          .session(session)
-          .lean();
-
         await CashFlow.create(
           [
             {
@@ -333,7 +351,7 @@ class OrderService {
               orderId: order._id,
               createdBy: order.userId,
               flowType: "EXPENSE",
-              amount: income?.amount ?? order.grandTotal,
+              amount: order.grandTotal,
               paymentMethod: order.paymentMethod,
               paymentReference: order.paymentReference,
               description: `Return order ${order._id}`,
@@ -390,22 +408,12 @@ class OrderService {
         throw new Error("Order was already paid or cancelled, please refresh");
       }
 
-      await CashFlow.create(
-        [
-          {
-            tenantId: order.tenantId,
-            branchId: order.branchId,
-            orderId: order._id,
-            createdBy: userId,
-            flowType: "INCOME",
-            amount: order.grandTotal,
-            paymentMethod: dto.paymentMethod,
-            paymentReference: order.paymentReference,
-            description: `Offline payment (${dto.paymentMethod}) for SePay order ${order.paymentReference}`,
-          },
-        ],
-        { session },
-      );
+      const cashFlowRows = buildOrderCashFlowRows(order, {
+        paymentMethod: dto.paymentMethod,
+        createdBy: userId,
+        incomeDescription: `Offline payment (${dto.paymentMethod}) for SePay order ${order.paymentReference}`,
+      });
+      await CashFlow.create(cashFlowRows, { session, ordered: true });
 
       await session.commitTransaction();
 

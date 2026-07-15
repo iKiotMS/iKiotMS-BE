@@ -209,7 +209,9 @@ class AuthService {
     }
 
     if (user.tenantId) {
-      tenant = await Tenant.findById(user.tenantId).lean();
+      tenant = await Tenant.findById(user.tenantId)
+        .select('+banking.sepayWebhookApiKey')
+        .lean();
     }
 
     return { user, subscription, tenant };
