@@ -12,7 +12,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   post:
  *     tags: [StockMovements]
  *     summary: Create a new stock movement request
- *     description: A STAFF user may create IMPORT, EXPORT, RETURN, or ADJUST requests only while managedBy an active SCHEDULED working schedule (startAt <= now < endAt) and only for a scheduled branch or warehouse location.
+ *     description: A STAFF user may create EXPORT, RETURN, or ADJUST requests only while managedBy an active SCHEDULED working schedule (startAt <= now < endAt) and only for a scheduled branch or warehouse location. IMPORT is not granted to managedBy STAFF.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -54,7 +54,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   get:
  *     tags: [StockMovements]
  *     summary: List stock movement requests
- *     description: A STAFF user may list requests only during an active managed schedule. Results are restricted to scheduled branch and warehouse locations.
+ *     description: A STAFF user may list requests only during an active managed schedule. Results are restricted to scheduled branch and warehouse locations and exclude IMPORT requests.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -84,7 +84,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   get:
  *     tags: [StockMovements]
  *     summary: Get a request by ID
- *     description: Temporary managed STAFF access requires an active schedule and a source or destination inside the schedule location scope.
+ *     description: Temporary managed STAFF access requires an active schedule and a source or destination inside the schedule location scope. IMPORT requests are excluded.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -108,7 +108,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   patch:
  *     tags: [StockMovements]
  *     summary: Update details (products and quantities) for EXPORT/RETURN
- *     description: Only works when status is OPENING. Checks stock limits. Temporary managed STAFF access is limited to the four documented types and scheduled locations.
+ *     description: Only works when status is OPENING. Checks stock limits. Temporary managed STAFF access is limited to EXPORT, RETURN, and ADJUST requests at scheduled locations; IMPORT is excluded.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -148,7 +148,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   patch:
  *     tags: [StockMovements]
  *     summary: Transition DRAFT to OPENING
- *     description: Temporary managed STAFF access requires an active schedule and the movement source location; IMPORT uses its destination location.
+ *     description: Temporary managed STAFF access requires an active schedule and the movement source location. IMPORT requests are excluded.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -172,7 +172,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   patch:
  *     tags: [StockMovements]
  *     summary: Transition OPENING to CLOSED
- *     description: Temporary managed STAFF access requires an active schedule and the movement source location; IMPORT uses its destination location.
+ *     description: Temporary managed STAFF access requires an active schedule and the movement source location. IMPORT requests are excluded.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -196,7 +196,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   patch:
  *     tags: [StockMovements]
  *     summary: Transition CLOSED/PENDING to IN_TRANSIT
- *     description: Deducts stock from sender location for EXPORT/RETURN. Temporary managed STAFF access is restricted to an active schedule location.
+ *     description: Deducts stock from sender location for EXPORT/RETURN. Temporary managed STAFF access is restricted to an active schedule location and excludes IMPORT requests.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -220,7 +220,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   patch:
  *     tags: [StockMovements]
  *     summary: Transition IN_TRANSIT to RECEIVED
- *     description: Adds received stock to destination and updates supplier debt if IMPORT. Temporary managed STAFF access requires the destination to be in the active schedule scope.
+ *     description: Adds received stock to destination and updates supplier debt if IMPORT. Temporary managed STAFF access requires the destination to be in the active schedule scope and excludes IMPORT requests.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -282,7 +282,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   patch:
  *     tags: [StockMovements]
  *     summary: Cancel a stock movement request
- *     description: Rollbacks stock if the request was already IN_TRANSIT. Temporary managed STAFF access is restricted to the active schedule location.
+ *     description: Rollbacks stock if the request was already IN_TRANSIT. Temporary managed STAFF access is restricted to the active schedule location and excludes IMPORT requests.
  *     security:
  *       - bearerAuth: []
  *     parameters:

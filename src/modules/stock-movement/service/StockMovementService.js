@@ -66,6 +66,12 @@ class StockMovementService {
     const { movementType } = payload;
     const isManagedStaff =
       user.role === "STAFF" && user.managedScheduleAccess?.temporary;
+
+    if (isManagedStaff && movementType === "IMPORT") {
+      const error = new Error("Managed staff cannot access IMPORT requests");
+      error.statusCode = 403;
+      throw error;
+    }
     
     // Duplicate Product Validation
     if (payload.details && payload.details.length > 0) {
@@ -221,6 +227,16 @@ class StockMovementService {
       const request = await StockMovementRequest.findOne({ _id: movementId, tenantId }).session(session);
       if (!request) throw new Error("Stock movement request not found");
 
+      if (
+        user.role === "STAFF" &&
+        user.managedScheduleAccess?.temporary &&
+        request.movementType === "IMPORT"
+      ) {
+        const error = new Error("Managed staff cannot access IMPORT requests");
+        error.statusCode = 403;
+        throw error;
+      }
+
       // Duplicate product check
       if (details && details.length > 0) {
         const productIds = details.map(d => d.productItemId.toString());
@@ -331,6 +347,16 @@ class StockMovementService {
     const request = await StockMovementRequest.findOne({ _id: movementId, tenantId: user.tenantId });
     if (!request) throw new Error("Stock movement request not found");
 
+    if (
+      user.role === "STAFF" &&
+      user.managedScheduleAccess?.temporary &&
+      request.movementType === "IMPORT"
+    ) {
+      const error = new Error("Managed staff cannot access IMPORT requests");
+      error.statusCode = 403;
+      throw error;
+    }
+
     const canOpen =
       request.movementType === "IMPORT" &&
       user.role === "STAFF" &&
@@ -353,6 +379,16 @@ class StockMovementService {
   async close(user, movementId) {
     const request = await StockMovementRequest.findOne({ _id: movementId, tenantId: user.tenantId });
     if (!request) throw new Error("Stock movement request not found");
+
+    if (
+      user.role === "STAFF" &&
+      user.managedScheduleAccess?.temporary &&
+      request.movementType === "IMPORT"
+    ) {
+      const error = new Error("Managed staff cannot access IMPORT requests");
+      error.statusCode = 403;
+      throw error;
+    }
 
     const canClose =
       request.movementType === "IMPORT" &&
@@ -382,6 +418,16 @@ class StockMovementService {
     try {
       const request = await StockMovementRequest.findOne({ _id: movementId, tenantId }).session(session);
       if (!request) throw new Error("Stock movement request not found");
+
+      if (
+        user.role === "STAFF" &&
+        user.managedScheduleAccess?.temporary &&
+        request.movementType === "IMPORT"
+      ) {
+        const error = new Error("Managed staff cannot access IMPORT requests");
+        error.statusCode = 403;
+        throw error;
+      }
 
       const canShip =
         request.movementType === "IMPORT" &&
@@ -452,6 +498,16 @@ class StockMovementService {
     try {
       const request = await StockMovementRequest.findOne({ _id: movementId, tenantId }).session(session);
       if (!request) throw new Error("Stock movement request not found");
+
+      if (
+        user.role === "STAFF" &&
+        user.managedScheduleAccess?.temporary &&
+        request.movementType === "IMPORT"
+      ) {
+        const error = new Error("Managed staff cannot access IMPORT requests");
+        error.statusCode = 403;
+        throw error;
+      }
 
       if (!this._checkLocationAuth(user, request.toLocationId, request.toLocationType)) {
         const error = new Error("Unauthorized to RECEIVE request");
@@ -613,6 +669,16 @@ class StockMovementService {
       const request = await StockMovementRequest.findOne({ _id: movementId, tenantId }).session(session);
       if (!request) throw new Error("Stock movement request not found");
 
+      if (
+        user.role === "STAFF" &&
+        user.managedScheduleAccess?.temporary &&
+        request.movementType === "IMPORT"
+      ) {
+        const error = new Error("Managed staff cannot access IMPORT requests");
+        error.statusCode = 403;
+        throw error;
+      }
+
       const canCancel =
         request.movementType === "IMPORT" &&
         user.role === "STAFF" &&
@@ -677,6 +743,7 @@ class StockMovementService {
 
     // Filter by role/location
     if (role === "STAFF" && user.managedScheduleAccess?.temporary) {
+      filter.$and = [{ movementType: { $ne: "IMPORT" } }];
       const clauses = [];
       const access = user.managedScheduleAccess;
       if (access.branchIds?.length) {
@@ -739,6 +806,11 @@ class StockMovementService {
 
     // Enforce view authorization
     if (role === "STAFF" && user.managedScheduleAccess?.temporary) {
+      if (request.movementType === "IMPORT") {
+        const error = new Error("Managed staff cannot access IMPORT requests");
+        error.statusCode = 403;
+        throw error;
+      }
       const canViewSource = this._checkLocationAuth(
         user,
         request.fromLocationId,

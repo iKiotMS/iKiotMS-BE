@@ -2,6 +2,9 @@ const { specs } = require("../../src/config/setupSwagger");
 
 describe("Managed schedule authorization Swagger documentation", () => {
   test("documents temporary STAFF access for supplier endpoints", () => {
+    expect(specs.paths["/suppliers"].post.description).toContain(
+      "not granted temporarily to managedBy STAFF",
+    );
     expect(specs.paths["/suppliers"].get.description).toContain(
       "managedBy an active SCHEDULED working schedule",
     );
@@ -24,7 +27,7 @@ describe("Managed schedule authorization Swagger documentation", () => {
     ).toContain("active managed schedule");
   });
 
-  test("documents all four stock movement types and temporary scope", () => {
+  test("documents stock movement types and excludes IMPORT from temporary scope", () => {
     const createOperation = specs.paths["/stock-movements"].post;
     const movementType =
       createOperation.requestBody.content["application/json"].schema.properties
@@ -39,6 +42,9 @@ describe("Managed schedule authorization Swagger documentation", () => {
     expect(movementType.enum).not.toContain("TRANSFER");
     expect(createOperation.description).toContain(
       "startAt <= now < endAt",
+    );
+    expect(createOperation.description).toContain(
+      "IMPORT is not granted to managedBy STAFF",
     );
     expect(createOperation.responses["403"]).toBeDefined();
     expect(

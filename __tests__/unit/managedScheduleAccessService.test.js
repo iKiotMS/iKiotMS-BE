@@ -54,6 +54,12 @@ describe("Managed schedule access service", () => {
     ).toBe(false);
   });
 
+  test("does not grant supplier creation as a temporary permission", () => {
+    expect(
+      ManagedScheduleAccessService.supports("suppliers", "create"),
+    ).toBe(false);
+  });
+
   test("resolves active managed schedules and their location scope", async () => {
     mockManagedStaff({
       branchId: "branch-1",

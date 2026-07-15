@@ -13,14 +13,23 @@ describe("Managed schedule stock movement scope", () => {
     },
   };
 
-  test("uses the four stock movement types implemented by the model", () => {
+  test("does not grant IMPORT stock movement access to managed staff", () => {
     expect(MANAGED_STOCK_MOVEMENT_TYPES).toEqual([
-      "IMPORT",
       "EXPORT",
       "ADJUST",
       "RETURN",
     ]);
+    expect(MANAGED_STOCK_MOVEMENT_TYPES).not.toContain("IMPORT");
     expect(MANAGED_STOCK_MOVEMENT_TYPES).not.toContain("TRANSFER");
+  });
+
+  test("rejects managed staff creating an IMPORT request", async () => {
+    await expect(
+      StockMovementService.create(managedStaff, { movementType: "IMPORT" }),
+    ).rejects.toMatchObject({
+      message: "Managed staff cannot access IMPORT requests",
+      statusCode: 403,
+    });
   });
 
   test("allows only locations from the active managed schedule", () => {

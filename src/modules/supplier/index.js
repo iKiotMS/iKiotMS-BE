@@ -8,7 +8,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   post:
  *     tags: [Suppliers]
  *     summary: Create a new supplier
- *     description: Requires the suppliers create permission. A STAFF user receives this permission temporarily only while they are managedBy an active SCHEDULED working schedule (startAt <= now < endAt).
+ *     description: Requires the permanent suppliers create permission. This permission is not granted temporarily to managedBy STAFF.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -31,7 +31,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Missing role permission or no active managed working schedule
+ *         description: Missing permanent suppliers create permission
  *       500:
  *         description: Failed to verify managed schedule access or unexpected server error
  *   get:

@@ -9,7 +9,7 @@ const TEMPORARY_PERMISSIONS = Object.freeze({
     "read_own",
     "finalize",
   ]),
-  suppliers: Object.freeze(["create", "read", "update", "delete"]),
+  suppliers: Object.freeze(["read", "update", "delete"]),
   stock_movement: Object.freeze([
     "create",
     "read",
@@ -21,7 +21,6 @@ const TEMPORARY_PERMISSIONS = Object.freeze({
 });
 
 const MANAGED_STOCK_MOVEMENT_TYPES = Object.freeze([
-  "IMPORT",
   "EXPORT",
   "ADJUST",
   "RETURN",

@@ -7,11 +7,20 @@ jest.mock("../../src/models/LeaveRequest", () => ({
 jest.mock("../../src/models", () => ({
   User: {
     findOne: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+    updateOne: jest.fn(),
+    findById: jest.fn(),
   },
   WorkingSchedule: {
     find: jest.fn(),
     updateMany: jest.fn(),
   },
+}));
+
+jest.mock("../../src/services/notificationService", () => ({
+  approversOf: jest.fn().mockResolvedValue([]),
+  displayName: jest.fn().mockResolvedValue("Manager"),
+  notify: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mongoose = require("mongoose");
@@ -64,7 +73,9 @@ describe("LeaveRequestService manager schedule handover", () => {
       },
     ]);
     LeaveRequest.findOne.mockReset();
+    LeaveRequest.findOne.mockReturnValue(makeQuery(null));
     LeaveRequest.findOneAndUpdate.mockReset();
+    User.findById.mockReturnValue(makeQuery(null));
   });
 
   afterEach(() => {
@@ -72,7 +83,7 @@ describe("LeaveRequestService manager schedule handover", () => {
     jest.useRealTimers();
   });
 
-  test("creates manager leave request and reassigns affected schedules", async () => {
+  test("creates a pending manager leave request without reassigning schedules", async () => {
     WorkingSchedule.find.mockReturnValue(
       makeQuery([
         { _id: "64a000000000000000000011" },
@@ -99,7 +110,7 @@ describe("LeaveRequestService manager schedule handover", () => {
 
     expect(result.handover).toEqual({
       required: true,
-      reassignedSchedules: 2,
+      reassignedSchedules: 0,
       handoverToUserId,
     });
     expect(LeaveRequest.create).toHaveBeenCalledWith(
@@ -108,24 +119,84 @@ describe("LeaveRequestService manager schedule handover", () => {
           tenantId,
           userId: managerId,
           handoverToUserId,
+          handoverScheduleIds: [
+            "64a000000000000000000011",
+            "64a000000000000000000012",
+          ],
         }),
       ],
       { session },
     );
+    expect(WorkingSchedule.updateMany).not.toHaveBeenCalled();
+  });
+
+  test("reassigns affected schedules only when the leave request is approved", async () => {
+    const reviewerId = "64a000000000000000000005";
+    const scheduleIds = [
+      "64a000000000000000000011",
+      "64a000000000000000000012",
+    ];
+
+    LeaveRequest.findOne.mockReturnValue({
+      session: jest.fn().mockResolvedValue({
+        _id: "64a000000000000000000099",
+        tenantId,
+        userId: managerId,
+        status: "PENDING",
+        startDate: new Date("2099-07-04T00:00:00.000Z"),
+        endDate: new Date("2099-07-05T00:00:00.000Z"),
+        handoverToUserId,
+      }),
+    });
+    User.findOne
+      .mockReturnValueOnce(makeQuery({ _id: reviewerId, role: "TENANT_OWNER" }))
+      .mockReturnValueOnce(
+        makeQuery({ _id: managerId, role: "BRANCH_MANAGER", branchId }),
+      )
+      .mockReturnValueOnce(
+        makeQuery({ _id: handoverToUserId, role: "STAFF", branchId }),
+      );
+    WorkingSchedule.find.mockReturnValue(
+      makeQuery(scheduleIds.map((_id) => ({ _id }))),
+    );
+    LeaveRequest.findOneAndUpdate.mockReturnValue(
+      makeQuery({
+        _id: "64a000000000000000000099",
+        userId: managerId,
+        status: "APPROVED",
+      }),
+    );
+
+    await LeaveRequestService.reviewLeaveRequest({
+      tenantId,
+      leaveRequestId: "64a000000000000000000099",
+      data: {
+        approvedBy: reviewerId,
+        status: "APPROVED",
+        paidLeaveDays: 0,
+        unpaidLeaveDays: 1,
+      },
+    });
+
     expect(WorkingSchedule.updateMany).toHaveBeenCalledWith(
       {
-        _id: {
-          $in: ["64a000000000000000000011", "64a000000000000000000012"],
-        },
+        _id: { $in: scheduleIds },
         tenantId,
         managedBy: managerId,
+        status: "SCHEDULED",
       },
-      {
-        $set: {
-          managedBy: handoverToUserId,
-        },
-      },
+      { $set: { managedBy: handoverToUserId } },
       { session },
+    );
+    expect(LeaveRequest.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: "64a000000000000000000099", tenantId },
+      {
+        $set: expect.objectContaining({
+          status: "APPROVED",
+          handoverScheduleIds: scheduleIds,
+        }),
+      },
+      { new: true, runValidators: true, session },
     );
   });
 
@@ -150,7 +221,9 @@ describe("LeaveRequestService manager schedule handover", () => {
           reason: "Family trip",
         },
       }),
-    ).rejects.toThrow("handoverToUserId is required");
+    ).rejects.toThrow(
+      "Cần chọn nhân viên nhận bàn giao vì quản lý có lịch làm việc trong thời gian nghỉ",
+    );
 
     expect(LeaveRequest.create).not.toHaveBeenCalled();
     expect(WorkingSchedule.updateMany).not.toHaveBeenCalled();
@@ -197,7 +270,51 @@ describe("LeaveRequestService manager schedule handover", () => {
     expect(LeaveRequest.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: "64a000000000000000000099", tenantId },
       { $set: { status: "CANCELLED" } },
-      { new: true, runValidators: true },
+      { new: true, runValidators: true, session },
+    );
+    expect(WorkingSchedule.updateMany).not.toHaveBeenCalled();
+  });
+
+  test("clears managedBy only on recorded schedules when an approved request is cancelled", async () => {
+    jest.useFakeTimers().setSystemTime(new Date("2099-07-03T00:00:00.000Z"));
+    const scheduleIds = [
+      "64a000000000000000000011",
+      "64a000000000000000000012",
+    ];
+
+    LeaveRequest.findOne.mockResolvedValue({
+      _id: "64a000000000000000000099",
+      tenantId,
+      userId: managerId,
+      status: "APPROVED",
+      paidLeaveDays: 0,
+      startDate: new Date("2099-07-04T00:00:00.000Z"),
+      endDate: new Date("2099-07-05T00:00:00.000Z"),
+      handoverToUserId,
+      handoverScheduleIds: scheduleIds,
+    });
+    LeaveRequest.findOneAndUpdate.mockReturnValue(
+      makeQuery({
+        _id: "64a000000000000000000099",
+        status: "CANCELLED",
+      }),
+    );
+
+    await LeaveRequestService.cancelLeaveRequest({
+      tenantId,
+      leaveRequestId: "64a000000000000000000099",
+      userId: managerId,
+    });
+
+    expect(WorkingSchedule.updateMany).toHaveBeenCalledWith(
+      {
+        _id: { $in: scheduleIds },
+        tenantId,
+        managedBy: handoverToUserId,
+        status: "SCHEDULED",
+      },
+      { $set: { managedBy: null } },
+      { session },
     );
   });
 });
