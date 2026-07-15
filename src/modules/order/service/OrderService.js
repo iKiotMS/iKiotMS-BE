@@ -68,6 +68,9 @@ class OrderService {
       grandTotal,
       customerPay,
       note,
+      discountType,
+      discountValue,
+      appliedPromotions,
     } = dto;
 
     let customer;
@@ -162,6 +165,9 @@ class OrderService {
               unitPrice: item.unitPrice,
               discountAmount: item.discountAmount || 0,
             })),
+            discountType: discountType || null,
+            discountValue: discountValue || 0,
+            appliedPromotions: appliedPromotions || null,
           },
         ],
         { session },
