@@ -102,6 +102,35 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *     responses:
  *       200: { description: '{ income, expense, net, byType }' }
  *       400: { description: Validation error }
+ * /stats/cashflow/transactions:
+ *   get:
+ *     tags: [Stats]
+ *     summary: Paginated list of individual cash-in / cash-out transactions
+ *     description: Each CashFlow record (INCOME or EXPENSE) with amount, payment method, reference, branch, supplier, creator and timestamp. Filter by `flowType`, `paymentMethod`, and `flow` (reference prefix). Scoped by role like the other stats endpoints.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - $ref: '#/components/parameters/StatsFromDate'
+ *       - $ref: '#/components/parameters/StatsToDate'
+ *       - $ref: '#/components/parameters/StatsBranchId'
+ *       - in: query
+ *         name: flow
+ *         schema: { type: string, enum: [ORD, SUP, PAYR] }
+ *         description: Reference prefix — ORD (sales), SUP (supplier payments), PAYR (payroll expenses).
+ *       - in: query
+ *         name: flowType
+ *         schema: { type: string, enum: [INCOME, EXPENSE] }
+ *       - in: query
+ *         name: paymentMethod
+ *         schema: { type: string, enum: [CASH, BANK_TRANSFER, MOMO, VNPAY, SEPAY] }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+ *     responses:
+ *       200: { description: '{ data: [...], pagination: { total, page, limit, totalPages } }' }
+ *       400: { description: Validation error }
  * /stats/top-products:
  *   get:
  *     tags: [Stats]
@@ -157,6 +186,7 @@ const registerStatsModule = (app) => {
   app.get("/stats/revenue-by-payment-method", ...guard, StatsController.revenueByPaymentMethod);
   app.get("/stats/revenue-by-staff", ...guard, StatsController.revenueByStaff);
   app.get("/stats/cashflow", ...guard, StatsController.cashflow);
+  app.get("/stats/cashflow/transactions", ...guard, StatsController.cashflowList);
   app.get("/stats/top-products", ...guard, StatsController.topProducts);
   app.get("/stats/inventory", ...guard, StatsController.inventory);
 

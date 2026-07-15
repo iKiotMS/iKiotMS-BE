@@ -50,7 +50,8 @@ const createApp = () => {
     response.json({ status: "ok" });
   });
 
-  app.use("/redis-test", require("./utils/redisTest"));
+  // Redis disabled — test route commented out.
+  // app.use("/redis-test", require("./utils/redisTest"));
 
   registerModules(app);
 
