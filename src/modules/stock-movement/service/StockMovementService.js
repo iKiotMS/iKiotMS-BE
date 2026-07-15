@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const { StockMovementRequest, Supplier, Branch, Warehouse } = require("../../../models");
 const InventoryService = require("../../inventory/service/InventoryService");
 const NotificationService = require("../../../services/notificationService");
+const ManagedScheduleAccessService = require("../../../services/managedScheduleAccessService");
 
 class StockMovementService {
   /**
@@ -46,6 +47,15 @@ class StockMovementService {
 
   _checkLocationAuth(user, locationId, locationType) {
     if (user.role === "TENANT_OWNER") return true;
+    if (
+      ManagedScheduleAccessService.canAccessLocation(
+        user.managedScheduleAccess,
+        locationId,
+        locationType,
+      )
+    ) {
+      return true;
+    }
     if (user.role === "WAREHOUSE_MANAGER" && locationType === "warehouse" && user.warehouseId === locationId.toString()) return true;
     if (user.role === "BRANCH_MANAGER" && locationType === "branch" && user.branchId === locationId.toString()) return true;
     return false;
@@ -54,6 +64,8 @@ class StockMovementService {
   async create(user, payload) {
     const { tenantId, userId, role } = user;
     const { movementType } = payload;
+    const isManagedStaff =
+      user.role === "STAFF" && user.managedScheduleAccess?.temporary;
     
     // Duplicate Product Validation
     if (payload.details && payload.details.length > 0) {
@@ -67,6 +79,20 @@ class StockMovementService {
       if (role === "BRANCH_MANAGER") throw new Error("Branch Managers cannot create IMPORT requests");
       if (!payload.fromSupplierId) throw new Error("fromSupplierId is required for IMPORT");
       if (!payload.toLocationId || !payload.toLocationType) throw new Error("toLocation is required for IMPORT");
+      if (
+        isManagedStaff &&
+        !this._checkLocationAuth(
+          user,
+          payload.toLocationId,
+          payload.toLocationType,
+        )
+      ) {
+        const error = new Error(
+          "You cannot manage stock outside your active working schedule location",
+        );
+        error.statusCode = 403;
+        throw error;
+      }
       if (payload.details) {
         for (const item of payload.details) {
           if (!item.importPrice || item.importPrice <= 0) throw new Error("importPrice must be > 0 for IMPORT");
@@ -84,7 +110,24 @@ class StockMovementService {
       if (role === "BRANCH_MANAGER" && payload.toLocationType === "warehouse" && movementType === "EXPORT") {
         throw new Error("Branch Managers cannot EXPORT to a warehouse. Use RETURN instead.");
       }
-      if (role !== "TENANT_OWNER") {
+      if (isManagedStaff) {
+        if (!payload.fromLocationId || !payload.fromLocationType) {
+          throw new Error("fromLocation is required");
+        }
+        if (
+          !this._checkLocationAuth(
+            user,
+            payload.fromLocationId,
+            payload.fromLocationType,
+          )
+        ) {
+          const error = new Error(
+            "You cannot manage stock outside your active working schedule location",
+          );
+          error.statusCode = 403;
+          throw error;
+        }
+      } else if (role !== "TENANT_OWNER") {
         payload.fromLocationId = role === "WAREHOUSE_MANAGER" ? user.warehouseId : user.branchId;
         payload.fromLocationType = role === "WAREHOUSE_MANAGER" ? "warehouse" : "branch";
       }
@@ -99,7 +142,24 @@ class StockMovementService {
         }
       }
     } else if (movementType === "ADJUST") {
-      if (role !== "TENANT_OWNER") {
+      if (isManagedStaff) {
+        if (!payload.fromLocationId || !payload.fromLocationType) {
+          throw new Error("fromLocation is required for ADJUST");
+        }
+        if (
+          !this._checkLocationAuth(
+            user,
+            payload.fromLocationId,
+            payload.fromLocationType,
+          )
+        ) {
+          const error = new Error(
+            "You cannot manage stock outside your active working schedule location",
+          );
+          error.statusCode = 403;
+          throw error;
+        }
+      } else if (role !== "TENANT_OWNER") {
         payload.fromLocationId = role === "WAREHOUSE_MANAGER" ? user.warehouseId : user.branchId;
         payload.fromLocationType = role === "WAREHOUSE_MANAGER" ? "warehouse" : "branch";
       }
@@ -177,7 +237,11 @@ class StockMovementService {
         // Authorization: either sender or receiver can update when OPENING
         const isSender = this._checkLocationAuth(user, request.fromLocationId, request.fromLocationType);
         const isReceiver = this._checkLocationAuth(user, request.toLocationId, request.toLocationType);
-        if (!isSender && !isReceiver) throw new Error("Unauthorized to update details");
+        if (!isSender && !isReceiver) {
+          const error = new Error("Unauthorized to update details");
+          error.statusCode = 403;
+          throw error;
+        }
 
         // Check stock limits against fromLocation
         for (const item of details) {
@@ -207,7 +271,9 @@ class StockMovementService {
 
         if (request.movementType === "IMPORT") {
           if (!this._checkLocationAuth(user, request.toLocationId, request.toLocationType)) {
-             throw new Error("Unauthorized to update IMPORT details");
+             const error = new Error("Unauthorized to update IMPORT details");
+             error.statusCode = 403;
+             throw error;
           }
           for (const item of details) {
             if (!item.importPrice || item.importPrice <= 0) throw new Error("importPrice must be > 0 for IMPORT");
@@ -223,7 +289,9 @@ class StockMovementService {
 
         if (request.movementType === "ADJUST") {
           if (!this._checkLocationAuth(user, request.fromLocationId, request.fromLocationType)) {
-             throw new Error("Unauthorized to update ADJUST details");
+             const error = new Error("Unauthorized to update ADJUST details");
+             error.statusCode = 403;
+             throw error;
           }
           for (const item of details) {
             if (item.receivedQuantity === undefined || item.receivedQuantity === null || item.receivedQuantity < 0) {
@@ -263,8 +331,16 @@ class StockMovementService {
     const request = await StockMovementRequest.findOne({ _id: movementId, tenantId: user.tenantId });
     if (!request) throw new Error("Stock movement request not found");
 
-    if (!this._checkLocationAuth(user, request.fromLocationId, request.fromLocationType)) {
-      throw new Error("Unauthorized to OPEN request");
+    const canOpen =
+      request.movementType === "IMPORT" &&
+      user.role === "STAFF" &&
+      user.managedScheduleAccess?.temporary
+        ? this._checkLocationAuth(user, request.toLocationId, request.toLocationType)
+        : this._checkLocationAuth(user, request.fromLocationId, request.fromLocationType);
+    if (!canOpen) {
+      const error = new Error("Unauthorized to OPEN request");
+      error.statusCode = 403;
+      throw error;
     }
 
     if (request.status !== "DRAFT") throw new Error("Can only OPEN a DRAFT request");
@@ -278,8 +354,16 @@ class StockMovementService {
     const request = await StockMovementRequest.findOne({ _id: movementId, tenantId: user.tenantId });
     if (!request) throw new Error("Stock movement request not found");
 
-    if (!this._checkLocationAuth(user, request.fromLocationId, request.fromLocationType)) {
-      throw new Error("Unauthorized to CLOSE request");
+    const canClose =
+      request.movementType === "IMPORT" &&
+      user.role === "STAFF" &&
+      user.managedScheduleAccess?.temporary
+        ? this._checkLocationAuth(user, request.toLocationId, request.toLocationType)
+        : this._checkLocationAuth(user, request.fromLocationId, request.fromLocationType);
+    if (!canClose) {
+      const error = new Error("Unauthorized to CLOSE request");
+      error.statusCode = 403;
+      throw error;
     }
 
     if (request.status !== "OPENING") throw new Error("Can only CLOSE an OPENING request");
@@ -299,8 +383,16 @@ class StockMovementService {
       const request = await StockMovementRequest.findOne({ _id: movementId, tenantId }).session(session);
       if (!request) throw new Error("Stock movement request not found");
 
-      if (!this._checkLocationAuth(user, request.fromLocationId, request.fromLocationType)) {
-        throw new Error("Unauthorized to SHIP request");
+      const canShip =
+        request.movementType === "IMPORT" &&
+        user.role === "STAFF" &&
+        user.managedScheduleAccess?.temporary
+          ? this._checkLocationAuth(user, request.toLocationId, request.toLocationType)
+          : this._checkLocationAuth(user, request.fromLocationId, request.fromLocationType);
+      if (!canShip) {
+        const error = new Error("Unauthorized to SHIP request");
+        error.statusCode = 403;
+        throw error;
       }
 
       if (request.status !== "CLOSED" && request.status !== "PENDING") {
@@ -362,7 +454,9 @@ class StockMovementService {
       if (!request) throw new Error("Stock movement request not found");
 
       if (!this._checkLocationAuth(user, request.toLocationId, request.toLocationType)) {
-        throw new Error("Unauthorized to RECEIVE request");
+        const error = new Error("Unauthorized to RECEIVE request");
+        error.statusCode = 403;
+        throw error;
       }
 
       if (request.movementType === "IMPORT") {
@@ -465,7 +559,9 @@ class StockMovementService {
       if (!request) throw new Error("Stock movement request not found");
 
       if (!this._checkLocationAuth(user, request.fromLocationId, request.fromLocationType)) {
-        throw new Error("Unauthorized to approve ADJUST request");
+        const error = new Error("Unauthorized to approve ADJUST request");
+        error.statusCode = 403;
+        throw error;
       }
 
       if (request.movementType !== "ADJUST") throw new Error("Only ADJUST requests can be approved this way");
@@ -517,8 +613,16 @@ class StockMovementService {
       const request = await StockMovementRequest.findOne({ _id: movementId, tenantId }).session(session);
       if (!request) throw new Error("Stock movement request not found");
 
-      if (!this._checkLocationAuth(user, request.fromLocationId, request.fromLocationType)) {
-        throw new Error("Unauthorized to CANCEL request");
+      const canCancel =
+        request.movementType === "IMPORT" &&
+        user.role === "STAFF" &&
+        user.managedScheduleAccess?.temporary
+          ? this._checkLocationAuth(user, request.toLocationId, request.toLocationType)
+          : this._checkLocationAuth(user, request.fromLocationId, request.fromLocationType);
+      if (!canCancel) {
+        const error = new Error("Unauthorized to CANCEL request");
+        error.statusCode = 403;
+        throw error;
       }
 
       if (request.status === "RECEIVED" || request.status === "COMPLETED" || request.status === "CANCELLED") {
@@ -572,7 +676,28 @@ class StockMovementService {
     if (movementType) filter.movementType = movementType;
 
     // Filter by role/location
-    if (role === "WAREHOUSE_MANAGER") {
+    if (role === "STAFF" && user.managedScheduleAccess?.temporary) {
+      const clauses = [];
+      const access = user.managedScheduleAccess;
+      if (access.branchIds?.length) {
+        clauses.push(
+          { fromLocationType: "branch", fromLocationId: { $in: access.branchIds } },
+          { toLocationType: "branch", toLocationId: { $in: access.branchIds } },
+        );
+      }
+      if (access.warehouseIds?.length) {
+        clauses.push(
+          { fromLocationType: "warehouse", fromLocationId: { $in: access.warehouseIds } },
+          { toLocationType: "warehouse", toLocationId: { $in: access.warehouseIds } },
+        );
+      }
+      if (!clauses.length) {
+        const error = new Error("Active managed schedule has no accessible stock location");
+        error.statusCode = 403;
+        throw error;
+      }
+      filter.$or = clauses;
+    } else if (role === "WAREHOUSE_MANAGER") {
       filter.$or = [{ fromLocationId: warehouseId }, { toLocationId: warehouseId }];
     } else if (role === "BRANCH_MANAGER") {
       filter.$or = [{ fromLocationId: branchId }, { toLocationId: branchId }];
@@ -613,7 +738,23 @@ class StockMovementService {
     if (!request) throw new Error("Stock movement request not found");
 
     // Enforce view authorization
-    if (role === "WAREHOUSE_MANAGER") {
+    if (role === "STAFF" && user.managedScheduleAccess?.temporary) {
+      const canViewSource = this._checkLocationAuth(
+        user,
+        request.fromLocationId,
+        request.fromLocationType,
+      );
+      const canViewDestination = this._checkLocationAuth(
+        user,
+        request.toLocationId,
+        request.toLocationType,
+      );
+      if (!canViewSource && !canViewDestination) {
+        const error = new Error("Unauthorized to view this request");
+        error.statusCode = 403;
+        throw error;
+      }
+    } else if (role === "WAREHOUSE_MANAGER") {
       if (request.fromLocationId?.toString() !== warehouseId && request.toLocationId?.toString() !== warehouseId) {
          throw new Error("Unauthorized to view this request");
       }

@@ -10,8 +10,16 @@ jest.mock("../../src/modules/cash-drawer/service/CashDrawerService", () => ({
   submitShiftLog: jest.fn(),
   finalize: jest.fn(),
 }));
+jest.mock("../../src/services/managedScheduleAccessService", () => ({
+  supports: jest.fn((moduleName, action) =>
+    moduleName === "cash_drawers" &&
+    ["open", "read", "read_own", "finalize"].includes(action),
+  ),
+  resolve: jest.fn(),
+}));
 
 const CashDrawerService = require("../../src/modules/cash-drawer/service/CashDrawerService");
+const ManagedScheduleAccessService = require("../../src/services/managedScheduleAccessService");
 const { registerCashDrawerModule } = require("../../src/modules/cash-drawer");
 
 describe("Cash drawer API", () => {
@@ -27,7 +35,15 @@ describe("Cash drawer API", () => {
   app.use(express.json());
   registerCashDrawerModule(app);
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    ManagedScheduleAccessService.supports.mockImplementation(
+      (moduleName, action) =>
+        moduleName === "cash_drawers" &&
+        ["open", "read", "read_own", "finalize"].includes(action),
+    );
+    ManagedScheduleAccessService.resolve.mockResolvedValue(null);
+  });
 
   test("rejects an unauthenticated open request", async () => {
     const response = await request(app).post("/cash-drawer-sessions").send({
@@ -85,6 +101,34 @@ describe("Cash drawer API", () => {
     expect(CashDrawerService.open).toHaveBeenCalledTimes(1);
   });
 
+  test("allows managedBy staff to open the drawer during the active schedule", async () => {
+    ManagedScheduleAccessService.resolve.mockResolvedValue({
+      temporary: true,
+      scheduleIds: ["schedule-1"],
+      branchIds: [branchId],
+      warehouseIds: [],
+    });
+    CashDrawerService.open.mockResolvedValue({
+      _id: "64a000000000000000000005",
+      openingAmount: 500_000,
+      status: "OPEN",
+    });
+
+    const response = await request(app)
+      .post("/cash-drawer-sessions")
+      .set("Authorization", `Bearer ${token("STAFF", staffId)}`)
+      .send({ branchId, staffId, openingAmount: 500_000 });
+
+    expect(response.status).toBe(201);
+    expect(CashDrawerService.open).toHaveBeenCalledWith({
+      actor: expect.objectContaining({
+        role: "STAFF",
+        managedScheduleAccess: expect.objectContaining({ temporary: true }),
+      }),
+      dto: expect.anything(),
+    });
+  });
+
   test("allows staff to submit a shift log", async () => {
     CashDrawerService.submitShiftLog.mockResolvedValue({
       _id: "64a000000000000000000005",
@@ -99,6 +143,29 @@ describe("Cash drawer API", () => {
     expect(response.body).toMatchObject({
       success: true,
       message: "Shift log recorded",
+    });
+    expect(CashDrawerService.submitShiftLog).toHaveBeenCalledWith({
+      actor: expect.objectContaining({ userId: staffId }),
+      sessionId: "64a000000000000000000005",
+      dto: expect.objectContaining({ type: "END", amount: 900_000 }),
+    });
+  });
+
+  test("allows staff to submit a START log through the same endpoint", async () => {
+    CashDrawerService.submitShiftLog.mockResolvedValue({
+      _id: "64a000000000000000000005",
+      shiftLogs: [{ type: "START", staffId, amount: 500_000 }],
+    });
+    const response = await request(app)
+      .post("/cash-drawer-sessions/64a000000000000000000005/shift-logs")
+      .set("Authorization", `Bearer ${token("STAFF", staffId)}`)
+      .send({ type: "START", amount: 500_000 });
+
+    expect(response.status).toBe(201);
+    expect(CashDrawerService.submitShiftLog).toHaveBeenCalledWith({
+      actor: expect.objectContaining({ userId: staffId }),
+      sessionId: "64a000000000000000000005",
+      dto: expect.objectContaining({ type: "START", amount: 500_000 }),
     });
   });
 });

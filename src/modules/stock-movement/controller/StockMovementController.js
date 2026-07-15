@@ -10,7 +10,7 @@ class StockMovementController {
         data: request,
       });
     } catch (error) {
-      res.status(400).json({ success: false, message: error.message });
+      res.status(error.statusCode || 400).json({ success: false, message: error.message });
     }
   }
 
@@ -23,7 +23,7 @@ class StockMovementController {
         data: request,
       });
     } catch (error) {
-      res.status(400).json({ success: false, message: error.message });
+      res.status(error.statusCode || 400).json({ success: false, message: error.message });
     }
   }
 
@@ -36,7 +36,7 @@ class StockMovementController {
         data: request,
       });
     } catch (error) {
-      res.status(400).json({ success: false, message: error.message });
+      res.status(error.statusCode || 400).json({ success: false, message: error.message });
     }
   }
 
@@ -49,7 +49,7 @@ class StockMovementController {
         data: request,
       });
     } catch (error) {
-      res.status(400).json({ success: false, message: error.message });
+      res.status(error.statusCode || 400).json({ success: false, message: error.message });
     }
   }
 
@@ -62,7 +62,7 @@ class StockMovementController {
         data: request,
       });
     } catch (error) {
-      res.status(400).json({ success: false, message: error.message });
+      res.status(error.statusCode || 400).json({ success: false, message: error.message });
     }
   }
 
@@ -75,7 +75,7 @@ class StockMovementController {
         data: request,
       });
     } catch (error) {
-      res.status(400).json({ success: false, message: error.message });
+      res.status(error.statusCode || 400).json({ success: false, message: error.message });
     }
   }
 
@@ -88,7 +88,7 @@ class StockMovementController {
         data: request,
       });
     } catch (error) {
-      res.status(400).json({ success: false, message: error.message });
+      res.status(error.statusCode || 400).json({ success: false, message: error.message });
     }
   }
 
@@ -101,7 +101,7 @@ class StockMovementController {
         data: request,
       });
     } catch (error) {
-      res.status(400).json({ success: false, message: error.message });
+      res.status(error.statusCode || 400).json({ success: false, message: error.message });
     }
   }
 
@@ -113,7 +113,7 @@ class StockMovementController {
         ...result,
       });
     } catch (error) {
-      res.status(400).json({ success: false, message: error.message });
+      res.status(error.statusCode || 400).json({ success: false, message: error.message });
     }
   }
 
@@ -125,7 +125,7 @@ class StockMovementController {
         data: request,
       });
     } catch (error) {
-      res.status(404).json({ success: false, message: error.message });
+      res.status(error.statusCode || 404).json({ success: false, message: error.message });
     }
   }
 }

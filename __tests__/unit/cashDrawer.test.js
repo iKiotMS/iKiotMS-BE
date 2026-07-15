@@ -26,6 +26,7 @@ describe("Cash drawer handover log", () => {
 
   test("stores opening, shift handover, and manager final logs", () => {
     expect(CashDrawerSession.schema.path("openingAmount")).toBeDefined();
+    expect(CashDrawerSession.schema.path("shiftLogs").schema.path("type")).toBeDefined();
     expect(CashDrawerSession.schema.path("shiftLogs").schema.path("amount")).toBeDefined();
     expect(CashDrawerSession.schema.path("shiftLogs").schema.path("nextStaffId")).toBeDefined();
     expect(CashDrawerSession.schema.path("finalLog.amount")).toBeDefined();
@@ -51,6 +52,17 @@ describe("Cash drawer handover log", () => {
       isValid: true,
       errors: {},
     });
+    expect(new ShiftLogDTO({ type: "START", amount: 100_000 }).validate()).toEqual({
+      isValid: true,
+      errors: {},
+    });
+    expect(
+      new ShiftLogDTO({
+        type: "START",
+        amount: 100_000,
+        nextStaffId: "staff",
+      }).validate(),
+    ).toMatchObject({ isValid: false, errors: { nextStaffId: expect.any(String) } });
     expect(new FinalizeCashDrawerDTO({ finalAmount: 200_000 }).validate()).toEqual({
       isValid: true,
       errors: {},
@@ -84,6 +96,32 @@ describe("Cash drawer handover log", () => {
       "finalize",
     ]);
     expect(permissions.STAFF.cash_drawers).toEqual(["read_own", "report"]);
+  });
+
+  test("scopes temporary managed staff to scheduled branches", () => {
+    const actor = {
+      tenantId: "507f1f77bcf86cd799439011",
+      userId: "507f1f77bcf86cd799439012",
+      role: "STAFF",
+      managedScheduleAccess: {
+        temporary: true,
+        branchIds: ["507f1f77bcf86cd799439013"],
+        warehouseIds: [],
+      },
+    };
+
+    expect(
+      CashDrawerService.scopedBranchId(
+        actor,
+        "507f1f77bcf86cd799439013",
+      ),
+    ).toBe("507f1f77bcf86cd799439013");
+    expect(() =>
+      CashDrawerService.scopedBranchId(
+        actor,
+        "507f1f77bcf86cd799439014",
+      ),
+    ).toThrow("outside your managed schedule");
   });
 
   test("documents all routes and response schemas", () => {
