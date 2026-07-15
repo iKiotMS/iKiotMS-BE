@@ -1,5 +1,12 @@
 const mongoose = require("mongoose");
-const { Product, ProductItem, Inventory, Supplier, Order, StockMovementRequest } = require("../../../models");
+const {
+  Product,
+  ProductItem,
+  Inventory,
+  Supplier,
+  Order,
+  StockMovementRequest,
+} = require("../../../models");
 const InventoryService = require("../../inventory/service/InventoryService");
 
 function escapeRegex(str) {
@@ -133,7 +140,7 @@ class ProductService {
         .select("productId")
         .lean();
       const supplierProductIds = new Set(
-        supplierItems.map((i) => i.productId.toString())
+        supplierItems.map((i) => i.productId.toString()),
       );
       filter._id = { $in: Array.from(supplierProductIds) };
     }
@@ -158,12 +165,12 @@ class ProductService {
       }).lean();
 
       const locationProductIds = new Set(
-        productItems.map((pi) => pi.productId.toString())
+        productItems.map((pi) => pi.productId.toString()),
       );
 
       if (filter._id) {
         const intersected = filter._id.$in.filter((id) =>
-          locationProductIds.has(id.toString())
+          locationProductIds.has(id.toString()),
         );
         filter._id = { $in: intersected };
       } else {
@@ -181,7 +188,7 @@ class ProductService {
     ]);
 
     // Format brandName
-    data = data.map(product => ({
+    data = data.map((product) => ({
       ...product,
       brandName: product.brandId?.name || null,
       brandId: product.brandId?._id || product.brandId,
@@ -211,6 +218,7 @@ class ProductService {
           const id = inv.productItemId.toString();
           if (!inventoryMap[id]) inventoryMap[id] = [];
           inventoryMap[id].push({
+            inventoryId: inv._id,
             locationId: inv.locationId,
             locationType: inv.locationType,
             stock: inv.stock,
@@ -219,19 +227,25 @@ class ProductService {
 
         // Group items by productId
         const itemMap = {};
-        items.forEach(item => {
+        items.forEach((item) => {
           const pId = item.productId.toString();
           if (!itemMap[pId]) itemMap[pId] = [];
-          
+
           item.stockDetails = inventoryMap[item._id.toString()] || [];
-          item.stock = item.stockDetails.reduce((sum, inv) => sum + inv.stock, 0);
+          item.stock = item.stockDetails.reduce(
+            (sum, inv) => sum + inv.stock,
+            0,
+          );
           itemMap[pId].push(item);
         });
 
         // Compute totalStock without attaching items
-        data.forEach(product => {
+        data.forEach((product) => {
           const productItems = itemMap[product._id.toString()] || [];
-          product.totalStock = productItems.reduce((sum, item) => sum + item.stock, 0);
+          product.totalStock = productItems.reduce(
+            (sum, item) => sum + item.stock,
+            0,
+          );
         });
       } else {
         data.forEach((product) => {
@@ -265,7 +279,10 @@ class ProductService {
       locationType,
     } = query;
     const skip = (page - 1) * limit;
-    const empty = { data: [], pagination: { total: 0, page, limit, totalPages: 0 } };
+    const empty = {
+      data: [],
+      pagination: { total: 0, page, limit, totalPages: 0 },
+    };
 
     const filter = { tenantId };
 
@@ -274,7 +291,7 @@ class ProductService {
     }
 
     if (categoryId) filter.categoryId = categoryId;
-    
+
     if (supplierId) {
       const supplierItems = await ProductItem.find({
         tenantId,
@@ -283,7 +300,7 @@ class ProductService {
         .select("productId")
         .lean();
       const supplierProductIds = new Set(
-        supplierItems.map((i) => i.productId.toString())
+        supplierItems.map((i) => i.productId.toString()),
       );
       if (supplierProductIds.size === 0) return empty;
       filter._id = { $in: Array.from(supplierProductIds) };
@@ -316,7 +333,7 @@ class ProductService {
 
       if (filter._id) {
         const intersected = filter._id.$in.filter((id) =>
-          matchedIds.has(id.toString())
+          matchedIds.has(id.toString()),
         );
         if (intersected.length === 0) return empty;
         filter._id = { $in: intersected };
@@ -382,6 +399,7 @@ class ProductService {
         const id = inv.productItemId.toString();
         if (!inventoryMap[id]) inventoryMap[id] = [];
         inventoryMap[id].push({
+          inventoryId: inv._id,
           locationId: inv.locationId,
           locationType: inv.locationType,
           stock: inv.stock,
@@ -400,7 +418,10 @@ class ProductService {
       data.forEach((product) => {
         const productItems = itemMap[product._id.toString()] || [];
         product.items = productItems;
-        product.totalStock = productItems.reduce((sum, item) => sum + item.stock, 0);
+        product.totalStock = productItems.reduce(
+          (sum, item) => sum + item.stock,
+          0,
+        );
       });
     }
 
@@ -428,31 +449,32 @@ class ProductService {
 
     if (items.length > 0) {
       const itemIds = items.map((i) => i._id);
-      
+
       const invQuery = { tenantId, productItemId: { $in: itemIds } };
       if (locationType) invQuery.locationType = locationType;
       if (locationId) invQuery.locationId = locationId;
 
       const inventories = await Inventory.find(invQuery).lean();
-      
+
       const inventoryMap = {};
-      inventories.forEach(inv => {
+      inventories.forEach((inv) => {
         const id = inv.productItemId.toString();
         if (!inventoryMap[id]) inventoryMap[id] = [];
         inventoryMap[id].push({
+          inventoryId: inv._id,
           locationId: inv.locationId,
           locationType: inv.locationType,
-          stock: inv.stock
+          stock: inv.stock,
         });
       });
-      
+
       let totalStock = 0;
-      items.forEach(item => {
+      items.forEach((item) => {
         item.stockDetails = inventoryMap[item._id.toString()] || [];
         item.stock = item.stockDetails.reduce((sum, inv) => sum + inv.stock, 0);
         totalStock += item.stock;
       });
-      
+
       product.totalStock = totalStock;
     } else {
       product.totalStock = 0;
@@ -630,8 +652,10 @@ class ProductService {
     const productItem = await ProductItem.findOneAndUpdate(
       { _id: itemId, tenantId },
       { $addToSet: { suppliers: supplierId } },
-      { new: true }
-    ).populate("suppliers", "supplierName email phoneNumber").lean();
+      { new: true },
+    )
+      .populate("suppliers", "supplierName email phoneNumber")
+      .lean();
 
     if (!productItem) {
       throw new Error("Product item not found");
@@ -665,8 +689,6 @@ class ProductService {
       if (!productItem) {
         throw new Error("Product item not found");
       }
-
-
 
       await session.commitTransaction();
       session.endSession();
