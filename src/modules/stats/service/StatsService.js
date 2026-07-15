@@ -26,6 +26,20 @@ class StatsService {
     return requestedBranchId ? { branchId: toObjectId(requestedBranchId) } : {};
   }
 
+  _cashflowLocationFilter(user, requestedBranchId, requestedWarehouseId) {
+    if (user.role === "BRANCH_MANAGER") {
+      if (!user.branchId) throw new Error("Branch manager has no branch assigned");
+      return { branchId: toObjectId(user.branchId) };
+    }
+    if (user.role === "WAREHOUSE_MANAGER") {
+      if (!user.warehouseId) throw new Error("Warehouse manager has no warehouse assigned");
+      return { warehouseId: toObjectId(user.warehouseId) };
+    }
+    if (requestedWarehouseId) return { warehouseId: toObjectId(requestedWarehouseId) };
+    if (requestedBranchId) return { branchId: toObjectId(requestedBranchId) };
+    return {};
+  }
+
   _dateRange(fromDate, toDate) {
     return { $gte: fromDate, $lte: toDate };
   }
@@ -109,8 +123,8 @@ class StatsService {
     return { breakdown: rows };
   }
 
-  async getCashflow(user, { fromDate, toDate, branchId, flow, flowType }) {
-    const scope = this._branchFilter(user, branchId);
+  async getCashflow(user, { fromDate, toDate, branchId, warehouseId, flow, flowType }) {
+    const scope = this._cashflowLocationFilter(user, branchId, warehouseId);
     const match = {
       tenantId: toObjectId(user.tenantId),
       ...scope,
@@ -134,8 +148,8 @@ class StatsService {
     };
   }
 
-  async getCashflowList(user, { fromDate, toDate, branchId, flow, flowType, paymentMethod, page, limit }) {
-    const scope = this._branchFilter(user, branchId);
+  async getCashflowList(user, { fromDate, toDate, branchId, warehouseId, flow, flowType, paymentMethod, page, limit }) {
+    const scope = this._cashflowLocationFilter(user, branchId, warehouseId);
     const match = {
       tenantId: toObjectId(user.tenantId),
       ...scope,
@@ -153,6 +167,7 @@ class StatsService {
         .skip(skip)
         .limit(limit)
         .populate("branchId", "name")
+        .populate("warehouseId", "name")
         .populate("supplierId", "name")
         .populate("createdBy", "profile.firstName profile.lastName")
         .lean(),
@@ -173,6 +188,9 @@ class StatsService {
       description: c.description || null,
       paymentReference: c.paymentReference || null,
       branchName: c.branchId?.name || null,
+      warehouseName: c.warehouseId?.name || null,
+      locationName: c.branchId?.name || c.warehouseId?.name || null,
+      locationType: c.branchId ? "branch" : c.warehouseId ? "warehouse" : null,
       supplierName: c.supplierId?.name || null,
       createdByName: fullName(c.createdBy),
       orderId: c.orderId || null,
@@ -265,7 +283,7 @@ class StatsService {
     return { sortBy: sortField, products: rows };
   }
 
-  async getInventory(user, { branchId, lowStockThreshold }) {
+  async getInventory(user, { branchId, warehouseId, lowStockThreshold }) {
     const match = { tenantId: toObjectId(user.tenantId) };
     if (user.role === "WAREHOUSE_MANAGER") {
       if (!user.warehouseId) throw new Error("Warehouse manager has no warehouse assigned");
@@ -275,8 +293,12 @@ class StatsService {
       if (!user.branchId) throw new Error("Branch manager has no branch assigned");
       match.locationId = toObjectId(user.branchId);
       match.locationType = "branch";
+    } else if (warehouseId) {
+      match.locationId = toObjectId(warehouseId);
+      match.locationType = "warehouse";
     } else if (branchId) {
       match.locationId = toObjectId(branchId);
+      match.locationType = "branch";
     }
 
     const [result] = await Inventory.aggregate([
