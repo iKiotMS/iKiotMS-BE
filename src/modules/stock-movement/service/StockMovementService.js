@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { StockMovementRequest, Supplier, Branch, Warehouse } = require("../../../models");
+const { StockMovementRequest, Supplier, Branch, Warehouse, CashFlow } = require("../../../models");
 const InventoryService = require("../../inventory/service/InventoryService");
 const NotificationService = require("../../../services/notificationService");
 const ManagedScheduleAccessService = require("../../../services/managedScheduleAccessService");
@@ -558,6 +558,29 @@ class StockMovementService {
 
       if (totalReceivedQty === 0) {
         throw new Error("Cannot receive an empty order. Received quantity must be > 0 for at least one item.");
+      }
+
+      if (
+        request.movementType === "IMPORT" &&
+        totalImportCost > 0 &&
+        request.toLocationType === "branch"
+      ) {
+        // Auto-create CashFlow expense for Branch
+        await CashFlow.create(
+          [
+            {
+              tenantId,
+              branchId: request.toLocationId,
+              supplierId: request.fromSupplierId,
+              createdBy: user.userId,
+              flowType: "EXPENSE",
+              amount: totalImportCost,
+              paymentMethod: "CASH",
+              description: `Tự động tạo phiếu chi thanh toán nhập hàng - Phiếu ${request._id}`,
+            },
+          ],
+          { session },
+        );
       }
 
       if (request.movementType === "IMPORT" && request.fromSupplierId && totalImportCost > 0) {

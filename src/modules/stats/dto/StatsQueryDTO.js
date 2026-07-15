@@ -24,6 +24,10 @@ class StatsQueryDTO {
     this.sortBy = query.sortBy;
     this.limit = query.limit;
     this.lowStockThreshold = query.lowStockThreshold;
+    this.page = query.page;
+    this.paymentMethod = query.paymentMethod
+      ? String(query.paymentMethod).toUpperCase()
+      : undefined;
 
     this.toDate = this.rawTo ? parseBoundary(this.rawTo, true) : new Date();
     this.fromDate = this.rawFrom
@@ -33,6 +37,7 @@ class StatsQueryDTO {
     this.limit = this.limit != null ? parseInt(this.limit, 10) : 10;
     this.lowStockThreshold =
       this.lowStockThreshold != null ? parseInt(this.lowStockThreshold, 10) : 10;
+    this.page = this.page != null ? parseInt(this.page, 10) : 1;
   }
 
   validate() {
@@ -49,6 +54,15 @@ class StatsQueryDTO {
     }
     if (this.flowType && !["INCOME", "EXPENSE"].includes(this.flowType)) {
       errors.flowType = "Must be one of: INCOME, EXPENSE";
+    }
+    if (
+      this.paymentMethod &&
+      !["CASH", "BANK_TRANSFER", "MOMO", "VNPAY", "SEPAY"].includes(this.paymentMethod)
+    ) {
+      errors.paymentMethod = "Must be one of: CASH, BANK_TRANSFER, MOMO, VNPAY, SEPAY";
+    }
+    if (Number.isNaN(this.page) || this.page < 1) {
+      errors.page = "page must be >= 1";
     }
     if (this.flow && !CASHFLOW_PREFIXES.includes(this.flow)) {
       errors.flow = `Must be one of: ${CASHFLOW_PREFIXES.join(", ")}`;

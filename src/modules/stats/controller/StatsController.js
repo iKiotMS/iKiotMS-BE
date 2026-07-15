@@ -23,6 +23,7 @@ class StatsController {
   revenueByPaymentMethod = run("getRevenueByPaymentMethod");
   revenueByStaff = run("getRevenueByStaff");
   cashflow = run("getCashflow");
+  cashflowList = run("getCashflowList");
   topProducts = run("getTopProducts");
   inventory = run("getInventory");
 
