@@ -8,7 +8,7 @@ const NOW = new Date("2026-06-15T00:00:00.000Z");
 function makePromotion(overrides = {}) {
   return {
     _id: "promo1",
-    branchId: null,
+    branchIds: [],
     status: "ACTIVE",
     startDate: new Date("2026-06-01T00:00:00.000Z"),
     endDate: new Date("2026-06-30T00:00:00.000Z"),
@@ -60,13 +60,19 @@ describe("PricingEngine.filterApplicablePromotions", () => {
     expect(filterApplicablePromotions([expired], cart, NOW)).toHaveLength(0);
   });
 
-  test("excludes promotions scoped to a different branch, keeps branch-null (all-branch) promos", () => {
-    const otherBranch = makePromotion({ branchId: "branch2" });
-    const allBranches = makePromotion({ branchId: null });
+  test("excludes promotions scoped to branches that don't include the cart's branch, keeps empty-branchIds (all-branch) promos", () => {
+    const otherBranch = makePromotion({ branchIds: ["branch2"] });
+    const allBranches = makePromotion({ branchIds: [] });
     const cart = cartOf([makeItem()]);
     const result = filterApplicablePromotions([otherBranch, allBranches], cart, NOW);
     expect(result).toHaveLength(1);
-    expect(result[0].branchId).toBeNull();
+    expect(result[0].branchIds).toEqual([]);
+  });
+
+  test("includes a multi-branch promotion when the cart's branch is one of several in branchIds", () => {
+    const promo = makePromotion({ branchIds: ["branch0", "branch1", "branch2"] });
+    const cart = cartOf([makeItem()]); // cart.branchId === "branch1"
+    expect(filterApplicablePromotions([promo], cart, NOW)).toHaveLength(1);
   });
 
   test("excludes when cart subtotal is below minOrderValue", () => {
@@ -87,10 +93,24 @@ describe("PricingEngine.filterApplicablePromotions", () => {
     expect(filterApplicablePromotions([promo], cart, NOW)).toHaveLength(0);
   });
 
-  test("includes usageLimitPerCustomer promotions when the cart has a customerId", () => {
+  test("includes usageLimitPerCustomer promotions when the cart has a customerId and no prior usage is known", () => {
     const promo = makePromotion({ usageLimitPerCustomer: 1 });
     const cart = cartOf([makeItem()], { customerId: "cust1" });
     expect(filterApplicablePromotions([promo], cart, NOW)).toHaveLength(1);
+  });
+
+  test("excludes usageLimitPerCustomer promotion once customerUsageCounts shows the cap reached", () => {
+    const promo = makePromotion({ _id: "promo1", usageLimitPerCustomer: 2 });
+    const cart = cartOf([makeItem()], { customerId: "cust1" });
+    const result = filterApplicablePromotions([promo], cart, NOW, { promo1: 2 });
+    expect(result).toHaveLength(0);
+  });
+
+  test("includes usageLimitPerCustomer promotion when customerUsageCounts is still under the cap", () => {
+    const promo = makePromotion({ _id: "promo1", usageLimitPerCustomer: 2 });
+    const cart = cartOf([makeItem()], { customerId: "cust1" });
+    const result = filterApplicablePromotions([promo], cart, NOW, { promo1: 1 });
+    expect(result).toHaveLength(1);
   });
 
   test("category rule only matches items in the target category (partial cart match)", () => {
