@@ -16,21 +16,30 @@ class StockMovementService {
    * người tạo phiếu, "both" báo cả hai trong MỘT lần gửi — notify() tự dedupe
    * nên người vừa là quản lý vừa là người tạo cũng chỉ nhận một thông báo.
    */
-  async _notifyMovement(request, { actorId, type, title, description, audience = "managers" }) {
+  async _notifyMovement(request, { actorId, type, title, description, notifyCreator = false, notifyFrom = false, notifyTo = false }) {
     const { tenantId } = request;
 
-    const managers =
-      audience === "creator"
-        ? []
-        : await NotificationService.managersOfLocation({
-            tenantId,
-            locationId: request.toLocationId,
-            locationType: request.toLocationType,
-          });
+    let fromManagers = [];
+    if (notifyFrom && request.fromLocationId && request.fromLocationType) {
+      fromManagers = await NotificationService.managersOfLocation({
+        tenantId,
+        locationId: request.fromLocationId,
+        locationType: request.fromLocationType,
+      });
+    }
 
-    const creator = audience === "managers" ? [] : [request.createdBy];
+    let toManagers = [];
+    if (notifyTo && request.toLocationId && request.toLocationType) {
+      toManagers = await NotificationService.managersOfLocation({
+        tenantId,
+        locationId: request.toLocationId,
+        locationType: request.toLocationType,
+      });
+    }
 
-    const filtered = [...creator, ...managers].filter(
+    const creator = notifyCreator ? [request.createdBy] : [];
+
+    const filtered = [...creator, ...fromManagers, ...toManagers].filter(
       (id) => String(id) !== String(actorId),
     );
 
@@ -213,6 +222,8 @@ class StockMovementService {
       type: "STOCK_MOVEMENT_CREATED",
       title: "Phiếu chuyển kho mới",
       description: `Có phiếu ${movementType} mới cần bạn xử lý.`,
+      notifyFrom: request.movementType !== "IMPORT",
+      notifyTo: request.movementType === "IMPORT",
     });
 
     return request;
@@ -479,6 +490,7 @@ class StockMovementService {
         type: "STOCK_MOVEMENT_IN_TRANSIT",
         title: "Hàng đang được chuyển tới",
         description: "Một phiếu chuyển kho vừa được gửi đi, chờ bạn xác nhận nhận hàng.",
+        notifyTo: true,
       });
 
       return request;
@@ -617,7 +629,8 @@ class StockMovementService {
         type: "STOCK_MOVEMENT_RECEIVED",
         title: "Phiếu chuyển kho đã được nhận",
         description: "Bên nhận đã xác nhận nhận đủ hàng cho phiếu bạn tạo.",
-        audience: "creator",
+        notifyCreator: true,
+        notifyFrom: true,
       });
 
       return request;
@@ -744,7 +757,9 @@ class StockMovementService {
         type: "STOCK_MOVEMENT_CANCELLED",
         title: "Phiếu chuyển kho đã bị hủy",
         description: "Một phiếu chuyển kho liên quan đến bạn đã bị hủy.",
-        audience: "both",
+        notifyCreator: true,
+        notifyFrom: true,
+        notifyTo: true,
       });
 
       return request;
