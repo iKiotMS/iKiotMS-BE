@@ -202,6 +202,56 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       401:
  *         description: Unauthorized
  *
+ * /leave-requests/me/per-day:
+ *   get:
+ *     summary: Get personal leave requests as one item per calendar day
+ *     description: Expands each request from startDate through endDate. Each result has a date field.
+ *     tags: [Leave Requests]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: status
+ *         in: query
+ *         schema: { type: string, enum: [PENDING, APPROVED, REJECTED, CANCELLED, EXPIRED, DELETED] }
+ *       - name: keyword
+ *         in: query
+ *         description: Search within the leave reason.
+ *         schema: { type: string }
+ *       - name: startDate
+ *         in: query
+ *         description: Include expanded days on or after this date.
+ *         schema: { type: string, format: date-time }
+ *       - name: endDate
+ *         in: query
+ *         description: Include expanded days on or before this date.
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: Personal leave request days retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       date: { type: string, format: date-time }
+ *                       startDate: { type: string, format: date-time }
+ *                       endDate: { type: string, format: date-time }
+ *                       status: { type: string }
+ *                       reason: { type: string }
+ *       400:
+ *         description: Invalid query parameters
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *
  * /leave-requests/balance:
  *   get:
  *     summary: Get current user's annual leave balance
@@ -391,7 +441,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Forbidden
+ *         description: Forbidden. Users cannot approve their own request, and branch and warehouse managers cannot approve each other's requests.
  *       404:
  *         description: Leave request not found
  *
@@ -423,7 +473,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       401:
  *         description: Unauthorized
  *       403:
- *         description: Forbidden
+ *         description: Forbidden. Users cannot reject their own request, and branch and warehouse managers cannot reject each other's requests.
  *       404:
  *         description: Leave request not found
  *
@@ -500,6 +550,13 @@ function registerLeaveRequestModule(app) {
     verifyJwt,
     authorize("leaveRequests", "read_mine"),
     LeaveRequestController.getPersonalHistory.bind(LeaveRequestController),
+  );
+
+  app.get(
+    "/leave-requests/me/per-day",
+    verifyJwt,
+    authorize("leaveRequests", "read_mine"),
+    LeaveRequestController.getPersonalHistoryPerDay.bind(LeaveRequestController),
   );
 
   app.get(

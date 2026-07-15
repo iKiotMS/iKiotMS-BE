@@ -24,7 +24,6 @@ const {
  *               brandId: { type: string }
  *               categoryId: { type: string }
  *               categoryName: { type: string }
- *               supplierId: { type: string }
  *               status: { type: string, enum: [ACTIVE, INACTIVE], default: ACTIVE }
  *               images:
  *                 type: array
@@ -37,8 +36,9 @@ const {
  *                 type: array
  *                 items:
  *                   type: object
- *                   required: [productCode, sku, retailPrice, costPrice]
+ *                   required: [productName, productCode, sku, retailPrice, costPrice]
  *                   properties:
+ *                     productName: { type: string }
  *                     productCode: { type: string }
  *                     sku: { type: string }
  *                     barcode: { type: string }
@@ -95,6 +95,9 @@ const {
  *         name: categoryId
  *         schema: { type: string }
  *       - in: query
+ *         name: supplierId
+ *         schema: { type: string }
+ *       - in: query
  *         name: status
  *         schema: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
  *       - in: query
@@ -120,24 +123,64 @@ const {
  *                     type: object
  *                     properties:
  *                       name: { type: string }
- *                       totalStock: { type: number, description: "Total stock across all items and locations" }
- *                       items:
+ *                       brandId: { type: string, nullable: true }
+ *                       categoryId: { type: string, nullable: true }
+ *                       brandName: { type: string, nullable: true }
+ *                       categoryName: { type: string, nullable: true }
+ *                       status: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
+ *                       images:
  *                         type: array
  *                         items:
  *                           type: object
  *                           properties:
- *                             sku: { type: string }
- *                             stock: { type: number, description: "Total stock of this specific variant across allowed locations" }
- *                             stockDetails:
- *                               type: array
- *                               items:
- *                                 type: object
- *                                 properties:
- *                                   locationId: { type: string }
- *                                   locationType: { type: string }
- *                                   stock: { type: number }
+ *                             url: { type: string }
+ *                             isThumbnail: { type: boolean }
+ *                       totalStock: { type: number, description: "Total stock across all items and locations" }
  *                 pagination:
  *                   type: object
+ * /products/search:
+ *   get:
+ *     tags: [Products]
+ *     summary: Cross-branch product search (name, code, SKU, or barcode)
+ *     description: >
+ *       Matches a single query against product name (substring) and item
+ *       code/SKU/barcode (prefix), returning full multi-location stock
+ *       breakdown per result so the caller can see availability across
+ *       every branch/warehouse, not just the currently active one.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema: { type: string, minLength: 2 }
+ *         description: Search text (min 2 characters). Matches name (substring) or code/SKU/barcode (prefix).
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, maximum: 50 }
+ *       - in: query
+ *         name: categoryId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: supplierId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
+ *       - in: query
+ *         name: locationId
+ *         schema: { type: string }
+ *         description: Restrict results to products with stock at this branch/warehouse ID.
+ *       - in: query
+ *         name: locationType
+ *         schema: { type: string, enum: [branch, warehouse] }
+ *     responses:
+ *       200:
+ *         description: List of matching products with full per-branch stock breakdown
+ *       400:
+ *         description: Invalid query parameters (e.g. q shorter than 2 characters)
  * /products/{id}:
  *   get:
  *     tags: [Products]
@@ -172,6 +215,9 @@ const {
  *             type: object
  *             properties:
  *               name: { type: string }
+ *               brandId: { type: string }
+ *               categoryId: { type: string }
+ *               categoryName: { type: string }
  *               status: { type: string, enum: [ACTIVE, INACTIVE, DISCONTINUED] }
  *               images:
  *                 type: array
@@ -219,8 +265,9 @@ const {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [productCode, sku, retailPrice, costPrice]
+ *             required: [productName, productCode, sku, retailPrice, costPrice]
  *             properties:
+ *               productName: { type: string }
  *               productCode: { type: string }
  *               sku: { type: string }
  *               barcode: { type: string }
@@ -285,7 +332,7 @@ const {
  *   delete:
  *     tags: [Products]
  *     summary: Hard delete a product item
- *     description: Fails if the item has active inventory stock > 0
+ *     description: Fails if the item is still linked to any location (even if stock is 0). You must remove it from all locations first.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -297,9 +344,36 @@ const {
  *       200:
  *         description: Product item deleted
  *       400:
- *         description: Cannot delete item because active inventory exists
+ *         description: Cannot delete item because it is still linked to locations
  *       404:
  *         description: Product item not found
+ * 
+ * /products/items/{itemId}/suppliers:
+ *   post:
+ *     tags: [Products]
+ *     summary: Add a supplier to a product item
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: itemId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               supplierId: { type: string }
+ *     responses:
+ *       200:
+ *         description: Supplier added successfully
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Supplier or Product item not found
  */
 const registerProductModule = (app) => {
   app.post(
@@ -312,6 +386,13 @@ const registerProductModule = (app) => {
     "/products",
     verifyJwt,
     ProductController.getList.bind(ProductController),
+  );
+  // Must be registered before "/products/:id" — otherwise Express matches
+  // this path as id="search".
+  app.get(
+    "/products/search",
+    verifyJwt,
+    ProductController.search.bind(ProductController),
   );
   app.get(
     "/products/:id",
@@ -345,6 +426,11 @@ const registerProductModule = (app) => {
     "/products/items/:itemId/delete",
     verifyJwt,
     ProductController.deleteItem.bind(ProductController),
+  );
+  app.post(
+    "/products/items/:itemId/suppliers",
+    verifyJwt,
+    ProductController.addSupplierToItem.bind(ProductController),
   );
 
   console.log("✓ Product module registered");

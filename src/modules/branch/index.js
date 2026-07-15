@@ -3,6 +3,7 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
 const { requireActiveSubscription } = require("../../middlewares/subscriptionMiddleware");
 const { cacheResponse } = require("../../middlewares/cacheMiddleware");
 const { cacheKeys } = require("../../utils/cacheHelpers");
+const { authorize } = require("../../middlewares/authorizationMiddleware");
 
 /**
  * @openapi
@@ -205,6 +206,7 @@ const registerBranchModule = (app) => {
   app.patch(
     "/branches/:id/manager",
     verifyJwt,
+    authorize("branches", "assign_manager"),
     BranchController.assignManager.bind(BranchController),
   );
 

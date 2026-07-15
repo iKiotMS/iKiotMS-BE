@@ -30,13 +30,20 @@ class UserProfileResponseDTO {
 
     // Add tenant info
     if (tenant) {
+      const banking = tenant.banking || {};
       this.tenant = {
         id: tenant._id,
         name: tenant.name,
         phoneNumber: tenant.phoneNumber,
         mainAddress: tenant.mainAddress,
         taxNumber: tenant.taxNumber,
-        banking: tenant.banking,
+        banking: {
+          accountNumber: banking.accountNumber,
+          bankName: banking.bankName,
+          accountName: banking.accountName,
+        },
+        // Whether the operator has linked this tenant's bank to SePay.
+        hasSepayKey: Boolean(banking.sepayWebhookApiKey),
         status: tenant.status,
       };
     }

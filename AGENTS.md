@@ -61,8 +61,15 @@ This document defines guidelines and requirements for AI agents when working wit
  *         description: Unauthorized
  *       404:
  *         description: Resource not found
- */
 ```
+
+---
+
+## Rule 1b: Synchronous Logic and Swagger Updates
+
+### Requirement:
+- **Never disconnect Swagger updates from Logic updates.** If you change the fields returned by an API or accepted by a payload, you **must** update the Swagger documentation (e.g., in `index.js`) in the exact same step or commit. 
+- Do not say "I will update logic first and swagger later" or vice versa. They are intrinsically tied.
 
 ---
 
@@ -113,6 +120,14 @@ POST   /resource/:id/action   — custom action on resource
   errors: { fieldName: "Error message" } 
 }
 ```
+
+---
+
+## Rule 2b: Keep Responses Clean (Avoid Over-fetching & Bloat)
+
+- **Context Awareness:** Always remember previous chats and the architecture of the UI. If a list API (like `getProducts`) is used for a Table view, **do not** include heavy nested arrays (like `items` or `variants`) in the response unless explicitly needed. 
+- **Targeted Returns:** Fetch and return only the necessary fields for the specific API's purpose. Heavy relationships should only be populated in Detail APIs (e.g., `GET /resource/:id`).
+- If you realize an API is returning redundant data, remove it from the logic and the Swagger documentation.
 
 ---
 

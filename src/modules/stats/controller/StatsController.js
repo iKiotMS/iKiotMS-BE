@@ -1,4 +1,5 @@
 const StatsService = require("../service/StatsService");
+const AdminStatsService = require("../service/AdminStatsService");
 const StatsQueryDTO = require("../dto/StatsQueryDTO");
 
 // All handlers share the same query parsing; only the service call differs.
@@ -22,8 +23,26 @@ class StatsController {
   revenueByPaymentMethod = run("getRevenueByPaymentMethod");
   revenueByStaff = run("getRevenueByStaff");
   cashflow = run("getCashflow");
+  cashflowList = run("getCashflowList");
   topProducts = run("getTopProducts");
   inventory = run("getInventory");
+
+  adminOverview = async (req, res) => {
+    try {
+      if (req.user.role !== "SUPER_ADMIN") {
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
+      const dto = new StatsQueryDTO(req.query);
+      const { isValid, errors } = dto.validate();
+      if (!isValid) {
+        return res.status(400).json({ success: false, message: "Validation failed", errors });
+      }
+      const data = await AdminStatsService.getOverview(dto);
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  };
 }
 
 module.exports = new StatsController();

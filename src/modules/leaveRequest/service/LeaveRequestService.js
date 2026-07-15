@@ -103,7 +103,7 @@ class LeaveRequestService extends BaseService {
 
   async getLeaveRequests({ tenantId, filter, page, recordPerPage }) {
     const selectedFields =
-      "userId paidLeaveDays unpaidLeaveDays startDate endDate status reason";
+      "userId approvedBy paidLeaveDays unpaidLeaveDays startDate endDate status reason reviewNote handoverToUserId createdAt updatedAt";
     const populatedFields = {
       path: "userId",
       select: "branchId warehouseId profile email",
@@ -127,6 +127,56 @@ class LeaveRequestService extends BaseService {
       recordPerPage,
     });
     return leaveRequests;
+  }
+
+  async getMyLeaveRequestsPerDay({ tenantId, userId, filter }) {
+    const query = { tenantId, userId };
+    if (filter.status) query.status = filter.status;
+    if (filter.keyword) {
+      query.reason = { $regex: this.escapeRegex(filter.keyword), $options: "i" };
+    }
+    if (filter.startDate) query.endDate = { $gte: this.toUtcDay(filter.startDate) };
+    if (filter.endDate) query.startDate = { $lt: this.addUtcDay(this.toUtcDay(filter.endDate)) };
+
+    const requests = await LeaveRequest.find(query)
+      .select("userId approvedBy paidLeaveDays unpaidLeaveDays startDate endDate status reason reviewNote handoverToUserId createdAt updatedAt")
+      .populate({
+        path: "userId",
+        select: "branchId warehouseId profile email",
+        populate: [
+          { path: "branchId", select: "name" },
+          { path: "warehouseId", select: "name" },
+        ],
+      })
+      .sort({ startDate: -1 })
+      .lean();
+
+    const rangeStart = filter.startDate ? this.toUtcDay(filter.startDate) : null;
+    const rangeEnd = filter.endDate ? this.toUtcDay(filter.endDate) : null;
+    const dayItems = [];
+
+    requests.forEach((request) => {
+      const firstDay = this.toUtcDay(request.startDate);
+      const lastDay = this.toUtcDay(request.endDate);
+      for (let day = firstDay; day <= lastDay; day = this.addUtcDay(day)) {
+        if ((rangeStart && day < rangeStart) || (rangeEnd && day > rangeEnd)) continue;
+        dayItems.push({ ...request, date: new Date(day) });
+      }
+    });
+
+    dayItems.sort((left, right) => right.date - left.date);
+    return dayItems;
+  }
+
+  toUtcDay(value) {
+    const date = new Date(value);
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  }
+
+  addUtcDay(value) {
+    const nextDay = new Date(value);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    return nextDay;
   }
 
   sameId(left, right) {
@@ -720,6 +770,51 @@ class LeaveRequestService extends BaseService {
         if (!currentLeaveRequest) {
           let error = new Error("Không tìm thấy yêu cầu nghỉ phép");
           error.statusCode = 404;
+          throw error;
+        }
+
+        if (this.sameId(currentLeaveRequest.userId, data.approvedBy)) {
+          const error = new Error(
+            "Bạn không thể tự duyệt hoặc từ chối yêu cầu nghỉ phép của chính mình",
+          );
+          error.statusCode = 403;
+          throw error;
+        }
+
+        const reviewer = await User.findOne({
+          _id: data.approvedBy,
+          tenantId,
+        })
+          .select("role")
+          .session(session)
+          .lean();
+        const requester = await User.findOne({
+          _id: currentLeaveRequest.userId,
+          tenantId,
+        })
+          .select("role")
+          .session(session)
+          .lean();
+
+        if (!reviewer || !requester) {
+          const error = new Error(
+            "Không tìm thấy người duyệt hoặc người gửi yêu cầu",
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+
+        const isCrossManagerReview =
+          (reviewer.role === "BRANCH_MANAGER" &&
+            requester.role === "WAREHOUSE_MANAGER") ||
+          (reviewer.role === "WAREHOUSE_MANAGER" &&
+            requester.role === "BRANCH_MANAGER");
+
+        if (isCrossManagerReview) {
+          const error = new Error(
+            "Quản lý chi nhánh và quản lý kho không thể duyệt hoặc từ chối yêu cầu nghỉ phép của nhau",
+          );
+          error.statusCode = 403;
           throw error;
         }
 

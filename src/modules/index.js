@@ -25,6 +25,7 @@ const { registerSystemNotificationModule } = require("./system-notification");
 const { registerTicketModule } = require("./ticket");
 const { registerNotificationModule } = require("./notification");
 const { registerPromotionModule } = require("./promotion");
+const { registerCashDrawerModule } = require("./cash-drawer");
 
 function registerModules(app) {
   registerAuthModule(app);
@@ -54,6 +55,7 @@ function registerModules(app) {
   registerTicketModule(app);
   registerNotificationModule(app);
   registerPromotionModule(app);
+  registerCashDrawerModule(app);
 }
 
 module.exports = { registerModules };

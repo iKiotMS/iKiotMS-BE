@@ -47,21 +47,24 @@ redisClient.on("ready", () => {
   hasPrintedSocketError = false; // Reset the flag once it successfully reconnects
 });
 
-(async () => {
-  try {
-    await redisClient.connect();
-
-    // Set and retrieve some values
-    await redisClient.set("key", "node redis");
-    const value = await redisClient.get("key");
-    console.log("Redis connected. Test key value:", value);
-  } catch (error) {
-    console.log(
-      "Redis connection failed:",
-      error.message || error.code,
-      "- App will continue without Redis.",
-    );
-  }
-})();
+// Redis temporarily disabled — auto-connect commented out.
+// redisClient.isReady stays false, so all consumers (cache middleware, OTP
+// storage) degrade gracefully to in-memory / no-cache. Un-comment to re-enable.
+// (async () => {
+//   try {
+//     await redisClient.connect();
+//
+//     // Set and retrieve some values
+//     await redisClient.set("key", "node redis");
+//     const value = await redisClient.get("key");
+//     console.log("Redis connected. Test key value:", value);
+//   } catch (error) {
+//     console.log(
+//       "Redis connection failed:",
+//       error.message || error.code,
+//       "- App will continue without Redis.",
+//     );
+//   }
+// })();
 
 module.exports = redisClient;

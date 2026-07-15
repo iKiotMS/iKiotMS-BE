@@ -2,8 +2,10 @@ const ProductService = require("../service/ProductService");
 const CreateProductRequestDTO = require("../dto/CreateProductRequestDTO");
 const UpdateProductRequestDTO = require("../dto/UpdateProductRequestDTO");
 const ProductQueryDTO = require("../dto/ProductQueryDTO");
+const ProductSearchQueryDTO = require("../dto/ProductSearchQueryDTO");
 const CreateProductItemRequestDTO = require("../dto/CreateProductItemRequestDTO");
 const UpdateProductItemRequestDTO = require("../dto/UpdateProductItemRequestDTO");
+const AddSupplierToItemRequestDTO = require("../dto/AddSupplierToItemRequestDTO");
 
 class ProductController {
   async create(req, res) {
@@ -78,6 +80,42 @@ class ProductController {
       res.status(500).json({
         success: false,
         message: "Failed to retrieve products",
+      });
+    }
+  }
+
+  async search(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res
+          .status(403)
+          .json({ success: false, message: "Tenant context missing" });
+      }
+
+      const queryDTO = new ProductSearchQueryDTO(req.query);
+      const validation = queryDTO.validate();
+
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid query parameters",
+          errors: validation.errors,
+        });
+      }
+
+      const result = await ProductService.searchProducts(tenantId, queryDTO);
+
+      res.status(200).json({
+        success: true,
+        data: result.data,
+        pagination: result.pagination,
+      });
+    } catch (error) {
+      console.error("Search products error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to search products",
       });
     }
   }
@@ -246,6 +284,41 @@ class ProductController {
       res.status(400).json({
         success: false,
         message: error.message || "Failed to delete product item",
+      });
+    }
+  }
+
+  async addSupplierToItem(req, res) {
+    try {
+      const tenantId = req.user.tenantId;
+      const { itemId } = req.params;
+
+      const dto = new AddSupplierToItemRequestDTO(req.body);
+      const validation = dto.validate();
+
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: validation.errors,
+        });
+      }
+
+      const productItem = await ProductService.addSupplierToItem(
+        tenantId,
+        itemId,
+        dto.supplierId
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Supplier added to product item successfully",
+        data: productItem,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message || "Failed to add supplier to product item",
       });
     }
   }

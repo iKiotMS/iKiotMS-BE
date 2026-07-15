@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Attendance = require("../../../models/Attendance");
+const CashFlow = require("../../../models/CashFlow");
 const LeaveRequest = require("../../../models/LeaveRequest");
 const PaySheet = require("../../../models/Paysheet");
 const PayrollPeriod = require("../../../models/PayrollPeriod");
@@ -7,6 +8,8 @@ const Payslip = require("../../../models/Payslip");
 const User = require("../../../models/User");
 const WorkingSchedule = require("../../../models/WorkingSchedule");
 const NotificationService = require("../../../services/notificationService");
+const { REFERENCE_PREFIX } = require("../../../constants/referencePrefix");
+const { generateReference } = require("../../../utils/referenceGenerator");
 const GeneratePreviewPayrollDTO = require("../dto/GeneratePreviewPayrollDTO");
 const GeneratePayrollDTO = require("../dto/GeneratePayrollDTO");
 const ListPayrollPeriodDTO = require("../dto/ListPayrollPeriodDTO");
@@ -248,8 +251,7 @@ class PayrollService {
             amount =
               (basicPay.standardWorkingDaySalary ||
                 (basicPay.salaryPerPeriod || 0) /
-                  (basicPay.standardWorkingDays || 1)) *
-              allocation.dayFraction;
+                  (basicPay.standardWorkingDays || 1)) * allocation.dayFraction;
           } else if (basicPay.payType === "PAY_BY_SHIFT") {
             // Một ngày có thể có nhiều ca NORMAL; nghỉ có lương theo ca được trả
             // đúng tổng các ca đã xếp trong ngày đó, không bao gồm ca overtime.
@@ -388,10 +390,7 @@ class PayrollService {
         : payroll.basePay + leavePayroll.paidLeavePay;
     const basePay =
       basicPay.payType === "FIXED"
-        ? Math.min(
-            Number(basicPay.salaryPerPeriod || 0),
-            calculatedBasePay,
-          )
+        ? Math.min(Number(basicPay.salaryPerPeriod || 0), calculatedBasePay)
         : calculatedBasePay;
     const grossSalary = basePay + payroll.overtimePay;
     const bonus = 0;
@@ -588,36 +587,42 @@ class PayrollService {
     //remove all falsy value in paysheetIds: false, 0, -0, 0n, "", null, undefined, NaN
 
     const [paySheets, attendances, leaveRequests] = await Promise.all([
-        PaySheet.find({
-          _id: { $in: paySheetIds },
-          tenantId,
-          status: { $ne: "DELETED" },
-        }).lean(),
+      PaySheet.find({
+        _id: { $in: paySheetIds },
+        tenantId,
+        status: { $ne: "DELETED" },
+      }).lean(),
 
-        Attendance.find({
-          tenantId,
-          userId: { $in: targetUserIds },
-          workDate: { $gte: periodStart, $lte: periodEnd },
-        }).lean(),
+      Attendance.find({
+        tenantId,
+        userId: { $in: targetUserIds },
+        workDate: { $gte: periodStart, $lte: periodEnd },
+      }).lean(),
 
-        LeaveRequest.find({
-          tenantId,
-          userId: { $in: targetUserIds },
-          status: "APPROVED",
-          startDate: { $lte: periodEnd },
-          endDate: { $gte: periodStart },
-        }).lean(),
-      ]);
+      LeaveRequest.find({
+        tenantId,
+        userId: { $in: targetUserIds },
+        status: "APPROVED",
+        startDate: { $lte: periodEnd },
+        endDate: { $gte: periodStart },
+      }).lean(),
+    ]);
 
     // Với đơn vắt qua kỳ khác, payroll cần nhìn thấy lịch từ đầu đến cuối đơn
     // để biết các ngày paid đã được phân bổ trước kỳ hiện tại hay chưa.
     const scheduleRange = leaveRequests.reduce(
       (range, leaveRequest) => ({
         start: new Date(
-          Math.min(range.start.getTime(), new Date(leaveRequest.startDate).getTime()),
+          Math.min(
+            range.start.getTime(),
+            new Date(leaveRequest.startDate).getTime(),
+          ),
         ),
         end: new Date(
-          Math.max(range.end.getTime(), new Date(leaveRequest.endDate).getTime()),
+          Math.max(
+            range.end.getTime(),
+            new Date(leaveRequest.endDate).getTime(),
+          ),
         ),
       }),
       { start: periodStart, end: periodEnd },
@@ -886,8 +891,40 @@ class PayrollService {
       PayrollPeriod.countDocuments(filter),
     ]);
 
+    // Aggregate on the server instead of summing a paginated payslip result.
+    // tenantId is kept in the match even though period IDs are globally unique,
+    // so this financial total remains explicitly tenant-scoped.
+    const periodIds = data.map((p) => p._id);
+    const tenantObjectId = new mongoose.Types.ObjectId(tenantId.toString());
+    const costAgg = await Payslip.aggregate([
+      {
+        $match: {
+          tenantId: tenantObjectId,
+          payrollPeriodId: { $in: periodIds },
+        },
+      },
+      {
+        $group: {
+          _id: "$payrollPeriodId",
+          totalCost: { $sum: { $ifNull: ["$netSalary", 0] } },
+        },
+      },
+    ]);
+
+    const costMap = {};
+    costAgg.forEach((item) => {
+      if (item._id) {
+        costMap[item._id.toString()] = item.totalCost;
+      }
+    });
+
+    const dataWithCost = data.map((p) => ({
+      ...p,
+      totalCost: costMap[p._id.toString()] || 0,
+    }));
+
     return {
-      data,
+      data: dataWithCost,
       pagination: {
         total,
         page: dto.page,
@@ -923,9 +960,13 @@ class PayrollService {
       throw error;
     }
 
-    const payslipFilter = { tenantId, payrollPeriodId: periodId };
+    // Aggregation pipelines do not apply Mongoose's automatic string-to-ObjectId
+    // casting, so normalize the path ID before sharing this filter with aggregate.
+    const payrollPeriodId = new mongoose.Types.ObjectId(periodId.toString());
+    const tenantObjectId = new mongoose.Types.ObjectId(tenantId.toString());
+    const payslipFilter = { tenantId: tenantObjectId, payrollPeriodId };
     const skip = (dto.page - 1) * dto.limit;
-    const [payslips, total] = await Promise.all([
+    const [payslips, total, costAgg] = await Promise.all([
       Payslip.find(payslipFilter)
         .populate("userId", "profile email")
         .sort({ createdAt: 1 })
@@ -933,10 +974,26 @@ class PayrollService {
         .limit(dto.limit)
         .lean(),
       Payslip.countDocuments(payslipFilter),
+      Payslip.aggregate([
+        { $match: payslipFilter },
+        {
+          $group: {
+            _id: "$payrollPeriodId",
+            totalCost: { $sum: { $ifNull: ["$netSalary", 0] } },
+          },
+        },
+      ]),
     ]);
 
+    // totalCost represents the whole period and must not change with page/limit.
+    const totalCost = costAgg[0]?.totalCost || 0;
+    const payrollPeriodWithCost = {
+      ...payrollPeriod,
+      totalCost,
+    };
+
     return {
-      payrollPeriod,
+      payrollPeriod: payrollPeriodWithCost,
       payslips,
       pagination: {
         total,
@@ -985,7 +1042,7 @@ class PayrollService {
     const filter = {
       tenantId,
       userId,
-      status: { $in: ["APPROVED", "PAID"] },
+      status: { $in: ["APPROVED", "PAID", "REVIEW"] },
     };
     const skip = (dto.page - 1) * dto.limit;
     const [data, total] = await Promise.all([
@@ -1020,12 +1077,12 @@ class PayrollService {
       _id: payslipId,
       tenantId,
       userId,
-      status: { $in: ["APPROVED", "PAID"] },
+      status: { $in: ["APPROVED", "PAID", "REVIEW"] },
     })
       .populate("payrollPeriodId", "name periodStart periodEnd status paidAt")
       .lean();
     if (!payslip) {
-      const error = new Error("Không tìm thấy phiếu lương đã được công bố");
+      const error = new Error("Không tìm thấy phiếu lương có thể xem");
       error.statusCode = 404;
       throw error;
     }
@@ -1188,6 +1245,9 @@ class PayrollService {
     } else if (action === "MARK_PAID") {
       payrollPeriod.paidBy = currentUserId;
       payrollPeriod.paidAt = now;
+      // Payroll payout is recorded as CASH for the current MVP. Keep this
+      // server-owned so a client cannot label an unintegrated bank/SePay payout.
+      payrollPeriod.paymentMethod = "CASH";
       payrollPeriod.paymentReference = dto.paymentReference?.trim();
       payrollPeriod.paymentNote = dto.paymentNote?.trim();
     }
@@ -1195,6 +1255,67 @@ class PayrollService {
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
+        if (action === "MARK_PAID") {
+          const tenantObjectId = new mongoose.Types.ObjectId(
+            tenantId.toString(),
+          );
+          const payrollPeriodObjectId = new mongoose.Types.ObjectId(
+            periodId.toString(),
+          );
+
+          // Tổng chi phải được đọc lại bên trong cùng transaction với thao tác
+          // PAID. Không dùng totalCost từ API list/detail vì đó chỉ là dữ liệu
+          // trả về ở request khác và có thể đã cũ.
+          const totalRows = await Payslip.aggregate([
+            {
+              $match: {
+                tenantId: tenantObjectId,
+                payrollPeriodId: payrollPeriodObjectId,
+              },
+            },
+            {
+              $group: {
+                _id: "$payrollPeriodId",
+                totalCost: { $sum: { $ifNull: ["$netSalary", 0] } },
+              },
+            },
+          ]).session(session);
+          const totalCost = totalRows[0]?.totalCost || 0;
+
+          if (totalCost <= 0) {
+            const error = new Error(
+              "Không thể thanh toán kỳ lương có tổng chi bằng 0",
+            );
+            error.statusCode = 422;
+            throw error;
+          }
+
+          const cashFlowReference = generateReference(
+            REFERENCE_PREFIX.PAYROLL,
+          );
+          const [payrollCashFlow] = await CashFlow.create(
+            [
+              {
+                tenantId,
+                payrollPeriodId: periodId,
+                createdBy: currentUserId,
+                flowType: "EXPENSE",
+                amount: totalCost,
+                paymentMethod: payrollPeriod.paymentMethod,
+                paymentReference: cashFlowReference,
+                description: `Thanh toán ${payrollPeriod.name}`,
+              },
+            ],
+            { session },
+          );
+
+          // status PAID và dấu vết CashFlow được commit cùng nhau. cashFlowId là
+          // quan hệ chuẩn; cashFlowReference được snapshot để UI hiển thị nhanh
+          // mà không phải thêm một API đọc CashFlow chỉ để lấy mã PAYR.
+          payrollPeriod.cashFlowId = payrollCashFlow._id;
+          payrollPeriod.cashFlowReference = cashFlowReference;
+        }
+
         await payrollPeriod.save({ session });
         await Payslip.updateMany(
           { tenantId, payrollPeriodId: periodId },
@@ -1202,17 +1323,49 @@ class PayrollService {
           { session },
         );
       });
+    } catch (error) {
+      if (action === "MARK_PAID" && error.code === 11000) {
+        const conflictError = new Error(
+          "CashFlow của kỳ lương này đã được ghi nhận",
+        );
+        conflictError.statusCode = 409;
+        throw conflictError;
+      }
+      throw error;
     } finally {
       await session.endSession();
     }
 
-    // Chỉ báo cho nhân viên ở hai mốc họ thật sự quan tâm: lương được duyệt và
-    // lương đã trả. Các bước nội bộ (SUBMIT, RETURN_TO_DRAFT) không cần làm phiền.
+    // REVIEW là cửa sổ để nhân viên kiểm tra phiếu tạm tính và phản hồi trước
+    // khi APPROVED chốt số liệu. Mỗi lần re-submit từ DRAFT đều gửi lại thông báo
+    // để nhân viên biết phiên bản đã chỉnh sửa có thể được kiểm tra lại.
+    // RETURN_TO_DRAFT không gửi noti và bộ lọc my-payslips tự ẩn phiếu DRAFT.
     //
     // Bọc try/catch: notify() tự nuốt lỗi của nó, nhưng truy vấn Payslip.find
     // bên dưới thì không. Kỳ lương đã được chốt và commit ở trên rồi — không thể
     // để việc gửi thông báo thất bại kéo theo cả thao tác chốt lương.
-    if (action === "APPROVE" || action === "MARK_PAID") {
+    const notificationByAction = {
+      SUBMIT: {
+        type: "PAYSLIP_REVIEW",
+        title: "Phiếu lương tạm tính đang chờ kiểm tra",
+        description:
+          "Phiếu lương tạm tính đã sẵn sàng. Vui lòng kiểm tra và phản hồi trước khi được duyệt.",
+      },
+      APPROVE: {
+        type: "PAYSLIP_APPROVED",
+        title: "Phiếu lương đã được duyệt",
+        description: "Phiếu lương kỳ này đã được duyệt.",
+      },
+      MARK_PAID: {
+        type: "PAYSLIP_PAID",
+        title: "Lương đã được thanh toán",
+        description:
+          "Lương kỳ này đã được chi trả.",
+      },
+    };
+    const notification = notificationByAction[action];
+
+    if (notification) {
       try {
         const payslips = await Payslip.find({
           tenantId,
@@ -1221,19 +1374,11 @@ class PayrollService {
           .select("_id userId")
           .lean();
 
-        const paid = action === "MARK_PAID";
-
         for (const payslip of payslips) {
           await NotificationService.notify({
             tenantId,
             recipientIds: [payslip.userId],
-            type: paid ? "PAYSLIP_PAID" : "PAYSLIP_APPROVED",
-            title: paid
-              ? "Lương đã được thanh toán"
-              : "Phiếu lương đã được duyệt",
-            description: paid
-              ? "Lương kỳ này đã được chi trả. Xem chi tiết phiếu lương của bạn."
-              : "Phiếu lương kỳ này đã được duyệt.",
+            ...notification,
             link: `/staffs/payroll/${payslip._id}`,
             referenceId: payslip._id,
           });

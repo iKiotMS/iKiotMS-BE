@@ -176,6 +176,50 @@ class InventoryService {
       );
     }
   }
+
+  async addProductToLocation(tenantId, payload) {
+    const { locationId, locationType, productItemId } = payload;
+
+    const existingInventory = await Inventory.findOne({
+      tenantId,
+      locationId,
+      productItemId,
+    }).lean();
+
+    if (existingInventory) {
+      throw new Error("Product is already assigned to this location");
+    }
+
+    const inventory = new Inventory({
+      tenantId,
+      locationId,
+      locationType,
+      productItemId,
+      stock: 0,
+      minStock: 0,
+    });
+
+    await inventory.save();
+    return inventory;
+  }
+
+  async removeProductFromLocation(tenantId, inventoryId) {
+    const inventory = await Inventory.findOne({
+      _id: inventoryId,
+      tenantId,
+    });
+
+    if (!inventory) {
+      throw new Error("Inventory record not found");
+    }
+
+    if (inventory.stock > 0) {
+      throw new Error("Cannot remove product from location because stock is greater than 0");
+    }
+
+    await Inventory.findByIdAndDelete(inventory._id);
+    return { success: true };
+  }
 }
 
 module.exports = new InventoryService();

@@ -28,6 +28,7 @@
     "branches": ["create", "read", "update", "delete"],
     "warehouses": ["create", "read", "update", "delete"],
     "orders": ["read"],
+    "cash_drawers": ["open", "read", "report", "finalize"],
     "inventory": ["read", "update"],
     "promotions": ["create", "read", "update", "delete", "calculate", "apply"],
     "reports": ["read", "export"],
@@ -44,8 +45,10 @@
     "users": ["read", "create_staff"],
     "staff": ["create", "read", "update", "inactive", "suspend","delete"],
     "products": ["read"],
+    "suppliers": ["read"],
     "branches": ["read", "update"],
     "orders": ["create", "read", "update"],
+    "cash_drawers": ["open", "read", "report", "finalize"],
     "inventory": ["read", "update"],
     "promotions": ["read", "calculate", "apply"],
     "reports": ["read"],
@@ -54,10 +57,15 @@
     "schedules": ["create", "read", "readBR", "update", "delete"],
     "attendances": ["read"],
     "leaveRequests": ["create", "readBR", "update", "read_mine", "cancel","approve","reject", "create_emergency"],
-    "payslips": ["read_own"]
+    "payslips": ["read_own"],
+    "holidays":["read"]
+    
   },
   "WAREHOUSE_MANAGER": {
-    "products": ["read"],
+    "products": ["create", "read", "update", "delete"],
+    "categories": ["create", "read", "update", "delete"],
+    "brands": ["create", "read", "update", "delete"],
+    "suppliers": ["create", "read", "update", "delete"],
     "warehouses": ["read", "update"],
     "inventory": ["read", "update", "manage"],
     "stock_movement": ["create", "read", "update", "approve", "receive", "cancel"],
@@ -65,18 +73,24 @@
     "attendances": ["read"],
     "schedules": ["read", "readWH"],
     "leaveRequests": ["create", "readWH", "update", "read_mine", "cancel"],
-    "payslips": ["read_own"]
+    "payslips": ["read_own"],
+    "holidays":["read"]
+
   },
   "STAFF": {
     "products": ["read"],
+    "staff": ["read"],
     "orders": ["create", "read", "pay_offline"],
+    "cash_drawers": ["read_own", "report"],
     "inventory": ["read"],
     "branches": ["read"],
     "promotions": ["read", "calculate", "apply"],
     "schedules": ["read_own"],
     "attendances": ["read_own", "create", "update"],
     "leaveRequests": ["create", "read_mine","cancel"],
-    "payslips": ["read_own"]
+    "payslips": ["read_own"],
+    "holidays":["read"]
+
   },
   "CUSTOMER": {
     "profile": ["read"]

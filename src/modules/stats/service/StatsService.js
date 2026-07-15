@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const { Order, CashFlow, Inventory } = require("../../../models");
 const { referenceMatcher } = require("../../../utils/referenceGenerator");
 
@@ -6,16 +7,23 @@ const REVENUE_STATUS = "COMPLETED";
 
 const TZ = "+07:00";
 
+const toObjectId = (id) => {
+  if (id instanceof mongoose.Types.ObjectId) return id;
+  return mongoose.Types.ObjectId.isValid(id)
+    ? new mongoose.Types.ObjectId(id)
+    : id;
+};
+
 class StatsService {
   _branchFilter(user, requestedBranchId) {
     if (user.role === "BRANCH_MANAGER") {
       if (!user.branchId) throw new Error("Branch manager has no branch assigned");
-      return { branchId: user.branchId };
+      return { branchId: toObjectId(user.branchId) };
     }
     if (user.role === "WAREHOUSE_MANAGER") {
       return { branchId: null };
     }
-    return requestedBranchId ? { branchId: requestedBranchId } : {};
+    return requestedBranchId ? { branchId: toObjectId(requestedBranchId) } : {};
   }
 
   _dateRange(fromDate, toDate) {
@@ -30,7 +38,7 @@ class StatsService {
 
     const summarize = async (from, to) => {
       const [row] = await Order.aggregate([
-        { $match: { tenantId: user.tenantId, status: REVENUE_STATUS, ...scope, createdAt: this._dateRange(from, to) } },
+        { $match: { tenantId: toObjectId(user.tenantId), status: REVENUE_STATUS, ...scope, createdAt: this._dateRange(from, to) } },
         {
           $group: {
             _id: null,
@@ -75,7 +83,7 @@ class StatsService {
     const format = groupBy === "month" ? "%Y-%m" : "%Y-%m-%d";
 
     const rows = await Order.aggregate([
-      { $match: { tenantId: user.tenantId, status: REVENUE_STATUS, ...scope, createdAt: this._dateRange(fromDate, toDate) } },
+      { $match: { tenantId: toObjectId(user.tenantId), status: REVENUE_STATUS, ...scope, createdAt: this._dateRange(fromDate, toDate) } },
       {
         $group: {
           _id: { $dateToString: { format, date: "$createdAt", timezone: TZ } },
@@ -93,7 +101,7 @@ class StatsService {
   async getRevenueByPaymentMethod(user, { fromDate, toDate, branchId }) {
     const scope = this._branchFilter(user, branchId);
     const rows = await Order.aggregate([
-      { $match: { tenantId: user.tenantId, status: REVENUE_STATUS, ...scope, createdAt: this._dateRange(fromDate, toDate) } },
+      { $match: { tenantId: toObjectId(user.tenantId), status: REVENUE_STATUS, ...scope, createdAt: this._dateRange(fromDate, toDate) } },
       { $group: { _id: "$paymentMethod", revenue: { $sum: "$grandTotal" }, orderCount: { $sum: 1 } } },
       { $sort: { revenue: -1 } },
       { $project: { _id: 0, paymentMethod: "$_id", revenue: 1, orderCount: 1 } },
@@ -104,7 +112,7 @@ class StatsService {
   async getCashflow(user, { fromDate, toDate, branchId, flow, flowType }) {
     const scope = this._branchFilter(user, branchId);
     const match = {
-      tenantId: user.tenantId,
+      tenantId: toObjectId(user.tenantId),
       ...scope,
       createdAt: this._dateRange(fromDate, toDate),
     };
@@ -126,10 +134,66 @@ class StatsService {
     };
   }
 
+  async getCashflowList(user, { fromDate, toDate, branchId, flow, flowType, paymentMethod, page, limit }) {
+    const scope = this._branchFilter(user, branchId);
+    const match = {
+      tenantId: toObjectId(user.tenantId),
+      ...scope,
+      createdAt: this._dateRange(fromDate, toDate),
+    };
+    if (flowType) match.flowType = flowType;
+    if (paymentMethod) match.paymentMethod = paymentMethod;
+    if (flow) match.paymentReference = referenceMatcher(flow);
+
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      CashFlow.find(match)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("branchId", "name")
+        .populate("supplierId", "name")
+        .populate("createdBy", "profile.firstName profile.lastName")
+        .lean(),
+      CashFlow.countDocuments(match),
+    ]);
+
+    const fullName = (u) => {
+      if (!u?.profile) return null;
+      const name = `${u.profile.firstName || ""} ${u.profile.lastName || ""}`.trim();
+      return name || null;
+    };
+
+    const data = items.map((c) => ({
+      _id: c._id,
+      flowType: c.flowType,
+      amount: c.amount,
+      paymentMethod: c.paymentMethod || null,
+      description: c.description || null,
+      paymentReference: c.paymentReference || null,
+      branchName: c.branchId?.name || null,
+      supplierName: c.supplierId?.name || null,
+      createdByName: fullName(c.createdBy),
+      orderId: c.orderId || null,
+      createdAt: c.createdAt,
+    }));
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
   async getRevenueByStaff(user, { fromDate, toDate, branchId }) {
     const scope = this._branchFilter(user, branchId);
     const rows = await Order.aggregate([
-      { $match: { tenantId: user.tenantId, status: REVENUE_STATUS, ...scope, createdAt: this._dateRange(fromDate, toDate) } },
+      { $match: { tenantId: toObjectId(user.tenantId), status: REVENUE_STATUS, ...scope, createdAt: this._dateRange(fromDate, toDate) } },
       { $group: { _id: "$userId", revenue: { $sum: "$grandTotal" }, orderCount: { $sum: 1 } } },
       { $sort: { revenue: -1 } },
       { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "staff" } },
@@ -177,7 +241,7 @@ class StatsService {
     const sortField = sortBy === "revenue" ? "revenue" : "quantity";
 
     const rows = await Order.aggregate([
-      { $match: { tenantId: user.tenantId, status: REVENUE_STATUS, ...scope, createdAt: this._dateRange(fromDate, toDate) } },
+      { $match: { tenantId: toObjectId(user.tenantId), status: REVENUE_STATUS, ...scope, createdAt: this._dateRange(fromDate, toDate) } },
       { $unwind: "$items" },
       {
         $group: {
@@ -202,17 +266,17 @@ class StatsService {
   }
 
   async getInventory(user, { branchId, lowStockThreshold }) {
-    const match = { tenantId: user.tenantId };
+    const match = { tenantId: toObjectId(user.tenantId) };
     if (user.role === "WAREHOUSE_MANAGER") {
       if (!user.warehouseId) throw new Error("Warehouse manager has no warehouse assigned");
-      match.locationId = user.warehouseId;
+      match.locationId = toObjectId(user.warehouseId);
       match.locationType = "warehouse";
     } else if (user.role === "BRANCH_MANAGER") {
       if (!user.branchId) throw new Error("Branch manager has no branch assigned");
-      match.locationId = user.branchId;
+      match.locationId = toObjectId(user.branchId);
       match.locationType = "branch";
     } else if (branchId) {
-      match.locationId = branchId;
+      match.locationId = toObjectId(branchId);
     }
 
     const [result] = await Inventory.aggregate([

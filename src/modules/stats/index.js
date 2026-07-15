@@ -86,7 +86,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *   get:
  *     tags: [Stats]
  *     summary: Income vs expense from CashFlow
- *     description: Totals of INCOME and EXPENSE plus net. Filter by `flow` (reference prefix) to isolate a money-flow — e.g. ORD = sales, SUP = supplier payments.
+ *     description: Totals of INCOME and EXPENSE plus net. Filter by `flow` (reference prefix) to isolate a money-flow — ORD = sales, SUP = supplier payments, PAYR = payroll payments.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - $ref: '#/components/parameters/StatsFromDate'
@@ -94,13 +94,42 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       - $ref: '#/components/parameters/StatsBranchId'
  *       - in: query
  *         name: flow
- *         schema: { type: string, enum: [ORD, SUP] }
- *         description: Reference prefix — ORD (sales), SUP (supplier payments).
+ *         schema: { type: string, enum: [ORD, SUP, PAYR] }
+ *         description: Reference prefix — ORD (sales), SUP (supplier payments), PAYR (payroll expenses).
  *       - in: query
  *         name: flowType
  *         schema: { type: string, enum: [INCOME, EXPENSE] }
  *     responses:
  *       200: { description: '{ income, expense, net, byType }' }
+ *       400: { description: Validation error }
+ * /stats/cashflow/transactions:
+ *   get:
+ *     tags: [Stats]
+ *     summary: Paginated list of individual cash-in / cash-out transactions
+ *     description: Each CashFlow record (INCOME or EXPENSE) with amount, payment method, reference, branch, supplier, creator and timestamp. Filter by `flowType`, `paymentMethod`, and `flow` (reference prefix). Scoped by role like the other stats endpoints.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - $ref: '#/components/parameters/StatsFromDate'
+ *       - $ref: '#/components/parameters/StatsToDate'
+ *       - $ref: '#/components/parameters/StatsBranchId'
+ *       - in: query
+ *         name: flow
+ *         schema: { type: string, enum: [ORD, SUP, PAYR] }
+ *         description: Reference prefix — ORD (sales), SUP (supplier payments), PAYR (payroll expenses).
+ *       - in: query
+ *         name: flowType
+ *         schema: { type: string, enum: [INCOME, EXPENSE] }
+ *       - in: query
+ *         name: paymentMethod
+ *         schema: { type: string, enum: [CASH, BANK_TRANSFER, MOMO, VNPAY, SEPAY] }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+ *     responses:
+ *       200: { description: '{ data: [...], pagination: { total, page, limit, totalPages } }' }
  *       400: { description: Validation error }
  * /stats/top-products:
  *   get:
@@ -132,6 +161,22 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         schema: { type: integer, minimum: 0, default: 10 }
  *     responses:
  *       200: { description: Valuation + low-stock items }
+ * /stats/admin/overview:
+ *   get:
+ *     tags: [Stats]
+ *     summary: Platform-operator overview (SUPER_ADMIN only)
+ *     description: Cross-tenant analytics for the platform operator — tenant counts by status, subscription plan distribution, platform revenue (from tenant plan invoices) with period-over-period change and a time series, tenant growth, ticket counts, SePay-linked ratio, top tenants by revenue, and recent invoices.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - $ref: '#/components/parameters/StatsFromDate'
+ *       - $ref: '#/components/parameters/StatsToDate'
+ *       - in: query
+ *         name: groupBy
+ *         schema: { type: string, enum: [day, month], default: day }
+ *     responses:
+ *       200: { description: Platform overview }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden (not SUPER_ADMIN) }
  */
 const registerStatsModule = (app) => {
   const guard = [verifyJwt, authorize("reports", "read")];
@@ -141,8 +186,12 @@ const registerStatsModule = (app) => {
   app.get("/stats/revenue-by-payment-method", ...guard, StatsController.revenueByPaymentMethod);
   app.get("/stats/revenue-by-staff", ...guard, StatsController.revenueByStaff);
   app.get("/stats/cashflow", ...guard, StatsController.cashflow);
+  app.get("/stats/cashflow/transactions", ...guard, StatsController.cashflowList);
   app.get("/stats/top-products", ...guard, StatsController.topProducts);
   app.get("/stats/inventory", ...guard, StatsController.inventory);
+
+  // SUPER_ADMIN platform overview — role checked inside the controller.
+  app.get("/stats/admin/overview", verifyJwt, StatsController.adminOverview);
 
   console.log("✓ Stats module registered");
 };

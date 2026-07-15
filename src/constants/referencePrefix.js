@@ -8,10 +8,15 @@
 const REFERENCE_PREFIX = {
   ORDER: "ORD", // Customer order: INCOME on sale, EXPENSE on refund/return
   SUPPLIER: "SUP", // Supplier debt payment (EXPENSE)
+  PAYROLL: "PAYR", // Payroll period payment (EXPENSE)
   SUBSCRIPTION: "IKMS", // Tenant pays iKiot for a plan (company bank — not tenant CashFlow)
 };
 
 // Every flow that can appear in a tenant's CashFlow, for stats filtering.
-const CASHFLOW_PREFIXES = [REFERENCE_PREFIX.ORDER, REFERENCE_PREFIX.SUPPLIER];
+const CASHFLOW_PREFIXES = [
+  REFERENCE_PREFIX.ORDER,
+  REFERENCE_PREFIX.SUPPLIER,
+  REFERENCE_PREFIX.PAYROLL,
+];
 
 module.exports = { REFERENCE_PREFIX, CASHFLOW_PREFIXES };

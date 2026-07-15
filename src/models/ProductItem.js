@@ -59,6 +59,12 @@ const productItemSchema = new mongoose.Schema(
       min: [0, "VAT cannot be negative"],
       max: [100, "VAT cannot exceed 100"],
     },
+    suppliers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Supplier",
+      },
+    ],
     productDetails: [
       {
         id: {
@@ -83,5 +89,8 @@ productItemSchema.index(
   { tenantId: 1, sku: 1 },
   { unique: true, sparse: true },
 );
+
+productItemSchema.index({ tenantId: 1, productCode: 1 });
+productItemSchema.index({ tenantId: 1, barcode: 1 });
 
 module.exports = mongoose.model("ProductItem", productItemSchema);

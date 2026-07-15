@@ -36,7 +36,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *                   properties:
  *                     productItemId: { type: string }
  *                     quantity: { type: integer, description: "Required for IMPORT, EXPORT, RETURN (> 0)" }
- *                     importPrice: { type: number, description: "Required for IMPORT (> 0)" }
+ *                     importPrice: { type: number, description: "Required for IMPORT (> 0, must be <= retailPrice). For EXPORT/RETURN, auto-filled with product costPrice if omitted, but can be manually overridden." }
  *                     receivedQuantity: { type: integer, description: "Required for ADJUST (>= 0)" }
  *     responses:
  *       201:
@@ -105,7 +105,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *                   properties:
  *                     productItemId: { type: string }
  *                     quantity: { type: integer }
- *                     importPrice: { type: number }
+ *                     importPrice: { type: number, description: "For IMPORT, must be <= retailPrice. For EXPORT/RETURN, auto-filled with product costPrice if omitted, but can be manually overridden." }
  *                     receivedQuantity: { type: integer }
  *     responses:
  *       200:

@@ -61,6 +61,10 @@ const stockMovementRequestSchema = new mongoose.Schema(
       ref: "User",
       required: [true, "User is required"],
     },
+    totalPrice: {
+      type: Number,
+      default: 0,
+    },
     note: {
       type: String,
       trim: true,
@@ -83,6 +87,8 @@ const stockMovementRequestSchema = new mongoose.Schema(
         importPrice: {
           type: Number,
           min: [0, "Import price cannot be negative"],
+
+          // Đơn EXPORT / RETURN : giá gốc của sản phẩm.
         },
         receivedQuantity: {
           type: Number,

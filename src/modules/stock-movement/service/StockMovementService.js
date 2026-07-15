@@ -68,10 +68,16 @@ class StockMovementService {
       if (!payload.fromSupplierId) throw new Error("fromSupplierId is required for IMPORT");
       if (!payload.toLocationId || !payload.toLocationType) throw new Error("toLocation is required for IMPORT");
       if (payload.details) {
-        payload.details.forEach(item => {
+        for (const item of payload.details) {
           if (!item.importPrice || item.importPrice <= 0) throw new Error("importPrice must be > 0 for IMPORT");
           if (!item.quantity || item.quantity <= 0) throw new Error("quantity must be > 0 for IMPORT");
-        });
+
+          const productItem = await mongoose.model("ProductItem").findOne({ _id: item.productItemId, tenantId }).lean();
+          if (!productItem) throw new Error("Product item not found");
+          if (item.importPrice > productItem.retailPrice) {
+            throw new Error(`Import price cannot be greater than retail price (${productItem.retailPrice}) for product item ${productItem.sku}`);
+          }
+        }
       }
     } else if (movementType === "EXPORT" || movementType === "RETURN") {
       if (!payload.toLocationId || !payload.toLocationType) throw new Error("toLocation is required");
@@ -84,9 +90,13 @@ class StockMovementService {
       }
       if (!payload.fromLocationId || !payload.fromLocationType) throw new Error("fromLocation is required");
       if (payload.details) {
-        payload.details.forEach(item => {
+        for (const item of payload.details) {
           if (!item.quantity || item.quantity <= 0) throw new Error("quantity must be > 0");
-        });
+          if (item.importPrice === undefined || item.importPrice === null) {
+            const productItem = await mongoose.model("ProductItem").findOne({ _id: item.productItemId, tenantId }).lean();
+            item.importPrice = productItem ? (productItem.costPrice || 0) : 0;
+          }
+        }
       }
     } else if (movementType === "ADJUST") {
       if (role !== "TENANT_OWNER") {
@@ -117,11 +127,17 @@ class StockMovementService {
       status = "PENDING";
     }
 
+    let totalPrice = 0;
+    if (movementType !== "ADJUST" && payload.details) {
+      totalPrice = payload.details.reduce((sum, item) => sum + (item.quantity * (item.importPrice || 0)), 0);
+    }
+
     const request = new StockMovementRequest({
       ...payload,
       tenantId,
       createdBy: userId,
       status,
+      totalPrice,
     });
     
     await request.save();
@@ -178,6 +194,10 @@ class StockMovementService {
           if (item.quantity > currentStock) {
             throw new Error(`Quantity ${item.quantity} exceeds available stock ${currentStock} at source location`);
           }
+          if (item.importPrice === undefined || item.importPrice === null) {
+            const productItem = await mongoose.model("ProductItem").findOne({ _id: item.productItemId, tenantId }).lean();
+            item.importPrice = productItem ? (productItem.costPrice || 0) : 0;
+          }
         }
       } else {
         // IMPORT and ADJUST
@@ -192,6 +212,12 @@ class StockMovementService {
           for (const item of details) {
             if (!item.importPrice || item.importPrice <= 0) throw new Error("importPrice must be > 0 for IMPORT");
             if (!item.quantity || item.quantity <= 0) throw new Error("quantity must be > 0 for IMPORT");
+
+            const productItem = await mongoose.model("ProductItem").findOne({ _id: item.productItemId, tenantId }).lean();
+            if (!productItem) throw new Error("Product item not found");
+            if (item.importPrice > productItem.retailPrice) {
+              throw new Error(`Import price cannot be greater than retail price (${productItem.retailPrice}) for product item ${productItem.sku}`);
+            }
           }
         }
 
@@ -217,6 +243,9 @@ class StockMovementService {
       }
 
       request.details = details;
+      if (request.movementType !== "ADJUST") {
+        request.totalPrice = details.reduce((sum, item) => sum + (item.quantity * (item.importPrice || 0)), 0);
+      }
       await request.save({ session });
 
       await session.commitTransaction();
@@ -387,6 +416,20 @@ class StockMovementService {
           { $inc: { outstandingDebt: totalImportCost } },
           { session }
         );
+      }
+
+      if (request.movementType === "IMPORT" && request.fromSupplierId) {
+        const receivedProductItemIds = request.details
+          .filter(reqItem => reqItem.receivedQuantity > 0)
+          .map(reqItem => reqItem.productItemId);
+
+        if (receivedProductItemIds.length > 0) {
+          await mongoose.model("ProductItem").updateMany(
+            { _id: { $in: receivedProductItemIds }, tenantId },
+            { $addToSet: { suppliers: request.fromSupplierId } },
+            { session }
+          );
+        }
       }
 
       request.status = "RECEIVED";
