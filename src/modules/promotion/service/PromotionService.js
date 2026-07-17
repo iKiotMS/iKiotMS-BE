@@ -26,6 +26,20 @@ class PromotionService {
     return requestedBranchId ? { branchIds: requestedBranchId } : {};
   }
 
+  // Single-document counterpart of _branchScope, for endpoints that fetch by id
+  // (getPromotionById/getPromotionLogs) rather than filtering a list.
+  _assertBranchAccess(user, promotion) {
+    if (user.role !== "BRANCH_MANAGER" && user.role !== "STAFF") return;
+    const branchIds = promotion.branchIds || [];
+    if (branchIds.length === 0) return;
+    const inScope = branchIds.some((id) => String(id) === String(user.branchId));
+    if (!inScope) {
+      const error = new Error("Promotion access denied");
+      error.statusCode = 403;
+      throw error;
+    }
+  }
+
   async createPromotion(tenantId, data) {
     if (data.branchIds && data.branchIds.length > 0) {
       await this._validateBranches(tenantId, data.branchIds);
@@ -71,11 +85,14 @@ class PromotionService {
     };
   }
 
-  async getPromotionById(tenantId, id) {
+  async getPromotionById(tenantId, id, user) {
     const promotion = await Promotion.findOne({ _id: id, tenantId }).lean();
     if (!promotion) {
-      throw new Error("Promotion not found");
+      const error = new Error("Promotion not found");
+      error.statusCode = 404;
+      throw error;
     }
+    this._assertBranchAccess(user, promotion);
     return promotion;
   }
 
@@ -309,7 +326,17 @@ class PromotionService {
     }
   }
 
-  async getPromotionLogs(tenantId, promotionId, query) {
+  async getPromotionLogs(tenantId, promotionId, query, user) {
+    const promotion = await Promotion.findOne({ _id: promotionId, tenantId })
+      .select("branchIds")
+      .lean();
+    if (!promotion) {
+      const error = new Error("Promotion not found");
+      error.statusCode = 404;
+      throw error;
+    }
+    this._assertBranchAccess(user, promotion);
+
     const { page = 1, recordPerPage = 10 } = query;
     const skip = (page - 1) * recordPerPage;
     const filter = { tenantId, promotionId };
