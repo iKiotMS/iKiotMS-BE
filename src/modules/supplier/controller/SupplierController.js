@@ -85,8 +85,7 @@ class SupplierController {
 
   async payDebt(req, res) {
     try {
-      const { tenantId } = req.user;
-      const result = await SupplierService.payDebt(tenantId, req.params.id, req.body);
+      const result = await SupplierService.payDebt(req.user, req.params.id, req.body);
       res.status(200).json({
         success: true,
         message: "Debt payment recorded successfully",
