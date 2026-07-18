@@ -209,6 +209,15 @@ class StockMovementService {
       totalPrice = payload.details.reduce((sum, item) => sum + (item.quantity * (item.importPrice || 0)), 0);
     }
 
+    if (movementType === "IMPORT" && payload.fromSupplierId) {
+      const supplier = await mongoose.model("Supplier").findOne({ _id: payload.fromSupplierId, tenantId }).lean();
+      if (supplier && supplier.creditLimit > 0) {
+        if (supplier.outstandingDebt + totalPrice > supplier.creditLimit) {
+          throw new Error(`Hạn mức công nợ bị vượt quá. Nợ hiện tại: ${supplier.outstandingDebt}, Tổng đơn mới: ${totalPrice}, Hạn mức: ${supplier.creditLimit}`);
+        }
+      }
+    }
+
     const request = new StockMovementRequest({
       ...payload,
       tenantId,
@@ -343,6 +352,16 @@ class StockMovementService {
       if (request.movementType !== "ADJUST") {
         request.totalPrice = details.reduce((sum, item) => sum + (item.quantity * (item.importPrice || 0)), 0);
       }
+
+      if (request.movementType === "IMPORT" && request.fromSupplierId) {
+        const supplier = await mongoose.model("Supplier").findOne({ _id: request.fromSupplierId, tenantId }).session(session);
+        if (supplier && supplier.creditLimit > 0) {
+          if (supplier.outstandingDebt + request.totalPrice > supplier.creditLimit) {
+            throw new Error(`Hạn mức công nợ bị vượt quá. Nợ hiện tại: ${supplier.outstandingDebt}, Tổng đơn mới: ${request.totalPrice}, Hạn mức: ${supplier.creditLimit}`);
+          }
+        }
+      }
+
       await request.save({ session });
 
       await session.commitTransaction();
@@ -574,37 +593,31 @@ class StockMovementService {
         throw new Error("Cannot receive an empty order. Received quantity must be > 0 for at least one item.");
       }
 
-      if (request.movementType === "IMPORT" && totalImportCost > 0) {
-
-        const locationField =
-          request.toLocationType === "warehouse"
-            ? { warehouseId: request.toLocationId }
-            : { branchId: request.toLocationId };
-
-        await CashFlow.create(
-          [
-            {
-              tenantId,
-              ...locationField,
-              supplierId: request.fromSupplierId,
-              createdBy: user.userId,
-              flowType: "EXPENSE",
-              amount: totalImportCost,
-              paymentMethod: "CASH",
-              paymentReference: generateReference(REFERENCE_PREFIX.SUPPLIER),
-              description: `Tự động tạo phiếu chi thanh toán nhập hàng - Phiếu ${request._id}`,
-            },
-          ],
-          { session },
-        );
-      }
-
       if (request.movementType === "IMPORT" && request.fromSupplierId && totalImportCost > 0) {
-        await Supplier.findOneAndUpdate(
+        const supplier = await Supplier.findOneAndUpdate(
           { _id: request.fromSupplierId, tenantId },
           { $inc: { outstandingDebt: totalImportCost } },
-          { session }
+          { session, new: true }
         );
+
+        if (supplier && supplier.creditLimit > 0) {
+          if (supplier.outstandingDebt > supplier.creditLimit) {
+            throw new Error(`Hạn mức công nợ bị vượt quá lúc nhận hàng. Nợ mới: ${supplier.outstandingDebt}, Hạn mức: ${supplier.creditLimit}`);
+          }
+          if (supplier.outstandingDebt >= 0.75 * supplier.creditLimit && (supplier.outstandingDebt - totalImportCost) < 0.75 * supplier.creditLimit) {
+            const ownerIds = await NotificationService.approversOf({ tenantId, locationId: null, locationType: "tenant" });
+            const ownerIdsFiltered = ownerIds.filter(id => String(id) !== String(user.userId));
+            if (ownerIdsFiltered.length > 0) {
+               await NotificationService.notify({
+                 tenantId,
+                 recipientIds: ownerIdsFiltered,
+                 type: "SYSTEM",
+                 title: "Cảnh báo hạn mức công nợ",
+                 description: `Công nợ của nhà cung cấp ${supplier.supplierName} đã đạt ${(supplier.outstandingDebt / supplier.creditLimit * 100).toFixed(1)}% hạn mức (${supplier.outstandingDebt}/${supplier.creditLimit}).`,
+               });
+            }
+          }
+        }
       }
 
       if (request.movementType === "IMPORT" && request.fromSupplierId) {

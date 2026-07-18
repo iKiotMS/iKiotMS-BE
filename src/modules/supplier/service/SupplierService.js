@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const { Supplier, CashFlow } = require("../../../models");
 const { REFERENCE_PREFIX } = require("../../../constants/referencePrefix");
 const { generateReference } = require("../../../utils/referenceGenerator");
+const NotificationService = require("../../../services/notificationService");
 
 class SupplierService {
   async create(tenantId, data) {
@@ -87,8 +88,9 @@ class SupplierService {
     return supplier;
   }
 
-  async payDebt(tenantId, supplierId, payload) {
-    const { amount, paymentMethod, branchId, note } = payload;
+  async payDebt(user, supplierId, payload) {
+    const { tenantId, userId } = user;
+    const { amount, paymentMethod, note } = payload;
     
     if (!amount || amount <= 0) {
       throw new Error("Payment amount must be greater than 0");
@@ -112,13 +114,13 @@ class SupplierService {
       supplier.outstandingDebt -= amount;
       await supplier.save({ session });
 
-      // 3. Create CashFlow (Expense)
+      // 3. Create CashFlow (Expense) - Tenant Level (No branchId)
       const cashFlow = new CashFlow({
         tenantId,
         flowType: "EXPENSE",
         amount,
         paymentMethod: paymentMethod || "CASH",
-        branchId,
+        createdBy: userId,
         supplierId,
         paymentReference: generateReference(REFERENCE_PREFIX.SUPPLIER),
         description: note || `Thanh toán công nợ cho nhà cung cấp ${supplier.supplierName}`,
@@ -127,6 +129,20 @@ class SupplierService {
 
       await session.commitTransaction();
       session.endSession();
+
+      // 4. Send Notification
+      const ownerIds = await NotificationService.approversOf({ tenantId, locationId: null, locationType: "tenant" });
+      const ownerIdsFiltered = ownerIds.filter(id => String(id) !== String(userId));
+      
+      if (ownerIdsFiltered.length > 0) {
+        await NotificationService.notify({
+          tenantId,
+          recipientIds: ownerIdsFiltered,
+          type: "SYSTEM",
+          title: "Thanh toán công nợ nhà cung cấp",
+          description: `Đã trả nhà cung cấp ${supplier.supplierName} ${amount.toLocaleString()} VNĐ. Còn nợ ${(supplier.outstandingDebt).toLocaleString()} VNĐ.`,
+        });
+      }
 
       return {
         supplier,
