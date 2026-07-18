@@ -827,7 +827,7 @@ class StockMovementService {
 
     const [data, total] = await Promise.all([
       StockMovementRequest.find(filter)
-        .populate("createdBy", "fullName email")
+        .populate("createdBy", "profile.firstName profile.lastName phoneNumber email")
         .populate("fromSupplierId", "supplierName")
         .skip(skip)
         .limit(Number(limit))
@@ -852,7 +852,7 @@ class StockMovementService {
   async getDetail(user, movementId) {
     const { tenantId, role, warehouseId, branchId } = user;
     const request = await StockMovementRequest.findOne({ _id: movementId, tenantId })
-      .populate("createdBy", "fullName email")
+      .populate("createdBy", "profile.firstName profile.lastName phoneNumber email")
       .populate("fromSupplierId", "supplierName")
       .populate("details.productItemId", "sku productName images")
       .lean();
