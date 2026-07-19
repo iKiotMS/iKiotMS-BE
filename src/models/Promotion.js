@@ -7,10 +7,10 @@ const promotionSchema = new mongoose.Schema(
       ref: "Tenant",
       required: [true, "Tenant is required"],
     },
-    branchId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Branch",
-      default: null,
+    // Empty array = applies tenant-wide. Non-empty = only at these branches.
+    branchIds: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Branch" }],
+      default: [],
     },
     promoName: {
       type: String,
@@ -91,7 +91,7 @@ const promotionSchema = new mongoose.Schema(
 );
 
 promotionSchema.index({ tenantId: 1, status: 1 });
-promotionSchema.index({ tenantId: 1, branchId: 1 });
+promotionSchema.index({ tenantId: 1, branchIds: 1 });
 promotionSchema.index({ tenantId: 1, startDate: 1, endDate: 1 });
 
 module.exports = mongoose.model("Promotion", promotionSchema);

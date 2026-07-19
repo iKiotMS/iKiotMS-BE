@@ -138,6 +138,31 @@ const {
  *                       totalStock: { type: number, description: "Total stock across all items and locations" }
  *                 pagination:
  *                   type: object
+ * /products/items:
+ *   get:
+ *     tags: [Products]
+ *     summary: Flat list of ProductItems (SKUs) for pickers
+ *     description: >
+ *       Unlike GET /products, this does NOT attach items per product — it's a flat
+ *       SKU-level list (productId, productName, productCode, sku) for UI pickers that
+ *       need to reference a specific variant, e.g. a promotion's product-scope selector.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 200, maximum: 500 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Matches sku, productName, or productCode (case-insensitive substring).
+ *       - in: query
+ *         name: branchIds
+ *         schema: { type: string }
+ *         description: Comma-separated branch (location) IDs. When given, only items stocked at one of these branches are returned instead of every item in the tenant.
+ *     responses:
+ *       200:
+ *         description: List of product items
  * /products/search:
  *   get:
  *     tags: [Products]
@@ -388,7 +413,12 @@ const registerProductModule = (app) => {
     ProductController.getList.bind(ProductController),
   );
   // Must be registered before "/products/:id" — otherwise Express matches
-  // this path as id="search".
+  // these paths as id="items" / id="search".
+  app.get(
+    "/products/items",
+    verifyJwt,
+    ProductController.listItems.bind(ProductController),
+  );
   app.get(
     "/products/search",
     verifyJwt,

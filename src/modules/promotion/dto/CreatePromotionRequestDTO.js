@@ -3,7 +3,8 @@ const RULE_TYPES = ["all", "category", "product"];
 
 class CreatePromotionRequestDTO {
   constructor(data = {}) {
-    this.branchId = data.branchId || null;
+    // Empty array = applies tenant-wide. Non-empty = only at these branches.
+    this.branchIds = Array.isArray(data.branchIds) ? data.branchIds : [];
     this.promoName = data.promoName;
     this.description = data.description;
     this.discountType = data.discountType;
@@ -47,6 +48,10 @@ class CreatePromotionRequestDTO {
 
     if (this.minOrderValue < 0) {
       errors.push("minOrderValue cannot be negative");
+    }
+
+    if (this.branchIds.some((id) => typeof id !== "string" || !id.trim())) {
+      errors.push("branchIds must contain only non-empty branch ID strings");
     }
 
     if (!this.applicableRule || !RULE_TYPES.includes(this.applicableRule.type)) {

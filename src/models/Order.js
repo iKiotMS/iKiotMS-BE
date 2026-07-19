@@ -82,6 +82,29 @@ const orderSchema = new mongoose.Schema(
         },
       },
     ],
+    discountType: {
+      type: String,
+      enum: ["ORDER", "PROMOTION", null],
+      default: null,
+    },
+    discountValue: {
+      type: Number,
+      default: 0,
+      min: [0, "Discount value cannot be negative"],
+    },
+    appliedPromotions: {
+      type: [
+        {
+          promotionId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Promotion",
+          },
+          promoName: String,
+          discountAmount: Number,
+        },
+      ],
+      default: null,
+    },
   },
   { timestamps: true },
 );

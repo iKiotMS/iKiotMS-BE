@@ -68,14 +68,14 @@ class PromotionController {
       const tenantId = req.user.tenantId;
       const { id } = req.params;
 
-      const promotion = await PromotionService.getPromotionById(tenantId, id);
+      const promotion = await PromotionService.getPromotionById(tenantId, id, req.user);
 
       res.status(200).json({
         success: true,
         data: promotion,
       });
     } catch (error) {
-      res.status(404).json({
+      res.status(error.statusCode || 404).json({
         success: false,
         message: error.message || "Promotion not found",
       });
@@ -204,7 +204,7 @@ class PromotionController {
       const { id } = req.params;
 
       const queryDTO = new PromotionQueryDTO(req.query);
-      const result = await PromotionService.getPromotionLogs(tenantId, id, queryDTO);
+      const result = await PromotionService.getPromotionLogs(tenantId, id, queryDTO, req.user);
 
       res.status(200).json({
         success: true,
@@ -212,7 +212,7 @@ class PromotionController {
         pagination: result.pagination,
       });
     } catch (error) {
-      res.status(400).json({
+      res.status(error.statusCode || 400).json({
         success: false,
         message: error.message || "Failed to retrieve promotion logs",
       });

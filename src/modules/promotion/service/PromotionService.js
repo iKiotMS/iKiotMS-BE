@@ -7,9 +7,12 @@ function round(amount) {
 }
 
 class PromotionService {
-  async _validateBranch(tenantId, branchId) {
-    const branch = await Branch.findOne({ _id: branchId, tenantId }).lean();
-    if (!branch) {
+  // Batch-validate — every id in branchIds must resolve to a branch in this tenant.
+  async _validateBranches(tenantId, branchIds) {
+    const branches = await Branch.find({ _id: { $in: branchIds }, tenantId })
+      .select("_id")
+      .lean();
+    if (branches.length !== new Set(branchIds.map(String)).size) {
       throw new Error("Branch not found");
     }
   }
@@ -18,14 +21,28 @@ class PromotionService {
   // BRANCH_MANAGER/STAFF only see tenant-wide promotions plus ones scoped to their own branch.
   _branchScope(user, requestedBranchId) {
     if (user.role === "BRANCH_MANAGER" || user.role === "STAFF") {
-      return { $or: [{ branchId: null }, { branchId: user.branchId }] };
+      return { $or: [{ branchIds: { $size: 0 } }, { branchIds: user.branchId }] };
     }
-    return requestedBranchId ? { branchId: requestedBranchId } : {};
+    return requestedBranchId ? { branchIds: requestedBranchId } : {};
+  }
+
+  // Single-document counterpart of _branchScope, for endpoints that fetch by id
+  // (getPromotionById/getPromotionLogs) rather than filtering a list.
+  _assertBranchAccess(user, promotion) {
+    if (user.role !== "BRANCH_MANAGER" && user.role !== "STAFF") return;
+    const branchIds = promotion.branchIds || [];
+    if (branchIds.length === 0) return;
+    const inScope = branchIds.some((id) => String(id) === String(user.branchId));
+    if (!inScope) {
+      const error = new Error("Promotion access denied");
+      error.statusCode = 403;
+      throw error;
+    }
   }
 
   async createPromotion(tenantId, data) {
-    if (data.branchId) {
-      await this._validateBranch(tenantId, data.branchId);
+    if (data.branchIds && data.branchIds.length > 0) {
+      await this._validateBranches(tenantId, data.branchIds);
     }
     if (new Date(data.endDate) <= new Date(data.startDate)) {
       throw new Error("End date must be after start date");
@@ -68,11 +85,14 @@ class PromotionService {
     };
   }
 
-  async getPromotionById(tenantId, id) {
+  async getPromotionById(tenantId, id, user) {
     const promotion = await Promotion.findOne({ _id: id, tenantId }).lean();
     if (!promotion) {
-      throw new Error("Promotion not found");
+      const error = new Error("Promotion not found");
+      error.statusCode = 404;
+      throw error;
     }
+    this._assertBranchAccess(user, promotion);
     return promotion;
   }
 
@@ -81,8 +101,8 @@ class PromotionService {
     if (updateData.usedCount !== undefined) {
       delete updateData.usedCount;
     }
-    if (updateData.branchId) {
-      await this._validateBranch(tenantId, updateData.branchId);
+    if (updateData.branchIds && updateData.branchIds.length > 0) {
+      await this._validateBranches(tenantId, updateData.branchIds);
     }
 
     const existing = await Promotion.findOne({ _id: id, tenantId }).lean();
@@ -168,15 +188,50 @@ class PromotionService {
       status: "ACTIVE",
       startDate: { $lte: now },
       endDate: { $gte: now },
-      $or: [{ branchId: null }, { branchId }],
+      $or: [{ branchIds: { $size: 0 } }, { branchIds: branchId }],
     }).lean();
+  }
+
+  // How many times this customer has already used each candidate promotion (only the
+  // ones that actually cap usage per customer) — PricingEngine stays DB-free, so this
+  // is fetched here and passed in as a plain { [promotionId]: count } map.
+  async _getCustomerUsageCounts(tenantId, customerId, promotions) {
+    const relevantIds = promotions
+      .filter((p) => p.usageLimitPerCustomer != null)
+      .map((p) => p._id);
+    if (!customerId || relevantIds.length === 0) return {};
+
+    const rows = await PromotionLog.aggregate([
+      {
+        $match: {
+          tenantId: new mongoose.Types.ObjectId(tenantId),
+          customerId: new mongoose.Types.ObjectId(customerId),
+          promotionId: { $in: relevantIds },
+        },
+      },
+      { $group: { _id: "$promotionId", count: { $sum: 1 } } },
+    ]);
+
+    const counts = {};
+    for (const row of rows) counts[String(row._id)] = row.count;
+    return counts;
   }
 
   // Read-only preview — no session, no log, no usedCount mutation.
   async calculateDiscount(tenantId, payload) {
     const cartContext = await this._buildCartContext(tenantId, payload);
     const candidates = await this._findCandidatePromotions(tenantId, cartContext.branchId);
-    const applicable = PricingEngine.filterApplicablePromotions(candidates, cartContext);
+    const customerUsageCounts = await this._getCustomerUsageCounts(
+      tenantId,
+      cartContext.customerId,
+      candidates,
+    );
+    const applicable = PricingEngine.filterApplicablePromotions(
+      candidates,
+      cartContext,
+      new Date(),
+      customerUsageCounts,
+    );
     return PricingEngine.resolveStackedDiscount(applicable, cartContext);
   }
 
@@ -190,12 +245,24 @@ class PromotionService {
 
     const cartContext = await this._buildCartContext(tenantId, payload);
     const candidates = await this._findCandidatePromotions(tenantId, cartContext.branchId);
-    const applicable = PricingEngine.filterApplicablePromotions(candidates, cartContext);
+    const customerUsageCounts = await this._getCustomerUsageCounts(
+      tenantId,
+      cartContext.customerId,
+      candidates,
+    );
+    const applicable = PricingEngine.filterApplicablePromotions(
+      candidates,
+      cartContext,
+      new Date(),
+      customerUsageCounts,
+    );
     const result = PricingEngine.resolveStackedDiscount(applicable, cartContext);
 
     if (result.appliedPromotions.length === 0) {
       return result;
     }
+
+    const candidateById = new Map(candidates.map((p) => [String(p._id), p]));
 
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -217,6 +284,23 @@ class PromotionService {
         );
         if (!updated) {
           throw new Error(`Promotion "${applied.promoName}" has reached its usage limit`);
+        }
+
+        // Re-check the per-customer cap inside the transaction — the count fetched
+        // before this transaction started could be stale under concurrent checkouts
+        // by the same customer (e.g. two tabs applying the same promotion at once).
+        const candidate = candidateById.get(String(applied.promotionId));
+        if (candidate?.usageLimitPerCustomer != null && cartContext.customerId) {
+          const usedByCustomer = await PromotionLog.countDocuments({
+            tenantId,
+            promotionId: applied.promotionId,
+            customerId: cartContext.customerId,
+          }).session(session);
+          if (usedByCustomer >= candidate.usageLimitPerCustomer) {
+            throw new Error(
+              `Promotion "${applied.promoName}" has reached its usage limit for this customer`,
+            );
+          }
         }
 
         const log = new PromotionLog({
@@ -242,7 +326,17 @@ class PromotionService {
     }
   }
 
-  async getPromotionLogs(tenantId, promotionId, query) {
+  async getPromotionLogs(tenantId, promotionId, query, user) {
+    const promotion = await Promotion.findOne({ _id: promotionId, tenantId })
+      .select("branchIds")
+      .lean();
+    if (!promotion) {
+      const error = new Error("Promotion not found");
+      error.statusCode = 404;
+      throw error;
+    }
+    this._assertBranchAccess(user, promotion);
+
     const { page = 1, recordPerPage = 10 } = query;
     const skip = (page - 1) * recordPerPage;
     const filter = { tenantId, promotionId };

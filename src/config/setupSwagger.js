@@ -15,11 +15,11 @@ const options = {
         description: "Local development server",
       },
       {
-        url: "https://ikiotms-be.onrender.com",
+        url: "https://ikiotms-be-6e2r.onrender.com/",
         description: "Production server",
       },
       {
-        url: "https://ikiotms-be-dev.onrender.com/",
+        url: "https://ikiotms-be-dev-sozv.onrender.com/",
         description: "Development server",
       },
     ],

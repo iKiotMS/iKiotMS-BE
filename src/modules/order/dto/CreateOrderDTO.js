@@ -9,6 +9,9 @@ class CreateOrderDTO {
     this.grandTotal = data.grandTotal;
     this.customerPay = data.customerPay;
     this.note = data.note;
+    this.discountType = data.discountType;
+    this.discountValue = data.discountValue;
+    this.appliedPromotions = data.appliedPromotions;
   }
 
   validate() {
@@ -48,6 +51,16 @@ class CreateOrderDTO {
       this.customerPay < this.grandTotal
     ) {
       errors.customerPay = "customerPay cannot be less than grandTotal";
+    }
+
+    if (this.discountType !== undefined && this.discountType !== null) {
+      if (!["ORDER", "PROMOTION"].includes(this.discountType)) {
+        errors.discountType = "discountType must be either ORDER or PROMOTION";
+      }
+    }
+
+    if (this.discountValue != null && this.discountValue < 0) {
+      errors.discountValue = "discountValue cannot be negative";
     }
 
     return { isValid: Object.keys(errors).length === 0, errors };
