@@ -139,6 +139,15 @@ function registerNotificationModule(app) {
     NotificationController.deleteAllNotifications.bind(NotificationController),
   );
 
+  // "device-token" cũng phải đứng TRƯỚC "/:id", nếu không "device-token" sẽ bị
+  // bắt nhầm thành :id → deleteNotification cast "device-token" sang ObjectId
+  // và ném lỗi 500.
+  app.delete(
+    "/notifications/device-token",
+    verifyJwt,
+    NotificationController.removeDeviceToken.bind(NotificationController),
+  );
+
   app.delete(
     "/notifications/:id",
     verifyJwt,
@@ -149,12 +158,6 @@ function registerNotificationModule(app) {
     "/notifications/device-token",
     verifyJwt,
     NotificationController.registerDeviceToken.bind(NotificationController),
-  );
-
-  app.delete(
-    "/notifications/device-token",
-    verifyJwt,
-    NotificationController.removeDeviceToken.bind(NotificationController),
   );
 
   app.post(

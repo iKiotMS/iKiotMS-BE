@@ -32,6 +32,44 @@ const { verifyJwt } = require("../../middlewares/authMiddleware");
  *         description: Validation failed
  *       401:
  *         description: Invalid credentials
+ * /auth/firebase-login:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: Login with Google (Firebase)
+ *     description: >-
+ *       Authenticate using a Firebase ID token obtained from Google sign-in on
+ *       the client. The backend verifies the token and matches its email to an
+ *       existing user — the account must already have that email set on its
+ *       profile (no auto-provisioning). An email not present in the DB is
+ *       rejected. `platform` selects the role gate: "mobile" allows only
+ *       STAFF/BRANCH_MANAGER/WAREHOUSE_MANAGER; "web" allows every role except
+ *       CUSTOMER.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - idToken
+ *             properties:
+ *               idToken:
+ *                 type: string
+ *                 description: Firebase ID token from the client after Google sign-in.
+ *               platform:
+ *                 type: string
+ *                 enum: [web, mobile]
+ *                 default: web
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *       400:
+ *         description: Validation failed
+ *       401:
+ *         description: Invalid token or email not registered
+ *       403:
+ *         description: This role is not allowed to sign in on this platform
  * /auth/check-availability:
  *   post:
  *     tags:
@@ -333,6 +371,12 @@ const registerAuthModule = (app) => {
       method: "post",
       path: "/auth/login",
       handler: AuthController.login.bind(AuthController),
+      protected: false,
+    },
+    {
+      method: "post",
+      path: "/auth/firebase-login",
+      handler: AuthController.firebaseLogin.bind(AuthController),
       protected: false,
     },
     {

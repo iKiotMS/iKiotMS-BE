@@ -3,6 +3,8 @@ const { Plan, SubscriptionInvoice } = require("../../../models");
 const sepayService = require("../../../services/sepayService");
 const { emitToRoom } = require("../../../services/socketService");
 const NotificationService = require("../../../services/notificationService");
+const UpdatePlanDTO = require("../dto/UpdatePlanDTO");
+const { cacheKeys, deleteKeys } = require("../../../utils/cacheHelpers");
 
 class SubscriptionController {
   async listPlans(req, res) {
@@ -11,6 +13,91 @@ class SubscriptionController {
       res.status(200).json({ success: true, data: plans });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  // Admin: list every plan (including inactive) for the management table.
+  async listAllPlans(req, res) {
+    try {
+      if (req.user.role !== "SUPER_ADMIN") {
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
+      const plans = await SubscriptionService.listAllPlans();
+      res.status(200).json({ success: true, data: plans });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  // Admin: update a plan's editable fields (price, limits, marketing content...).
+  async updatePlan(req, res) {
+    try {
+      if (req.user.role !== "SUPER_ADMIN") {
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
+
+      const dto = new UpdatePlanDTO(req.body);
+      const { isValid, errors } = dto.validate();
+      if (!isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid plan data",
+          errors,
+        });
+      }
+
+      const payload = dto.toPayload();
+      if (Object.keys(payload).length === 0) {
+        return res
+          .status(400)
+          .json({ success: false, message: "No editable fields provided" });
+      }
+
+      const plan = await SubscriptionService.updatePlan(req.params.id, payload);
+
+      // Public GET /plans is cached 24h — drop it so changes show immediately.
+      await deleteKeys(cacheKeys.plansAll());
+
+      res.status(200).json({
+        success: true,
+        message: "Plan updated successfully",
+        data: plan,
+      });
+    } catch (error) {
+      const status = error.message === "Plan not found" ? 404 : 400;
+      res.status(status).json({ success: false, message: error.message });
+    }
+  }
+
+  // Admin: toggle a plan's active state (soft enable/disable).
+  async togglePlanActive(req, res) {
+    try {
+      if (req.user.role !== "SUPER_ADMIN") {
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
+
+      const { isActive } = req.body;
+      if (typeof isActive !== "boolean") {
+        return res
+          .status(400)
+          .json({ success: false, message: "isActive (boolean) is required" });
+      }
+
+      const plan = await SubscriptionService.setPlanActive(
+        req.params.id,
+        isActive,
+      );
+
+      await deleteKeys(cacheKeys.plansAll());
+
+      res.status(200).json({
+        success: true,
+        message: `Plan ${isActive ? "activated" : "deactivated"}`,
+        data: plan,
+      });
+    } catch (error) {
+      const status = error.message === "Plan not found" ? 404 : 400;
+      res.status(status).json({ success: false, message: error.message });
     }
   }
 

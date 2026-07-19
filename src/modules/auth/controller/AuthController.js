@@ -3,6 +3,7 @@ const { User, Tenant } = require("../../../models");
 const otpService = require("../../../services/otpService");
 const LoginRequestDTO = require("../dto/LoginRequestDTO");
 const LoginResponseDTO = require("../dto/LoginResponseDTO");
+const FirebaseLoginDTO = require("../dto/FirebaseLoginDTO");
 const RegisterRequestDTO = require("../dto/RegisterRequestDTO");
 const UserProfileResponseDTO = require("../dto/UserProfileResponseDTO");
 
@@ -34,6 +35,46 @@ class AuthController {
       res.status(200).json(response);
     } catch (error) {
       res.status(401).json({
+        success: false,
+        message: error.message || "Login failed",
+      });
+    }
+  }
+
+  async firebaseLogin(req, res) {
+    try {
+      const { idToken, platform } = req.body;
+
+      const dto = new FirebaseLoginDTO(idToken, platform);
+      const validation = dto.validate();
+
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation failed",
+          errors: validation.errors,
+        });
+      }
+
+      const userAgent = req.headers["user-agent"];
+      const result = await AuthService.firebaseLogin(
+        dto.idToken,
+        dto.platform,
+        userAgent,
+      );
+
+      const response = new LoginResponseDTO(
+        result.accessToken,
+        result.refreshToken,
+        result.user,
+      );
+
+      res.status(200).json(response);
+    } catch (error) {
+      // Role-gated rejections (wrong app for this role) → 403; everything
+      // else (bad/expired token, email not registered) → 401.
+      const status = error.isRoleDenied ? 403 : 401;
+      res.status(status).json({
         success: false,
         message: error.message || "Login failed",
       });
