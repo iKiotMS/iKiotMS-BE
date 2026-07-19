@@ -62,7 +62,7 @@ const startServer = async () => {
   const app = createApp();
   const config = getConfig();
 
-  connectDB();
+  await connectDB();
 
   const httpServer = http.createServer(app);
   initSocket(httpServer);
