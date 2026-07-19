@@ -25,8 +25,8 @@
     "categories": ["create", "read", "update", "delete"],
     "brands": ["create", "read", "update", "delete"],
     "suppliers": ["create", "read", "update", "delete", "pay_debt"],
-    "branches": ["create", "read", "update", "delete"],
-    "warehouses": ["create", "read", "update", "delete"],
+    "branches": ["create", "read", "update", "delete", "assign_manager"],
+    "warehouses": ["create", "read", "update", "delete", "assign_manager"],
     "orders": ["read"],
     "cash_drawers": ["open", "read", "report", "finalize"],
     "inventory": ["read", "update"],
@@ -59,7 +59,6 @@
     "leaveRequests": ["create", "readBR", "update", "read_mine", "cancel","approve","reject", "create_emergency"],
     "payslips": ["read_own"],
     "holidays":["read"]
-    
   },
   "WAREHOUSE_MANAGER": {
     "products": ["create", "read", "update", "delete"],
