@@ -2,6 +2,16 @@ const StaffService = require("../service/StaffService");
 const StaffResponseDTO = require("../dto/StaffResponseDTO");
 
 class StaffController {
+  sendValidationError(res, error) {
+    return res.status(400).json({
+      success: false,
+      message: "Validation failed",
+      errors: {
+        [error.field || "general"]: error.message,
+      },
+    });
+  }
+
   getRequestData(req) {
     return req.body?.data || req.body || {};
   }
@@ -22,7 +32,7 @@ class StaffController {
 
       res.status(201).json(staff);
     } catch (error) {
-      res.status(400).json({ error: error.message });
+      return this.sendValidationError(res, error);
     }
   }
 
@@ -82,7 +92,7 @@ class StaffController {
 
       res.status(200).json({ message: staff.message, staff: response });
     } catch (error) {
-      return res.status(400).json({ error: error.message });
+      return this.sendValidationError(res, error);
     }
   }
 
