@@ -23,6 +23,15 @@ const plans = [
     maxUsers: 2,
     maxProducts: 100,
     features: ALL_FEATURES,
+    description: "Khám phá toàn bộ tính năng iKiot miễn phí trong 7 ngày.",
+    displayFeatures: [
+      "Dùng thử 7 ngày miễn phí",
+      "Tối đa 2 chi nhánh",
+      "Tối đa 100 sản phẩm",
+      "Tối đa 2 nhân viên",
+      "Bán hàng POS & báo cáo cơ bản",
+    ],
+    isPopular: false,
     isActive: true,
   },
   {
@@ -35,6 +44,16 @@ const plans = [
     maxUsers: 5,
     maxProducts: 1000,
     features: ALL_FEATURES,
+    description:
+      "Phù hợp cho chuỗi cửa hàng vừa và nhỏ có nhu cầu đồng bộ đa chi nhánh.",
+    displayFeatures: [
+      "Tối đa 3 chi nhánh",
+      "Tối đa 1.000 sản phẩm",
+      "Tối đa 5 nhân viên",
+      "Quản lý kho & chuyển kho chi nhánh",
+      "Quản lý nhân sự & bảng lương",
+    ],
+    isPopular: true,
     isActive: true,
   },
   {
@@ -47,6 +66,16 @@ const plans = [
     maxUsers: 5,
     maxProducts: 1000,
     features: ALL_FEATURES,
+    description:
+      "Phù hợp cho chuỗi cửa hàng vừa và nhỏ có nhu cầu đồng bộ đa chi nhánh.",
+    displayFeatures: [
+      "Tối đa 3 chi nhánh",
+      "Tối đa 1.000 sản phẩm",
+      "Tối đa 5 nhân viên",
+      "Quản lý kho & chuyển kho chi nhánh",
+      "Quản lý nhân sự & bảng lương",
+    ],
+    isPopular: true,
     isActive: true,
   },
   {
@@ -59,6 +88,15 @@ const plans = [
     maxUsers: -1, // unlimited
     maxProducts: -1, // unlimited
     features: ALL_FEATURES,
+    description: "Giải pháp toàn diện không giới hạn cho chuỗi cửa hàng lớn.",
+    displayFeatures: [
+      "Không giới hạn chi nhánh",
+      "Không giới hạn sản phẩm",
+      "Không giới hạn nhân viên",
+      "Tất cả tính năng gói Plus",
+      "Hỗ trợ ưu tiên",
+    ],
+    isPopular: false,
     isActive: true,
   },
   {
@@ -71,6 +109,15 @@ const plans = [
     maxUsers: -1, // unlimited
     maxProducts: -1, // unlimited
     features: ALL_FEATURES,
+    description: "Giải pháp toàn diện không giới hạn cho chuỗi cửa hàng lớn.",
+    displayFeatures: [
+      "Không giới hạn chi nhánh",
+      "Không giới hạn sản phẩm",
+      "Không giới hạn nhân viên",
+      "Tất cả tính năng gói Plus",
+      "Hỗ trợ ưu tiên",
+    ],
+    isPopular: false,
     isActive: true,
   },
 ];
