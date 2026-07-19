@@ -49,7 +49,7 @@
     "branches": ["read", "update"],
     "orders": ["create", "read", "update"],
     "cash_drawers": ["open", "read", "report", "finalize"],
-    "": ["read", "update"],
+    "inventory": ["read", "update"],
     "promotions": ["create", "read", "update", "delete", "calculate", "apply"],
     "reports": ["read"],
     "paysheets": ["create", "read", "update", "delete"],
@@ -59,7 +59,6 @@
     "leaveRequests": ["create", "readBR", "update", "read_mine", "cancel","approve","reject", "create_emergency"],
     "payslips": ["read_own"],
     "holidays":["read"]
-    inventory
   },
   "WAREHOUSE_MANAGER": {
     "products": ["create", "read", "update", "delete"],
