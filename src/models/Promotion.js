@@ -58,10 +58,6 @@ const promotionSchema = new mongoose.Schema(
       type: Date,
       required: [true, "End date is required"],
     },
-    priority: {
-      type: Number,
-      default: 0,
-    },
     stackable: {
       type: Boolean,
       default: false,

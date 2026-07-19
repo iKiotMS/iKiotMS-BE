@@ -16,7 +16,6 @@ class UpdatePromotionRequestDTO {
     if (data.applicableRule !== undefined) this.applicableRule = data.applicableRule;
     if (data.startDate !== undefined) this.startDate = data.startDate;
     if (data.endDate !== undefined) this.endDate = data.endDate;
-    if (data.priority !== undefined) this.priority = data.priority;
     if (data.stackable !== undefined) this.stackable = Boolean(data.stackable);
     if (data.usageLimit !== undefined) this.usageLimit = data.usageLimit;
     if (data.usageLimitPerCustomer !== undefined) this.usageLimitPerCustomer = data.usageLimitPerCustomer;
@@ -84,10 +83,6 @@ class UpdatePromotionRequestDTO {
     }
     if (this.startDate !== undefined && this.endDate !== undefined && new Date(this.endDate) <= new Date(this.startDate)) {
       errors.push("endDate must be after startDate");
-    }
-
-    if (this.priority !== undefined && (!Number.isInteger(this.priority) || this.priority < 0)) {
-      errors.push("priority must be a non-negative integer");
     }
 
     if (

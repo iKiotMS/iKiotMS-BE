@@ -55,7 +55,7 @@
     "paysheets": ["create", "read", "update", "delete"],
     "stock_movement": ["create", "read", "update", "approve", "receive", "cancel"],
     "schedules": ["create", "read", "readBR", "update", "delete"],
-    "attendances": ["read"],
+    "attendances": ["read", "read_own", "create", "update"],
     "leaveRequests": ["create", "readBR", "update", "read_mine", "cancel","approve","reject", "create_emergency"],
     "payslips": ["read_own"],
     "holidays":["read"]
@@ -69,7 +69,7 @@
     "inventory": ["read", "update", "manage"],
     "stock_movement": ["create", "read", "update", "approve", "receive", "cancel"],
     "reports": ["read"],
-    "attendances": ["read"],
+    "attendances": ["read", "read_own", "create", "update"],
     "schedules": ["read", "readWH"],
     "leaveRequests": ["create", "readWH", "update", "read_mine", "cancel"],
     "payslips": ["read_own"],

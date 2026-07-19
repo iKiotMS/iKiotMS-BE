@@ -21,7 +21,13 @@ class PromotionService {
   // BRANCH_MANAGER/STAFF only see tenant-wide promotions plus ones scoped to their own branch.
   _branchScope(user, requestedBranchId) {
     if (user.role === "BRANCH_MANAGER" || user.role === "STAFF") {
-      return { $or: [{ branchIds: { $size: 0 } }, { branchIds: user.branchId }] };
+      return {
+        $or: [
+          { branchIds: { $exists: false } },
+          { branchIds: { $size: 0 } },
+          { branchIds: user.branchId },
+        ],
+      };
     }
     return requestedBranchId ? { branchIds: requestedBranchId } : {};
   }
@@ -40,7 +46,13 @@ class PromotionService {
     }
   }
 
-  async createPromotion(tenantId, data) {
+  async createPromotion(tenantId, data, user) {
+    // BRANCH_MANAGER may only ever scope a promotion to their own branch — force it
+    // server-side regardless of what was submitted (empty/other branchIds included).
+    if (user && user.role === "BRANCH_MANAGER") {
+      data.branchIds = [user.branchId];
+    }
+
     if (data.branchIds && data.branchIds.length > 0) {
       await this._validateBranches(tenantId, data.branchIds);
     }
@@ -96,18 +108,27 @@ class PromotionService {
     return promotion;
   }
 
-  async updatePromotion(tenantId, id, updateData) {
+  async updatePromotion(tenantId, id, updateData, user) {
     // usedCount is server-managed only, mirrors Supplier.outstandingDebt protection.
     if (updateData.usedCount !== undefined) {
       delete updateData.usedCount;
-    }
-    if (updateData.branchIds && updateData.branchIds.length > 0) {
-      await this._validateBranches(tenantId, updateData.branchIds);
     }
 
     const existing = await Promotion.findOne({ _id: id, tenantId }).lean();
     if (!existing) {
       throw new Error("Promotion not found");
+    }
+    // A branch manager may only ever touch promotions already in their scope, and
+    // any branchIds they submit gets forced back to their own branch (same rule as create).
+    if (user && user.role === "BRANCH_MANAGER") {
+      this._assertBranchAccess(user, existing);
+      if (updateData.branchIds) {
+        updateData.branchIds = [user.branchId];
+      }
+    }
+
+    if (updateData.branchIds && updateData.branchIds.length > 0) {
+      await this._validateBranches(tenantId, updateData.branchIds);
     }
 
     const startDate = updateData.startDate ?? existing.startDate;
@@ -188,7 +209,15 @@ class PromotionService {
       status: "ACTIVE",
       startDate: { $lte: now },
       endDate: { $gte: now },
-      $or: [{ branchIds: { $size: 0 } }, { branchIds: branchId }],
+      // $size:0 only matches an array field that's actually present — a promotion
+      // predating the branchIds field (no default applied at insert time) would have
+      // no branchIds key at all and silently never match either clause, so treat a
+      // missing field the same as tenant-wide too.
+      $or: [
+        { branchIds: { $exists: false } },
+        { branchIds: { $size: 0 } },
+        { branchIds: branchId },
+      ],
     }).lean();
   }
 
@@ -217,8 +246,10 @@ class PromotionService {
     return counts;
   }
 
-  // Read-only preview — no session, no log, no usedCount mutation.
-  async calculateDiscount(tenantId, payload) {
+  // Shared by calculateDiscount/applyPromotions/listCandidatePromotions: builds the
+  // cart context, fetches this tenant+branch's candidate promotions, and pre-fetches
+  // per-customer usage counts — one place instead of three copies of this sequence.
+  async _resolveForPayload(tenantId, payload) {
     const cartContext = await this._buildCartContext(tenantId, payload);
     const candidates = await this._findCandidatePromotions(tenantId, cartContext.branchId);
     const customerUsageCounts = await this._getCustomerUsageCounts(
@@ -226,13 +257,65 @@ class PromotionService {
       cartContext.customerId,
       candidates,
     );
-    const applicable = PricingEngine.filterApplicablePromotions(
+    return { cartContext, candidates, customerUsageCounts };
+  }
+
+  // Browse endpoint: every candidate promotion for this cart, split branch-specific
+  // vs tenant-wide, each annotated with eligibility + a standalone preview discount —
+  // powers the "assign discount" picker instead of an auto-applied result.
+  async listCandidatePromotions(tenantId, payload) {
+    const { cartContext, candidates, customerUsageCounts } = await this._resolveForPayload(
+      tenantId,
+      payload,
+    );
+    const now = new Date();
+    const built = PricingEngine.buildCandidateList(candidates, cartContext, now, customerUsageCounts);
+
+    const toResponseShape = (entry) => ({
+      id: entry.promotion._id,
+      promoName: entry.promotion.promoName,
+      description: entry.promotion.description,
+      discountType: entry.promotion.discountType,
+      discountValue: entry.promotion.discountValue,
+      maxDiscountAmount: entry.promotion.maxDiscountAmount,
+      minOrderValue: entry.promotion.minOrderValue,
+      branchIds: entry.promotion.branchIds,
+      stackable: entry.promotion.stackable,
+      eligible: entry.eligible,
+      reason: entry.reason,
+      previewDiscount: entry.previewDiscount,
+    });
+
+    const sortEntries = (a, b) => {
+      if (a.eligible !== b.eligible) return a.eligible ? -1 : 1;
+      return b.previewDiscount - a.previewDiscount;
+    };
+
+    const branchPromotions = built
+      .filter((entry) => entry.promotion.branchIds && entry.promotion.branchIds.length > 0)
+      .sort(sortEntries)
+      .map(toResponseShape);
+    const systemPromotions = built
+      .filter((entry) => !entry.promotion.branchIds || entry.promotion.branchIds.length === 0)
+      .sort(sortEntries)
+      .map(toResponseShape);
+
+    return { branchPromotions, systemPromotions };
+  }
+
+  // Read-only preview — no session, no log, no usedCount mutation.
+  async calculateDiscount(tenantId, payload) {
+    const { cartContext, candidates, customerUsageCounts } = await this._resolveForPayload(
+      tenantId,
+      payload,
+    );
+    return PricingEngine.resolveSelectedPromotions(
       candidates,
+      payload.promotionIds,
       cartContext,
       new Date(),
       customerUsageCounts,
     );
-    return PricingEngine.resolveStackedDiscount(applicable, cartContext);
   }
 
   // Commits: re-validates usage caps atomically inside a transaction, increments
@@ -243,20 +326,17 @@ class PromotionService {
       throw new Error("orderId is required to apply promotions");
     }
 
-    const cartContext = await this._buildCartContext(tenantId, payload);
-    const candidates = await this._findCandidatePromotions(tenantId, cartContext.branchId);
-    const customerUsageCounts = await this._getCustomerUsageCounts(
+    const { cartContext, candidates, customerUsageCounts } = await this._resolveForPayload(
       tenantId,
-      cartContext.customerId,
-      candidates,
+      payload,
     );
-    const applicable = PricingEngine.filterApplicablePromotions(
+    const result = PricingEngine.resolveSelectedPromotions(
       candidates,
+      payload.promotionIds,
       cartContext,
       new Date(),
       customerUsageCounts,
     );
-    const result = PricingEngine.resolveStackedDiscount(applicable, cartContext);
 
     if (result.appliedPromotions.length === 0) {
       return result;

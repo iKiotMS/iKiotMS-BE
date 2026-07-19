@@ -4,6 +4,8 @@ class PromotionCalculateRequestDTO {
     this.customerId = data.customerId || null;
     this.orderId = data.orderId || null;
     this.items = Array.isArray(data.items) ? data.items : [];
+    // Explicit user-chosen promotions to apply — empty array is valid (no promotion).
+    this.promotionIds = Array.isArray(data.promotionIds) ? data.promotionIds : [];
   }
 
   validate() {
