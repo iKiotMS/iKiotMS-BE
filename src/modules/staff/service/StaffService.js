@@ -2,9 +2,22 @@ const { User, Branch, Warehouse } = require("../../../models");
 const BaseService = require("../../../common/services/baseService");
 const { STAFF_ROLES } = require("../../../constants/role");
 const { createStaffDTO, updateStaffDTO } = require("../dto/StaffDTO");
+const {
+  validateStaffPhoneNumber,
+} = require("../dto/StaffPhoneNumberValidator");
+const {
+  validateStaffIdentificationId,
+} = require("../dto/StaffIdentificationValidator");
 const UpdateAnnualLeaveDaysDTO = require("../dto/UpdateAnnualLeaveDaysDTO");
 const { validateRoleHierarchy } = require("../../../utils/permissionChecker");
 const NotificationService = require("../../../services/notificationService");
+
+function staffValidationError(field, message) {
+  const error = new Error(message);
+  error.name = "StaffValidationError";
+  error.field = field;
+  return error;
+}
 const {
   buildKeywordFilter,
   buildStatusFilter,
@@ -239,6 +252,7 @@ class StaffService extends BaseService {
     tenantId,
     phoneNumber,
     email,
+    identificationId,
     staffIdToExclude,
   }) {
     if (phoneNumber) {
@@ -251,7 +265,10 @@ class StaffService extends BaseService {
       const existingUser = await User.findOne(phoneFilter);
 
       if (existingUser) {
-        throw new Error("Phone number already exists");
+        throw staffValidationError(
+          "phoneNumber",
+          "Số điện thoại đã tồn tại",
+        );
       }
     }
 
@@ -268,7 +285,27 @@ class StaffService extends BaseService {
       const existingEmail = await User.findOne(emailFilter);
 
       if (existingEmail) {
-        throw new Error("Email already exists");
+        throw staffValidationError("email", "Email đã tồn tại");
+      }
+    }
+
+    if (identificationId) {
+      const identificationFilter = {
+        "profile.identificationId": identificationId,
+      };
+
+      if (staffIdToExclude) {
+        identificationFilter._id = { $ne: staffIdToExclude };
+      }
+
+      const existingIdentification = await User.findOne(
+        identificationFilter,
+      );
+      if (existingIdentification) {
+        throw staffValidationError(
+          "identificationId",
+          "Số căn cước đã tồn tại",
+        );
       }
     }
   }
@@ -276,6 +313,13 @@ class StaffService extends BaseService {
   async createStaff({ tenantId, data, userRole, subscription }) {
     checktenantId(tenantId);
     data = normalizeWorkplaceUpdateData(data || {});
+    data.phoneNumber = validateStaffPhoneNumber(data.phoneNumber);
+    if (data.profile?.identificationId !== undefined) {
+      data.profile.identificationId = validateStaffIdentificationId(
+        data.profile.identificationId,
+        { dob: data.dob, gender: data.profile?.gender },
+      );
+    }
     data.role = validateStaffRole(data.role, { required: true });
 
     if (validateRoleHierarchy(userRole, data.role) === false)
@@ -294,6 +338,7 @@ class StaffService extends BaseService {
       tenantId,
       phoneNumber: data.phoneNumber,
       email: data.email,
+      identificationId: data.profile?.identificationId,
     });
     // Check user quota
     if (subscription) {
@@ -415,11 +460,40 @@ class StaffService extends BaseService {
     }
 
     if (Object.hasOwn(data, "phoneNumber")) {
-      throw new Error("Phone number cannot be updated through this endpoint");
+      validateStaffPhoneNumber(data.phoneNumber);
+      throw staffValidationError(
+        "phoneNumber",
+        "Không thể cập nhật số điện thoại thông qua chức năng này",
+      );
     }
 
     if (Object.hasOwn(data, "status")) {
       throw new Error("Status cannot be updated through this endpoint");
+    }
+
+    const nextIdentificationId =
+      data.profile?.identificationId ?? currentStaff.profile?.identificationId;
+    if (
+      nextIdentificationId &&
+      ["identificationId", "dob", "gender"].some((field) =>
+        Object.hasOwn(data.profile || {}, field),
+      )
+    ) {
+      data.profile = data.profile || {};
+      if (data.profile.identificationId !== undefined) {
+        data.profile.identificationId = validateStaffIdentificationId(
+          data.profile.identificationId,
+          {
+            dob: data.profile.dob ?? currentStaff.profile?.dob,
+            gender: data.profile.gender ?? currentStaff.profile?.gender,
+          },
+        );
+      } else {
+        validateStaffIdentificationId(nextIdentificationId, {
+          dob: data.profile.dob ?? currentStaff.profile?.dob,
+          gender: data.profile.gender ?? currentStaff.profile?.gender,
+        });
+      }
     }
 
     const nextRole = data.role || currentStaff.role;
@@ -453,6 +527,7 @@ class StaffService extends BaseService {
     await this.checkStaffUniqueness({
       tenantId,
       email: data.email,
+      identificationId: data.profile?.identificationId,
       staffIdToExclude: staffId,
     });
 
