@@ -30,7 +30,9 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *           example: TAX123456
  *         identificationId:
  *           type: string
+ *           pattern: '^\\d{12}$'
  *           example: "079201000001"
+ *           description: Số căn cước gồm 12 chữ số. Mã nơi đăng ký khai sinh, năm sinh và giới tính được kiểm tra theo thông tin nhân viên nếu có.
  *         address:
  *           type: string
  *           example: Ho Chi Minh City
@@ -50,7 +52,9 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *           example: staff@example.com
  *         phoneNumber:
  *           type: string
+ *           pattern: '^(?:03[2-9]|05[25689]|07[06789]|08[1-9]|09\\d)\\d{7}$'
  *           example: "0901234567"
+ *           description: A 10-digit Vietnamese mobile number. VoIP (065), VSAT (067), private government networks (0692-0699), Central Post Office services (080), and emergency/service numbers (111-115) are not accepted.
  *         role:
  *           type: string
  *           enum: [BRANCH_MANAGER, WAREHOUSE_MANAGER, STAFF]
@@ -92,6 +96,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *           properties:
  *             identificationId:
  *               type: string
+ *               pattern: '^\\d{12}$'
  *               example: "079201000001"
  *             address:
  *               type: string
@@ -238,6 +243,22 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         totalPages:
  *           type: integer
  *           example: 3
+ *     StaffValidationError:
+ *       type: object
+ *       required: [success, message, errors]
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           example: false
+ *         message:
+ *           type: string
+ *           example: Validation failed
+ *         errors:
+ *           type: object
+ *           additionalProperties:
+ *             type: string
+ *           example:
+ *             identificationId: Số căn cước phải gồm đúng 12 chữ số
  * /staff:
  *   post:
  *     tags:
@@ -260,7 +281,11 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *             schema:
  *               $ref: '#/components/schemas/Staff'
  *       400:
- *         description: Validation failed
+ *         description: Validation failed, including invalid phone numbers or identification information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StaffValidationError'
  *       401:
  *         description: Unauthorized
  *       403:
@@ -394,7 +419,11 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *       200:
  *         description: Staff updated successfully
  *       400:
- *         description: Validation failed
+ *         description: Validation failed. Identification number, date of birth, and gender must be consistent. Phone numbers cannot be changed through this endpoint; reserved phone numbers receive a category-specific error.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StaffValidationError'
  *       401:
  *         description: Unauthorized
  *       403:
