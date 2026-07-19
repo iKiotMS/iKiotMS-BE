@@ -2,6 +2,10 @@
  * Pure discount-calculation engine — no Mongoose/DB access.
  * Callers (PromotionService) are responsible for fetching candidate promotions
  * and resolving productItemId -> categoryId before calling into this module.
+ *
+ * Promotion application is always explicit: the caller passes the exact set of
+ * promotionIds to apply (chosen by the user in the UI) rather than this module
+ * auto-picking a "best" combination by priority.
  */
 
 function round(amount) {
@@ -31,44 +35,6 @@ function isWithinDateRange(promotion, now) {
   return now >= new Date(promotion.startDate) && now <= new Date(promotion.endDate);
 }
 
-/**
- * Filters the tenant's candidate promotions down to the ones eligible for this cart.
- * cartContext: { branchId, customerId?, subtotal, items: [{productItemId, categoryId, quantity, unitPrice, lineTotal}] }
- * customerUsageCounts: { [promotionId]: number } — how many times cartContext.customerId
- * has already used each promotion (pre-fetched by the caller from PromotionLog, since this
- * module intentionally stays DB-free). Only needs entries for promotions that actually set
- * usageLimitPerCustomer; missing entries are treated as 0.
- */
-function filterApplicablePromotions(promotions, cartContext, now = new Date(), customerUsageCounts = {}) {
-  return promotions.filter((promotion) => {
-    if (promotion.status !== "ACTIVE") return false;
-    if (!isWithinDateRange(promotion, now)) return false;
-    // Empty/missing branchIds = applies tenant-wide. Non-empty = only at those branches.
-    if (
-      promotion.branchIds &&
-      promotion.branchIds.length > 0 &&
-      !promotion.branchIds.some((id) => String(id) === String(cartContext.branchId))
-    ) {
-      return false;
-    }
-    if (cartContext.subtotal < (promotion.minOrderValue || 0)) return false;
-    if (
-      promotion.usageLimit != null &&
-      (promotion.usedCount || 0) >= promotion.usageLimit
-    ) {
-      return false;
-    }
-    if (promotion.usageLimitPerCustomer != null) {
-      // A per-customer usage cap is meaningless without knowing who the customer is —
-      // exclude rather than silently skip the check for anonymous/walk-in carts.
-      if (!cartContext.customerId) return false;
-      const usedByCustomer = customerUsageCounts[String(promotion._id)] || 0;
-      if (usedByCustomer >= promotion.usageLimitPerCustomer) return false;
-    }
-    return getMatchedItems(promotion, cartContext.items).length > 0;
-  });
-}
-
 function matchedSubtotal(matchedItems) {
   return matchedItems.reduce((sum, item) => sum + item.lineTotal, 0);
 }
@@ -88,39 +54,67 @@ function rawDiscount(promotion, matchedItems) {
 }
 
 /**
- * Sorts by priority DESC, then computed discount DESC, then createdAt ASC, then _id ASC —
- * fully deterministic so equal-priority ties resolve the same way every time.
+ * Evaluates a single promotion against the cart, returning why it can/can't be
+ * applied. cartContext: { branchId, customerId?, subtotal, items: [{productItemId,
+ * categoryId, quantity, unitPrice, lineTotal}] }. customerUsageCounts: { [promotionId]:
+ * number } — how many times cartContext.customerId has already used each promotion
+ * (pre-fetched by the caller from PromotionLog, since this module stays DB-free).
+ * Only needs entries for promotions that actually set usageLimitPerCustomer.
  */
-function sortByPriority(computed) {
-  return [...computed].sort((a, b) => {
-    if (b.promotion.priority !== a.promotion.priority) {
-      return b.promotion.priority - a.promotion.priority;
+function evaluateEligibility(promotion, cartContext, now = new Date(), customerUsageCounts = {}) {
+  if (promotion.status !== "ACTIVE") {
+    return { eligible: false, reason: "Khuyến mãi không hoạt động" };
+  }
+  if (!isWithinDateRange(promotion, now)) {
+    return { eligible: false, reason: "Khuyến mãi chưa bắt đầu hoặc đã kết thúc" };
+  }
+  // Empty/missing branchIds = applies tenant-wide. Non-empty = only at those branches.
+  if (
+    promotion.branchIds &&
+    promotion.branchIds.length > 0 &&
+    !promotion.branchIds.some((id) => String(id) === String(cartContext.branchId))
+  ) {
+    return { eligible: false, reason: "Không áp dụng cho chi nhánh này" };
+  }
+  if (cartContext.subtotal < (promotion.minOrderValue || 0)) {
+    const minOrderLabel = (promotion.minOrderValue || 0).toLocaleString("vi-VN");
+    return {
+      eligible: false,
+      reason: `Đơn hàng chưa đạt giá trị tối thiểu ${minOrderLabel}đ`,
+    };
+  }
+  if (promotion.usageLimit != null && (promotion.usedCount || 0) >= promotion.usageLimit) {
+    return { eligible: false, reason: "Khuyến mãi đã hết lượt sử dụng" };
+  }
+  if (promotion.usageLimitPerCustomer != null) {
+    // A per-customer usage cap is meaningless without knowing who the customer is —
+    // exclude rather than silently skip the check for anonymous/walk-in carts.
+    if (!cartContext.customerId) {
+      return { eligible: false, reason: "Cần chọn khách hàng để áp dụng khuyến mãi này" };
     }
-    if (b.discount !== a.discount) return b.discount - a.discount;
-    const aCreated = new Date(a.promotion.createdAt || 0).getTime();
-    const bCreated = new Date(b.promotion.createdAt || 0).getTime();
-    if (aCreated !== bCreated) return aCreated - bCreated;
-    return String(a.promotion._id).localeCompare(String(b.promotion._id));
-  });
+    const usedByCustomer = customerUsageCounts[String(promotion._id)] || 0;
+    if (usedByCustomer >= promotion.usageLimitPerCustomer) {
+      return { eligible: false, reason: "Khách hàng đã hết lượt sử dụng khuyến mãi này" };
+    }
+  }
+  if (getMatchedItems(promotion, cartContext.items).length === 0) {
+    return { eligible: false, reason: "Không áp dụng cho sản phẩm trong giỏ hàng" };
+  }
+  return { eligible: true, reason: null };
 }
 
 /**
- * Priority-driven resolution: the highest-priority promotion always applies first.
- * If it is non-stackable, it wins alone and resolution stops there. If it is
- * stackable, keep layering subsequent stackable promotions (in priority order),
- * skipping any further non-stackable ones encountered along the way.
+ * Builds the full candidate list for a cart — every promotion the caller fetched,
+ * annotated with eligibility + a standalone (non-stacked) preview discount amount.
+ * Used by the "browse promotions to assign" listing endpoint.
  */
-function pickAppliedPromotions(sortedComputed) {
-  const applied = [];
-  for (const entry of sortedComputed) {
-    if (applied.length === 0) {
-      applied.push(entry);
-      if (!entry.promotion.stackable) break;
-    } else if (entry.promotion.stackable) {
-      applied.push(entry);
-    }
-  }
-  return applied;
+function buildCandidateList(promotions, cartContext, now = new Date(), customerUsageCounts = {}) {
+  return promotions.map((promotion) => {
+    const { eligible, reason } = evaluateEligibility(promotion, cartContext, now, customerUsageCounts);
+    const matchedItems = getMatchedItems(promotion, cartContext.items);
+    const previewDiscount = eligible ? rawDiscount(promotion, matchedItems) : 0;
+    return { promotion, eligible, reason, matchedItems, previewDiscount };
+  });
 }
 
 /**
@@ -153,19 +147,57 @@ function allocatePerItemDiscount(appliedEntries) {
   return perItem;
 }
 
+function emptyResult(cartContext) {
+  return {
+    appliedPromotions: [],
+    totalDiscount: 0,
+    itemBreakdown: cartContext.items.map((item) => ({
+      productItemId: item.productItemId,
+      discountAmount: 0,
+    })),
+    grandTotal: round(cartContext.subtotal),
+  };
+}
+
 /**
- * applicable: promotions already filtered by filterApplicablePromotions.
- * Returns { appliedPromotions, totalDiscount, itemBreakdown, grandTotal }.
+ * Resolves an explicit, user-chosen set of promotionIds against the cart.
+ * promotions: candidate promotions the caller fetched (tenant-wide + this branch).
+ * selectedIds: at most 2 promotion ids; if 2, both must be stackable.
+ * Throws a descriptive Error if a selected id is unknown/ineligible, or if the
+ * combination breaks the stacking/count rules — callers should surface this as 400.
  */
-function resolveStackedDiscount(applicable, cartContext) {
-  const computed = applicable.map((promotion) => {
+function resolveSelectedPromotions(promotions, selectedIds, cartContext, now = new Date(), customerUsageCounts = {}) {
+  const uniqueIds = [...new Set((selectedIds || []).map(String))];
+  if (uniqueIds.length === 0) {
+    return emptyResult(cartContext);
+  }
+  if (uniqueIds.length > 2) {
+    throw new Error("Chỉ được chọn tối đa 2 khuyến mãi cộng dồn");
+  }
+
+  const promotionById = new Map(promotions.map((p) => [String(p._id), p]));
+  const resolved = uniqueIds.map((id) => {
+    const promotion = promotionById.get(id);
+    if (!promotion) {
+      throw new Error("Một khuyến mãi đã chọn không còn tồn tại hoặc không áp dụng cho đơn này");
+    }
+    const { eligible, reason } = evaluateEligibility(promotion, cartContext, now, customerUsageCounts);
+    if (!eligible) {
+      throw new Error(`Khuyến mãi "${promotion.promoName}" không đủ điều kiện: ${reason}`);
+    }
+    return promotion;
+  });
+
+  if (resolved.length > 1 && !resolved.every((p) => p.stackable)) {
+    throw new Error("Chỉ có thể chọn thêm khuyến mãi được phép cộng dồn (stackable)");
+  }
+
+  const computed = resolved.map((promotion) => {
     const matchedItems = getMatchedItems(promotion, cartContext.items);
     return { promotion, matchedItems, discount: rawDiscount(promotion, matchedItems) };
   });
 
-  const sorted = sortByPriority(computed);
-  const applied = pickAppliedPromotions(sorted);
-  const perItem = allocatePerItemDiscount(applied);
+  const perItem = allocatePerItemDiscount(computed);
 
   const itemBreakdown = cartContext.items.map((item) => ({
     productItemId: item.productItemId,
@@ -178,7 +210,7 @@ function resolveStackedDiscount(applicable, cartContext) {
   );
 
   return {
-    appliedPromotions: applied.map(({ promotion, discount }) => ({
+    appliedPromotions: computed.map(({ promotion, discount }) => ({
       promotionId: promotion._id,
       promoName: promotion.promoName,
       discountAmount: discount,
@@ -190,7 +222,13 @@ function resolveStackedDiscount(applicable, cartContext) {
 }
 
 module.exports = {
-  filterApplicablePromotions,
-  resolveStackedDiscount,
   ruleMatchesItem,
+  getMatchedItems,
+  isWithinDateRange,
+  matchedSubtotal,
+  rawDiscount,
+  evaluateEligibility,
+  buildCandidateList,
+  allocatePerItemDiscount,
+  resolveSelectedPromotions,
 };

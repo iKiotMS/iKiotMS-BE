@@ -28,7 +28,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         applicableRule: { $ref: "#/components/schemas/ApplicableRule" }
  *         startDate: { type: string, format: date-time }
  *         endDate: { type: string, format: date-time }
- *         priority: { type: number }
  *         stackable: { type: boolean }
  *         usageLimit: { type: number, nullable: true }
  *         usageLimitPerCustomer: { type: number, nullable: true }
@@ -41,6 +40,21 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         productItemId: { type: string }
  *         quantity: { type: number }
  *         unitPrice: { type: number }
+ *     PromotionCandidate:
+ *       type: object
+ *       properties:
+ *         id: { type: string }
+ *         promoName: { type: string }
+ *         description: { type: string }
+ *         discountType: { type: string, enum: [PERCENT, FIXED_AMOUNT] }
+ *         discountValue: { type: number }
+ *         maxDiscountAmount: { type: number, nullable: true }
+ *         minOrderValue: { type: number }
+ *         branchIds: { type: array, items: { type: string } }
+ *         stackable: { type: boolean }
+ *         eligible: { type: boolean }
+ *         reason: { type: string, nullable: true, description: "Why it's ineligible, when eligible=false" }
+ *         previewDiscount: { type: number, description: "Discount if this promotion alone were applied" }
  *
  * /promotions:
  *   post:
@@ -66,7 +80,6 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *               applicableRule: { $ref: "#/components/schemas/ApplicableRule" }
  *               startDate: { type: string, format: date-time }
  *               endDate: { type: string, format: date-time }
- *               priority: { type: number }
  *               stackable: { type: boolean }
  *               usageLimit: { type: number }
  *               usageLimitPerCustomer: { type: number }
@@ -169,10 +182,10 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *     responses:
  *       200:
  *         description: List of promotion usage logs
- * /promotions/calculate:
+ * /promotions/candidates:
  *   post:
  *     tags: [Promotions]
- *     summary: Preview eligible promotions and the stacked discount for a cart (read-only, no side effects)
+ *     summary: List every candidate promotion for a cart, split by branch-specific vs system-wide, each annotated with eligibility and a standalone preview discount — for the "assign discount" picker
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -190,13 +203,41 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *                 items: { $ref: "#/components/schemas/PromotionCalculateItem" }
  *     responses:
  *       200:
- *         description: Discount breakdown
+ *         description: branchPromotions and systemPromotions lists of PromotionCandidate
  *       400:
  *         description: Validation error
+ * /promotions/calculate:
+ *   post:
+ *     tags: [Promotions]
+ *     summary: Preview the discount for an explicit set of chosen promotionIds (read-only, no side effects)
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [items]
+ *             properties:
+ *               branchId: { type: string }
+ *               customerId: { type: string }
+ *               items:
+ *                 type: array
+ *                 items: { $ref: "#/components/schemas/PromotionCalculateItem" }
+ *               promotionIds:
+ *                 type: array
+ *                 items: { type: string }
+ *                 description: "User-chosen promotions to apply. Empty/omitted = no discount. At most 2, and if 2 both must be stackable."
+ *     responses:
+ *       200:
+ *         description: Discount breakdown
+ *       400:
+ *         description: Validation error, or a chosen promotionId is ineligible/not stackable
  * /promotions/apply:
  *   post:
  *     tags: [Promotions]
- *     summary: Apply eligible promotions to an order — commits usage count and writes usage logs
+ *     summary: Apply the explicitly chosen promotions to an order — commits usage count and writes usage logs
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -213,6 +254,10 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *               items:
  *                 type: array
  *                 items: { $ref: "#/components/schemas/PromotionCalculateItem" }
+ *               promotionIds:
+ *                 type: array
+ *                 items: { type: string }
+ *                 description: "Same set the caller previously confirmed via /promotions/calculate."
  *     responses:
  *       200:
  *         description: Discount breakdown applied and logged
@@ -256,6 +301,12 @@ const registerPromotionModule = (app) => {
       path: "/promotions/:id/logs",
       handler: PromotionController.getLogs.bind(PromotionController),
       action: "read",
+    },
+    {
+      method: "post",
+      path: "/promotions/candidates",
+      handler: PromotionController.listCandidates.bind(PromotionController),
+      action: "calculate",
     },
     {
       method: "post",
