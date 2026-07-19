@@ -15,7 +15,6 @@ class CreatePromotionRequestDTO {
     this.applicableRule = data.applicableRule || { type: "all" };
     this.startDate = data.startDate;
     this.endDate = data.endDate;
-    this.priority = data.priority || 0;
     this.stackable = Boolean(data.stackable);
     this.usageLimit = data.usageLimit === undefined ? null : data.usageLimit;
     this.usageLimitPerCustomer =
@@ -74,10 +73,6 @@ class CreatePromotionRequestDTO {
     }
     if (this.startDate && this.endDate && new Date(this.endDate) <= new Date(this.startDate)) {
       errors.push("endDate must be after startDate");
-    }
-
-    if (this.priority !== undefined && (!Number.isInteger(this.priority) || this.priority < 0)) {
-      errors.push("priority must be a non-negative integer");
     }
 
     if (this.usageLimit !== null && (!Number.isInteger(this.usageLimit) || this.usageLimit < 1)) {
