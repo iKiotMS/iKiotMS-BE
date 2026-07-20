@@ -5,8 +5,14 @@ const PayrollService = require("../../src/modules/payroll/service/PayrollService
 const PayrollSettingService = require("../../src/modules/payroll/service/PayrollSettingService");
 
 describe("Payroll period generation", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-08-01T01:00:00.000Z"));
+  });
+
   afterEach(() => {
     jest.restoreAllMocks();
+    jest.useRealTimers();
   });
 
   test("derives a cross-month period and saves draft payslips", async () => {
@@ -82,6 +88,33 @@ describe("Payroll period generation", () => {
     expect(session.endSession).toHaveBeenCalled();
   });
 
+  test("uses the configured monthly range for payroll preview", async () => {
+    jest.spyOn(PayrollSettingService, "getPayrollSetting").mockResolvedValue({
+      data: { periodStartDay: 26 },
+    });
+    const previewResult = { data: { payslips: [], skipped: [] } };
+    const generateSpy = jest
+      .spyOn(PayrollService, "generatePayRoll")
+      .mockResolvedValue(previewResult);
+
+    const result = await PayrollService.generatePayrollMonthPreview({
+      tenantId: new mongoose.Types.ObjectId(),
+      currentUserId: new mongoose.Types.ObjectId(),
+      payrollData: { payrollMonth: "2026-07" },
+    });
+
+    expect(generateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payrollData: {
+          periodStartDate: "2026-06-26",
+          periodEndDate: "2026-07-25",
+          userIds: undefined,
+        },
+      }),
+    );
+    expect(result).toBe(previewResult);
+  });
+
   test("rejects a period overlapping an existing payroll period", async () => {
     const conflictingPayrollPeriodId = new mongoose.Types.ObjectId();
     jest.spyOn(PayrollSettingService, "getPayrollSetting").mockResolvedValue({
@@ -103,5 +136,24 @@ describe("Payroll period generation", () => {
       statusCode: 409,
       conflictingPayrollPeriodId,
     });
+  });
+
+  test("rejects a payroll period that has not ended", async () => {
+    jest.spyOn(PayrollSettingService, "getPayrollSetting").mockResolvedValue({
+      data: { periodStartDay: 1 },
+    });
+    const findOneSpy = jest.spyOn(PayrollPeriod, "findOne");
+
+    await expect(
+      PayrollService.generatePayrollPeriod({
+        tenantId: new mongoose.Types.ObjectId(),
+        currentUserId: new mongoose.Types.ObjectId(),
+        payrollData: { payrollMonth: "2026-08" },
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 422,
+      message: "Chỉ có thể tạo bảng lương sau khi kỳ lương đã kết thúc",
+    });
+    expect(findOneSpy).not.toHaveBeenCalled();
   });
 });
