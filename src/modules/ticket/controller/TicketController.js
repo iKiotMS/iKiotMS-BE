@@ -81,7 +81,10 @@ class TicketController {
           .json({ success: false, message: "Tenant context required" });
       }
 
-      const tickets = await Ticket.find({ tenantId })
+      const tickets = await Ticket.find({
+        tenantId,
+        isDeletedByTenant: { $ne: true },
+      })
         .sort({ updatedAt: -1 })
         .lean();
       res.status(200).json({ success: true, data: tickets });
@@ -139,7 +142,7 @@ class TicketController {
     }
   }
 
-  // Admin lists all tickets
+  // Admin lists all tickets (with pagination)
   async listAllTickets(req, res) {
     try {
       if (req.user.role !== "SUPER_ADMIN") {
@@ -148,8 +151,27 @@ class TicketController {
           .json({ success: false, message: "Forbidden: Super admin only" });
       }
 
-      const tickets = await Ticket.find().sort({ updatedAt: -1 }).lean();
-      res.status(200).json({ success: true, data: tickets });
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.max(1, parseInt(req.query.limit, 10) || 10);
+      const skip = (page - 1) * limit;
+
+      const [tickets, total] = await Promise.all([
+        Ticket.find().sort({ updatedAt: -1 }).skip(skip).limit(limit).lean(),
+        Ticket.countDocuments(),
+      ]);
+
+      const totalPages = Math.ceil(total / limit) || 1;
+
+      res.status(200).json({
+        success: true,
+        data: tickets,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+        },
+      });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
     }
@@ -268,6 +290,40 @@ class TicketController {
       emitToRoom(`tenant:${ticket.tenantId}`, "ticket-update", ticket);
 
       res.status(200).json({ success: true, data: ticket });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  // Delete a ticket
+  async deleteTicket(req, res) {
+    try {
+      const { id } = req.params;
+      const ticket = await Ticket.findById(id);
+      if (!ticket) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Ticket not found" });
+      }
+
+      // Check permission: must be tenant owner of ticket or super admin
+      if (
+        req.user.role !== "SUPER_ADMIN" &&
+        (!req.user.tenantId || ticket.tenantId.toString() !== req.user.tenantId.toString())
+      ) {
+        return res.status(403).json({ success: false, message: "Forbidden" });
+      }
+
+      ticket.isDeletedByTenant = true;
+      ticket.deletedAt = new Date();
+      await ticket.save();
+
+      // Broadcast real-time deletion to tenant (so item disappears from tenant list)
+      // and ticket-update to admin (so admin sees soft deleted status/badge)
+      emitToRoom(`tenant:${ticket.tenantId}`, "ticket-delete", { _id: id });
+      emitToRoom("admin", "ticket-update", ticket);
+
+      res.status(200).json({ success: true, message: "Ticket soft deleted successfully", data: ticket });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
     }
