@@ -20,12 +20,12 @@ const authorizeRoles = (...roles) => {
 };
 
 const registerAIModule = (app) => {
-  // Only TENANT_OWNER is allowed to use AI features
-  app.post("/ai/chat", verifyJwt, authorizeRoles("TENANT_OWNER"), aiController.chat);
-  app.get("/ai/conversations", verifyJwt, authorizeRoles("TENANT_OWNER"), aiController.listConversations);
-  app.get("/ai/conversations/:id", verifyJwt, authorizeRoles("TENANT_OWNER"), aiController.getConversationDetail);
-  app.delete("/ai/conversations/:id", verifyJwt, authorizeRoles("TENANT_OWNER"), aiController.deleteConversation);
-  app.put("/ai/conversations/:id", verifyJwt, authorizeRoles("TENANT_OWNER"), aiController.renameConversation);
+  // TENANT_OWNER and BRANCH_MANAGER are allowed to use AI features
+  app.post("/ai/chat", verifyJwt, authorizeRoles("TENANT_OWNER", "BRANCH_MANAGER"), aiController.chat);
+  app.get("/ai/conversations", verifyJwt, authorizeRoles("TENANT_OWNER", "BRANCH_MANAGER"), aiController.listConversations);
+  app.get("/ai/conversations/:id", verifyJwt, authorizeRoles("TENANT_OWNER", "BRANCH_MANAGER"), aiController.getConversationDetail);
+  app.delete("/ai/conversations/:id", verifyJwt, authorizeRoles("TENANT_OWNER", "BRANCH_MANAGER"), aiController.deleteConversation);
+  app.put("/ai/conversations/:id", verifyJwt, authorizeRoles("TENANT_OWNER", "BRANCH_MANAGER"), aiController.renameConversation);
 };
 
 module.exports = { registerAIModule };

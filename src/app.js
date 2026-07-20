@@ -22,7 +22,11 @@ const createApp = () => {
 
   app.use(
     cors({
-      origin: ["http://localhost:3000", process.env.FRONTEND_URL],
+      origin: [
+        "http://localhost:52698",
+        "http://localhost:3000",
+        process.env.FRONTEND_URL,
+      ],
       credentials: true,
     }),
   );
@@ -34,7 +38,7 @@ const createApp = () => {
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
-  
+
   const { auditLogger } = require("./middlewares/auditMiddleware");
   app.use(auditLogger);
 

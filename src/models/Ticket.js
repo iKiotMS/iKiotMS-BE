@@ -66,6 +66,14 @@ const ticketSchema = new mongoose.Schema(
       default: "OPEN",
     },
     messages: [ticketMessageSchema],
+    isDeletedByTenant: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );
