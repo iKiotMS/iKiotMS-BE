@@ -91,6 +91,39 @@ class PayrollService {
     return date;
   }
 
+  buildMonthlyPeriodRange(payrollMonth, periodStartDay = 1) {
+    const [year, month] = payrollMonth.split("-").map(Number);
+    const startDay = periodStartDay || 1;
+    const periodStart =
+      startDay === 1
+        ? new Date(Date.UTC(year, month - 1, 1))
+        : new Date(Date.UTC(year, month - 2, startDay));
+    const nextPeriodStart =
+      startDay === 1
+        ? new Date(Date.UTC(year, month, 1))
+        : new Date(Date.UTC(year, month - 1, startDay));
+
+    return {
+      periodStart,
+      periodEnd: new Date(nextPeriodStart.getTime() - 1),
+    };
+  }
+
+  ensurePeriodHasEnded(periodEnd, now = new Date()) {
+    const vietnamToday = new Date(now.getTime() + 7 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    const periodEndDate = periodEnd.toISOString().slice(0, 10);
+
+    if (periodEndDate >= vietnamToday) {
+      const error = new Error(
+        "Chỉ có thể tạo bảng lương sau khi kỳ lương đã kết thúc",
+      );
+      error.statusCode = 422;
+      throw error;
+    }
+  }
+
   getSchedulePayableMinutes(schedule, attendances) {
     // Chỉ tính phần thời gian attendance nằm bên trong khung giờ của ca.
     // Ví dụ check-in 07:30 cho ca 08:00-17:00 thì thời gian trước 08:00 bị bỏ.
@@ -756,6 +789,36 @@ class PayrollService {
     };
   }
 
+  async generatePayrollMonthPreview({ tenantId, currentUserId, payrollData }) {
+    const inputData = new GeneratePayrollDTO(payrollData);
+    const validation = inputData.validate();
+
+    if (!validation.isValid) {
+      const error = new Error("Dữ liệu xem trước kỳ lương không hợp lệ");
+      error.statusCode = 400;
+      error.errors = validation.errors;
+      throw error;
+    }
+
+    const payrollSettingResult =
+      await PayrollSettingService.getPayrollSetting(tenantId);
+    const { periodStart, periodEnd } = this.buildMonthlyPeriodRange(
+      inputData.payrollMonth,
+      payrollSettingResult.data.periodStartDay,
+    );
+    this.ensurePeriodHasEnded(periodEnd);
+
+    return this.generatePayRoll({
+      tenantId,
+      currentUserId,
+      payrollData: {
+        periodStartDate: periodStart.toISOString().slice(0, 10),
+        periodEndDate: periodEnd.toISOString().slice(0, 10),
+        userIds: inputData.userIds,
+      },
+    });
+  }
+
   async generatePayrollPeriod({ tenantId, currentUserId, payrollData }) {
     const inputData = new GeneratePayrollDTO(payrollData);
     const validation = inputData.validate();
@@ -771,19 +834,13 @@ class PayrollService {
       await PayrollSettingService.getPayrollSetting(tenantId);
     const payrollSetting = payrollSettingResult.data;
     const [year, month] = inputData.payrollMonth.split("-").map(Number);
-    const periodStartDay = payrollSetting.periodStartDay || 1;
-
     // payrollMonth là tháng chứa ngày kết thúc kỳ lương.
     // Ví dụ payrollMonth 2026-07, start day 26 => 26/06 đến hết 25/07.
-    const periodStart =
-      periodStartDay === 1
-        ? new Date(Date.UTC(year, month - 1, 1))
-        : new Date(Date.UTC(year, month - 2, periodStartDay));
-    const nextPeriodStart =
-      periodStartDay === 1
-        ? new Date(Date.UTC(year, month, 1))
-        : new Date(Date.UTC(year, month - 1, periodStartDay));
-    const periodEnd = new Date(nextPeriodStart.getTime() - 1);
+    const { periodStart, periodEnd } = this.buildMonthlyPeriodRange(
+      inputData.payrollMonth,
+      payrollSetting.periodStartDay,
+    );
+    this.ensurePeriodHasEnded(periodEnd);
 
     const overlappingPeriod = await PayrollPeriod.findOne({
       tenantId,

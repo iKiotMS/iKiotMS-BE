@@ -3,7 +3,7 @@ const PayrollService = require("../service/PayrollService");
 class PayrollController {
   async generatePreview(req, res) {
     try {
-      const result = await PayrollService.generatePayRoll({
+      const result = await PayrollService.generatePayrollMonthPreview({
         tenantId: req.user.tenantId,
         currentUserId: req.user.userId,
         payrollData: req.body,

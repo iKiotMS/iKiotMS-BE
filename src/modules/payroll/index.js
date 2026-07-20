@@ -230,7 +230,7 @@ const PayrollController = require("./controller/PayrollController");
  *   post:
  *     tags: [Payroll]
  *     summary: Generate a payroll preview
- *     description: Calculates payroll without saving payroll periods or payslips.
+ *     description: Calculates a completed monthly payroll period without saving it. Period dates are derived from PayrollSetting.periodStartDay; arbitrary date ranges are not accepted.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -239,16 +239,13 @@ const PayrollController = require("./controller/PayrollController");
  *         application/json:
  *           schema:
  *             type: object
- *             required: [periodStartDate, periodEndDate]
+ *             required: [payrollMonth]
  *             properties:
- *               periodStartDate:
+ *               payrollMonth:
  *                 type: string
- *                 format: date
- *                 example: 2026-07-01
- *               periodEndDate:
- *                 type: string
- *                 format: date
- *                 example: 2026-07-31
+ *                 pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+ *                 example: 2026-07
+ *                 description: Month containing the configured payroll period end date.
  *               userIds:
  *                 type: array
  *                 description: Omit or send an empty array to preview all eligible employees.
@@ -362,13 +359,15 @@ const PayrollController = require("./controller/PayrollController");
  *                         totalGrossSalary: { type: number }
  *                         totalNetSalary: { type: number }
  *       400:
- *         description: Invalid date range or user IDs
+ *         description: Invalid payroll month or user IDs
  *       401:
  *         description: Unauthorized
  *       403:
  *         description: Forbidden
  *       404:
  *         description: Payroll settings not found
+ *       422:
+ *         description: The selected payroll period has not ended yet
  *       500:
  *         description: Unexpected server error
  *
@@ -376,7 +375,7 @@ const PayrollController = require("./controller/PayrollController");
  *   post:
  *     tags: [Payroll]
  *     summary: Generate and save a draft payroll period
- *     description: payrollMonth is the month containing the period end date. Dates are derived from PayrollSetting.periodStartDay.
+ *     description: payrollMonth is the month containing the period end date. Dates are derived from PayrollSetting.periodStartDay, and the period must already have ended.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -410,7 +409,7 @@ const PayrollController = require("./controller/PayrollController");
  *       409:
  *         description: Payroll period overlaps an existing period
  *       422:
- *         description: No valid payslips can be generated
+ *         description: Payroll period has not ended, or no valid payslips can be generated
  *       500:
  *         description: Unexpected server error
  *   get:

@@ -2,7 +2,7 @@ const request = require("supertest");
 const jwt = require("jsonwebtoken");
 
 jest.mock("../../src/modules/payroll/service/PayrollService", () => ({
-  generatePayRoll: jest.fn(),
+  generatePayrollMonthPreview: jest.fn(),
   generatePayrollPeriod: jest.fn(),
   updateDraftPayslip: jest.fn(),
   changePayrollPeriodStatus: jest.fn(),
@@ -48,7 +48,7 @@ describe("Payroll preview API", () => {
   });
 
   test("POST /payroll/preview returns the calculated preview", async () => {
-    PayrollService.generatePayRoll.mockResolvedValue({
+    PayrollService.generatePayrollMonthPreview.mockResolvedValue({
       message: "Tính bảng lương nháp thành công",
       data: {
         periodStart: "2026-07-01T00:00:00.000Z",
@@ -75,11 +75,7 @@ describe("Payroll preview API", () => {
       },
     });
 
-    const body = {
-      periodStartDate: "2026-07-01",
-      periodEndDate: "2026-07-31",
-      userIds: [userId],
-    };
+    const body = { payrollMonth: "2026-07", userIds: [userId] };
     const response = await request(app)
       .post("/payroll/preview")
       .set("Authorization", `Bearer ${token}`)
@@ -96,7 +92,7 @@ describe("Payroll preview API", () => {
         },
       },
     });
-    expect(PayrollService.generatePayRoll).toHaveBeenCalledWith({
+    expect(PayrollService.generatePayrollMonthPreview).toHaveBeenCalledWith({
       tenantId,
       currentUserId: userId,
       payrollData: body,
@@ -104,21 +100,21 @@ describe("Payroll preview API", () => {
   });
 
   test("POST /payroll/preview returns service validation errors", async () => {
-    const error = new Error("Dữ liệu tạo bảng lương không hợp lệ");
+    const error = new Error("Dữ liệu xem trước kỳ lương không hợp lệ");
     error.statusCode = 400;
-    error.errors = { periodEndDate: "periodEndDate không hợp lệ" };
-    PayrollService.generatePayRoll.mockRejectedValue(error);
+    error.errors = { payrollMonth: "Tháng lương phải có định dạng YYYY-MM" };
+    PayrollService.generatePayrollMonthPreview.mockRejectedValue(error);
 
     const response = await request(app)
       .post("/payroll/preview")
       .set("Authorization", `Bearer ${token}`)
-      .send({ periodStartDate: "2026-07-01", periodEndDate: "invalid" });
+      .send({ payrollMonth: "invalid" });
 
     expect(response.status).toBe(400);
     expect(response.body).toEqual({
       success: false,
-      message: "Dữ liệu tạo bảng lương không hợp lệ",
-      errors: { periodEndDate: "periodEndDate không hợp lệ" },
+      message: "Dữ liệu xem trước kỳ lương không hợp lệ",
+      errors: { payrollMonth: "Tháng lương phải có định dạng YYYY-MM" },
     });
   });
 
