@@ -922,6 +922,18 @@ class PayrollService {
       throw error;
     }
 
+    // Preview vẫn cho phép bỏ qua để quản lý nhìn thấy chính xác nhân viên nào
+    // đang thiếu cấu hình. Khi lưu DRAFT phải đủ toàn bộ nhân viên hợp lệ; nếu
+    // không, kỳ lương sẽ bị thiếu người và hiện chưa có flow bổ sung an toàn.
+    if (preview.data.skipped.length > 0) {
+      const error = new Error(
+        "Chưa thể tạo kỳ lương vì còn nhân viên thiếu cấu hình",
+      );
+      error.statusCode = 422;
+      error.skipped = preview.data.skipped;
+      throw error;
+    }
+
     const session = await mongoose.startSession();
     let payrollPeriod;
     let payslips;
@@ -1293,6 +1305,7 @@ class PayrollService {
     }
     const transitions = {
       SUBMIT: { from: "DRAFT", to: "REVIEW" },
+      CANCEL: { from: "DRAFT", to: "CANCELLED" },
       RETURN_TO_DRAFT: { from: "REVIEW", to: "DRAFT" },
       APPROVE: { from: "REVIEW", to: "APPROVED" },
       MARK_PAID: { from: "APPROVED", to: "PAID" },
@@ -1340,6 +1353,10 @@ class PayrollService {
     if (action === "SUBMIT") {
       payrollPeriod.submittedBy = currentUserId;
       payrollPeriod.submittedAt = now;
+    } else if (action === "CANCEL") {
+      payrollPeriod.cancelledBy = currentUserId;
+      payrollPeriod.cancelledAt = now;
+      payrollPeriod.cancelReason = dto.reason.trim();
     } else if (action === "RETURN_TO_DRAFT") {
       payrollPeriod.returnedBy = currentUserId;
       payrollPeriod.returnedAt = now;
@@ -1444,7 +1461,8 @@ class PayrollService {
     // REVIEW là cửa sổ để nhân viên kiểm tra phiếu tạm tính và phản hồi trước
     // khi APPROVED chốt số liệu. Mỗi lần re-submit từ DRAFT đều gửi lại thông báo
     // để nhân viên biết phiên bản đã chỉnh sửa có thể được kiểm tra lại.
-    // RETURN_TO_DRAFT không gửi noti và bộ lọc my-payslips tự ẩn phiếu DRAFT.
+    // RETURN_TO_DRAFT và CANCEL không gửi noti. DRAFT/CANCELLED cũng không nằm
+    // trong bộ lọc my-payslips nên nhân viên không còn nhìn thấy phiếu tạm.
     //
     // Bọc try/catch: notify() tự nuốt lỗi của nó, nhưng truy vấn Payslip.find
     // bên dưới thì không. Kỳ lương đã được chốt và commit ở trên rồi — không thể

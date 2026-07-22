@@ -41,6 +41,12 @@ const payrollPeriodSchema = new mongoose.Schema(
     },
     returnedAt: Date,
     returnReason: { type: String, trim: true },
+    cancelledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    cancelledAt: Date,
+    cancelReason: { type: String, trim: true },
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

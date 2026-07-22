@@ -165,6 +165,59 @@ describe("Payroll draft editing and status workflow", () => {
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
+  test("cancels only a draft period and keeps an audit trail", async () => {
+    const tenantId = new mongoose.Types.ObjectId();
+    const periodId = new mongoose.Types.ObjectId();
+    const currentUserId = new mongoose.Types.ObjectId();
+    const payrollPeriod = {
+      status: "DRAFT",
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    const session = {
+      withTransaction: jest.fn(async (callback) => callback()),
+      endSession: jest.fn(),
+    };
+    jest.spyOn(PayrollPeriod, "findOne").mockResolvedValue(payrollPeriod);
+    jest.spyOn(Payslip, "updateMany").mockResolvedValue({ modifiedCount: 2 });
+    jest.spyOn(mongoose, "startSession").mockResolvedValue(session);
+
+    const result = await PayrollService.changePayrollPeriodStatus({
+      tenantId,
+      currentUserId,
+      periodId,
+      action: "CANCEL",
+      actionData: { reason: "Sai dữ liệu chấm công" },
+    });
+
+    expect(result).toBe(payrollPeriod);
+    expect(payrollPeriod).toMatchObject({
+      status: "CANCELLED",
+      cancelledBy: currentUserId,
+      cancelledAt: expect.any(Date),
+      cancelReason: "Sai dữ liệu chấm công",
+    });
+    expect(Payslip.updateMany).toHaveBeenCalledWith(
+      { tenantId, payrollPeriodId: periodId },
+      { $set: { status: "CANCELLED" } },
+      { session },
+    );
+  });
+
+  test("requires a reason when cancelling a draft period", async () => {
+    await expect(
+      PayrollService.changePayrollPeriodStatus({
+        tenantId: new mongoose.Types.ObjectId(),
+        currentUserId: new mongoose.Types.ObjectId(),
+        periodId: new mongoose.Types.ObjectId(),
+        action: "CANCEL",
+        actionData: {},
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      errors: { reason: "Lý do hủy kỳ lương là bắt buộc" },
+    });
+  });
+
   test("lists only the authenticated employee's review or finalized payslips", async () => {
     const tenantId = new mongoose.Types.ObjectId();
     const userId = new mongoose.Types.ObjectId();
