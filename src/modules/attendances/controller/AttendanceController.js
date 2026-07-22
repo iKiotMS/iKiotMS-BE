@@ -5,6 +5,8 @@ const {
   ManageAttendanceService,
 } = require("../service/ManageAttendanceService");
 const { hasPermission } = require("../../../utils/permissionChecker");
+const ManualCheckoutDTO = require("../dto/ManualCheckoutDTO");
+const CreateManualAttendanceDTO = require("../dto/CreateManualAttendanceDTO");
 
 const takeAttendanceService = new TakeAttendanceService();
 const manageAttendanceService = new ManageAttendanceService();
@@ -182,6 +184,71 @@ class AttendanceController {
       );
 
       return res.status(200).json(result);
+    } catch (error) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+        errors: error.errors,
+      });
+    }
+  }
+
+  async manualCheckout(req, res) {
+    try {
+      const dto = new ManualCheckoutDTO(req.body?.data || req.body || {});
+      const validation = dto.validate();
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Dữ liệu không hợp lệ",
+          errors: validation.errors,
+        });
+      }
+
+      const attendance = await manageAttendanceService.manualCheckout(
+        req.user.tenantId,
+        req.params.attendanceId,
+        dto,
+        req.user,
+      );
+      return res.status(200).json({
+        success: true,
+        message: "Đã bổ sung giờ check-out thủ công",
+        data: attendance,
+      });
+    } catch (error) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+        errors: error.errors,
+      });
+    }
+  }
+
+  async createManualAttendance(req, res) {
+    try {
+      const dto = new CreateManualAttendanceDTO(req.body?.data || req.body || {});
+      const validation = dto.validate();
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: "Dữ liệu không hợp lệ",
+          errors: validation.errors,
+        });
+      }
+      const attendance = await manageAttendanceService.createManualAttendance(
+        req.user.tenantId,
+        dto,
+        req.user,
+      );
+      return res.status(201).json({
+        success: true,
+        message:
+          dto.status === "ABSENT"
+            ? "Đã đánh dấu nhân viên vắng mặt"
+            : "Đã tạo chấm công thủ công",
+        data: attendance,
+      });
     } catch (error) {
       return res.status(error.statusCode || 400).json({
         success: false,

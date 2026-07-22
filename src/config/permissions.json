@@ -35,7 +35,7 @@
     "paysheets": ["create", "read", "update", "delete"],
     "schedules": ["create", "read", "read_all", "update", "delete", "readBR", "readWH"],
     "stock_movement": ["create", "read", "update", "approve", "receive", "cancel"],
-    "attendances": ["read"],
+    "attendances": ["read", "update"],
     "leaveRequests": ["read", "update", "delete", "read_all","approve","reject", "create_emergency","readBR","readWH"],
     "payrollSettings": ["create", "read", "update"],
     "payroll": ["read", "create", "update", "delete"],

@@ -1,5 +1,5 @@
 const BaseService = require("../../../common/services/baseService");
-const { Attendance, User } = require("../../../models");
+const { Attendance, User, WorkingSchedule } = require("../../../models");
 
 class ManageAttendanceService extends BaseService {
   sameId(left, right) {
@@ -39,6 +39,23 @@ class ManageAttendanceService extends BaseService {
     const error = new Error("You do not have permission to read this attendance");
     error.statusCode = 403;
     throw error;
+  }
+
+  assertCanManuallyCheckout(user, attendance) {
+    const managerRoles = ["TENANT_OWNER", "BRANCH_MANAGER"];
+    if (!managerRoles.includes(user.role)) {
+      const error = new Error("Bạn không có quyền sửa chấm công thủ công");
+      error.statusCode = 403;
+      throw error;
+    }
+
+    if (this.sameId(attendance.userId?._id || attendance.userId, user.userId)) {
+      const error = new Error("Quản lý không thể tự sửa chấm công của chính mình");
+      error.statusCode = 403;
+      throw error;
+    }
+
+    this.assertCanReadAttendance(user, attendance);
   }
 
   parseBoolean(value) {
@@ -227,6 +244,9 @@ class ManageAttendanceService extends BaseService {
       "checkOutLocation",
       "createdAt",
       "updatedAt",
+      "manuallyEditedBy",
+      "manuallyEditedAt",
+      "manualEditReason",
     ];
 
     const detailPopulateFields = [
@@ -288,6 +308,140 @@ class ManageAttendanceService extends BaseService {
     this.assertCanReadAttendance(user, attendance);
 
     return attendance;
+  }
+
+  async manualCheckout(tenantId, attendanceId, dto, manager) {
+    await this.validateTenantId(tenantId);
+    const attendance = await Attendance.findOne({ tenantId, _id: attendanceId })
+      .populate({
+        path: "userId",
+        select: "_id branchId warehouseId",
+      });
+
+    if (!attendance) {
+      const error = new Error("Attendance not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    this.assertCanManuallyCheckout(manager, attendance);
+
+    if (attendance.status !== "CHECKED_IN" || !attendance.actualCheckinAt) {
+      const error = new Error("Chỉ có thể bổ sung checkout cho bản ghi đang CHECKED_IN");
+      error.statusCode = 409;
+      throw error;
+    }
+    if (dto.actualCheckoutAt <= attendance.actualCheckinAt) {
+      const error = new Error("Giờ check-out phải sau giờ check-in");
+      error.statusCode = 422;
+      throw error;
+    }
+    if (dto.actualCheckoutAt > new Date()) {
+      const error = new Error("Giờ check-out không thể ở tương lai");
+      error.statusCode = 422;
+      throw error;
+    }
+
+    attendance.actualCheckoutAt = dto.actualCheckoutAt;
+    attendance.workedMinutes = Math.floor(
+      (dto.actualCheckoutAt.getTime() - attendance.actualCheckinAt.getTime()) /
+        60000,
+    );
+    attendance.status = "CHECKED_OUT";
+    attendance.manuallyEditedBy = manager.userId;
+    attendance.manuallyEditedAt = new Date();
+    attendance.manualEditReason = dto.reason;
+    await attendance.save();
+
+    return attendance;
+  }
+
+  async createManualAttendance(tenantId, dto, manager) {
+    await this.validateTenantId(tenantId);
+    const [schedule, targetUser] = await Promise.all([
+      WorkingSchedule.findOne({
+        _id: dto.scheduleId,
+        tenantId,
+        userId: dto.userId,
+        status: { $in: ["SCHEDULED", "COMPLETED"] },
+      }).lean(),
+      User.findOne({ _id: dto.userId, tenantId })
+        .select("_id branchId warehouseId")
+        .lean(),
+    ]);
+
+    if (!schedule || !targetUser) {
+      const error = new Error("Không tìm thấy ca làm việc của nhân viên");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    this.assertCanManuallyCheckout(manager, { userId: targetUser });
+    const now = new Date();
+
+    if (dto.status === "ABSENT") {
+      if (!schedule.endAt || new Date(schedule.endAt) > now) {
+        const error = new Error("Chỉ được đánh dấu vắng sau khi ca kết thúc");
+        error.statusCode = 422;
+        throw error;
+      }
+    } else {
+      const earliestCheckin = new Date(schedule.startAt).getTime() - 30 * 60000;
+      if (dto.actualCheckinAt.getTime() < earliestCheckin) {
+        const error = new Error("Giờ check-in sớm hơn thời gian cho phép của ca");
+        error.statusCode = 422;
+        throw error;
+      }
+      if (dto.actualCheckinAt > now) {
+        const error = new Error("Giờ check-in không thể ở tương lai");
+        error.statusCode = 422;
+        throw error;
+      }
+      if (
+        dto.actualCheckoutAt &&
+        (dto.actualCheckoutAt <= dto.actualCheckinAt ||
+          dto.actualCheckoutAt > now)
+      ) {
+        const error = new Error(
+          "Giờ check-out phải sau check-in và không được ở tương lai",
+        );
+        error.statusCode = 422;
+        throw error;
+      }
+    }
+
+    try {
+      return await Attendance.create({
+        tenantId,
+        userId: dto.userId,
+        scheduleId: schedule._id,
+        workDate: schedule.workDate,
+        actualCheckinAt: dto.status === "ABSENT" ? undefined : dto.actualCheckinAt,
+        actualCheckoutAt:
+          dto.status === "CHECKED_OUT" ? dto.actualCheckoutAt : undefined,
+        workedMinutes:
+          dto.status === "CHECKED_OUT"
+            ? Math.floor(
+                (dto.actualCheckoutAt.getTime() -
+                  dto.actualCheckinAt.getTime()) /
+                  60000,
+              )
+            : dto.status === "ABSENT"
+              ? 0
+              : undefined,
+        status: dto.status,
+        manuallyCreatedBy: manager.userId,
+        manuallyCreatedAt: now,
+        manualCreationReason: dto.reason,
+      });
+    } catch (error) {
+      if (error?.code === 11000) {
+        const conflict = new Error("Nhân viên đã có chấm công cho ca này");
+        conflict.statusCode = 409;
+        throw conflict;
+      }
+      throw error;
+    }
   }
 }
 

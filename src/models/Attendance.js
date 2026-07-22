@@ -66,6 +66,26 @@ const attendanceSchema = new mongoose.Schema(
         default: "VERIFIED",
       },
     },
+    manuallyEditedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    manuallyEditedAt: Date,
+    manualEditReason: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+    },
+    manuallyCreatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    manuallyCreatedAt: Date,
+    manualCreationReason: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+    },
   },
 
   { timestamps: true },

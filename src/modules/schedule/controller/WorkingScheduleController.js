@@ -261,6 +261,22 @@ class WorkingScheduleController {
       });
     }
   }
+
+  async removeUserFromWorkingSchedule(req, res) {
+    try {
+      const result = await WorkingScheduleService.removeUserFromWorkingSchedule(
+        req.user.tenantId,
+        req.params.scheduleId,
+        req.params.userId,
+      );
+      return res.status(200).json(result);
+    } catch (error) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
 }
 
 module.exports = new WorkingScheduleController();
