@@ -421,6 +421,30 @@ const registerAuthModule = (app) => {
       handler: AuthController.updateProfile.bind(AuthController),
       protected: true,
     },
+    {
+      method: "post",
+      path: "/auth/change-password",
+      handler: AuthController.changePassword.bind(AuthController),
+      protected: true,
+    },
+    {
+      method: "post",
+      path: "/auth/send-forgot-password-otp",
+      handler: AuthController.sendForgotPasswordOtp.bind(AuthController),
+      protected: false,
+    },
+    {
+      method: "post",
+      path: "/auth/verify-forgot-password-otp",
+      handler: AuthController.verifyForgotPasswordOtp.bind(AuthController),
+      protected: false,
+    },
+    {
+      method: "post",
+      path: "/auth/reset-password",
+      handler: AuthController.resetPassword.bind(AuthController),
+      protected: false,
+    },
   ];
 
   authRoutes.forEach((route) => {
