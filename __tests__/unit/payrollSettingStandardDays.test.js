@@ -8,7 +8,6 @@ describe("Standard working day configuration", () => {
       "64a000000000000000000001",
       {
         cycle: "MONTHLY",
-        periodStartDay: 1,
         approveAfterPeriodEndDays: 1,
         payAfterPeriodEndDays: 5,
       },
@@ -16,6 +15,23 @@ describe("Standard working day configuration", () => {
 
     expect(dto.validate().isValid).toBe(true);
     expect(dto.toObject().standardWorkingDays).toBe(26);
+  });
+
+  test("rejects custom payroll period start day", () => {
+    const dto = new CreatePayrollSettingDTO(
+      "64a000000000000000000001",
+      {
+        cycle: "MONTHLY",
+        periodStartDay: 26,
+        approveAfterPeriodEndDays: 1,
+        payAfterPeriodEndDays: 5,
+      },
+    );
+
+    expect(dto.validate().isValid).toBe(false);
+    expect(dto.validate().error).toMatchObject({
+      periodStartDay: "Không hỗ trợ ngày bắt đầu kỳ lương tùy chỉnh",
+    });
   });
 
   test("allows updating only tenant standard working days", () => {

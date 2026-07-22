@@ -20,6 +20,10 @@ const {
   getHolidayByDate,
 } = require("./PayrollDayRateCalculator");
 const PayrollSettingService = require("./PayrollSettingService");
+const {
+  VIETNAM_UTC_OFFSET_IN_MILLISECONDS,
+  ONE_DAY_IN_MILLISECONDS,
+} = require("../../../constants/PayrollConstants");
 
 function mergeTimeRanges(ranges) {
   const sortedRanges = ranges
@@ -82,38 +86,72 @@ class PayrollService {
   };
 
   buildPeriodDate(dateValue, endOfDay = false) {
-    const date = new Date(dateValue);
-    if (endOfDay) {
-      date.setUTCHours(23, 59, 59, 999);
-    } else {
-      date.setUTCHours(0, 0, 0, 0);
+    const dateParts = String(dateValue || "").split("-");
+    if (dateParts.length !== 3) {
+      const error = new Error("Ngày phải có định dạng YYYY-MM-DD");
+      error.statusCode = 400;
+      throw error;
     }
-    return date;
+
+    const [year, month, day] = dateParts.map(Number);
+    if (![year, month, day].every(Number.isInteger)) {
+      const error = new Error("Ngày phải có định dạng YYYY-MM-DD");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    /*
+     * Ví dụ dateValue = "2026-06-26":
+     * 1. Tạo 00:00 ngày 26/06 theo UTC.
+     * 2. Trừ 7 giờ để được 00:00 ngày 26/06 theo giờ Việt Nam.
+     * 3. MongoDB lưu mốc đó là 17:00 ngày 25/06 UTC.
+     */
+    const startOfDateInUtc = Date.UTC(year, month - 1, day);
+    const startOfVietnamDateInUtc =
+      startOfDateInUtc - VIETNAM_UTC_OFFSET_IN_MILLISECONDS;
+
+    return new Date(
+      endOfDay
+        ? startOfVietnamDateInUtc + ONE_DAY_IN_MILLISECONDS - 1
+        : startOfVietnamDateInUtc,
+    );
   }
 
   buildMonthlyPeriodRange(payrollMonth, periodStartDay = 1) {
     const [year, month] = payrollMonth.split("-").map(Number);
-    const startDay = periodStartDay || 1;
-    const periodStart =
-      startDay === 1
-        ? new Date(Date.UTC(year, month - 1, 1))
-        : new Date(Date.UTC(year, month - 2, startDay));
-    const nextPeriodStart =
-      startDay === 1
-        ? new Date(Date.UTC(year, month, 1))
-        : new Date(Date.UTC(year, month - 1, startDay));
+    // Kỳ lương luôn bám theo tháng dương lịch: từ ngày 1 đến ngày cuối tháng.
+    // Hai Date dưới đây chỉ dùng để làm phép tính LỊCH, chưa phải mốc lưu DB.
+    const calendarPeriodStart = new Date(Date.UTC(year, month - 1, 1));
+    const calendarNextPeriodStart = new Date(Date.UTC(year, month, 1));
+    const calendarPeriodEnd = new Date(
+      calendarNextPeriodStart.getTime() - ONE_DAY_IN_MILLISECONDS,
+    );
+
+    /*
+     * Giữ riêng date key nghiệp vụ và instant UTC:
+     * - periodStartDate/periodEndDate: dùng cho preview, hiển thị và tính theo ngày.
+     * - periodStart/periodEnd: mốc UTC dùng để query và lưu MongoDB.
+     *
+     * Tuyệt đối không lấy date key bằng `periodStart.toISOString().slice(0, 10)`.
+     * Đầu ngày Việt Nam nằm ở 17:00 ngày hôm trước theo UTC nên cắt ISO sẽ sai ngày.
+     */
+    const periodStartDate = calendarPeriodStart.toISOString().slice(0, 10);
+    const periodEndDate = calendarPeriodEnd.toISOString().slice(0, 10);
 
     return {
-      periodStart,
-      periodEnd: new Date(nextPeriodStart.getTime() - 1),
+      periodStartDate,
+      periodEndDate,
+      periodStart: this.buildPeriodDate(periodStartDate),
+      periodEnd: this.buildPeriodDate(periodEndDate, true),
     };
   }
 
-  ensurePeriodHasEnded(periodEnd, now = new Date()) {
-    const vietnamToday = new Date(now.getTime() + 7 * 60 * 60 * 1000)
+  ensurePeriodHasEnded(periodEndDate, now = new Date()) {
+    const vietnamToday = new Date(
+      now.getTime() + VIETNAM_UTC_OFFSET_IN_MILLISECONDS,
+    )
       .toISOString()
       .slice(0, 10);
-    const periodEndDate = periodEnd.toISOString().slice(0, 10);
 
     if (periodEndDate >= vietnamToday) {
       const error = new Error(
@@ -167,8 +205,17 @@ class PayrollService {
   allocateLeaveDays({ leaveRequests, schedules, periodStart, periodEnd }) {
     leaveRequests = leaveRequests || [];
     schedules = schedules || [];
-    const periodStartKey = periodStart.toISOString().slice(0, 10);
-    const periodEndKey = periodEnd.toISOString().slice(0, 10);
+    // periodStart/periodEnd là instant UTC; cộng lại offset để lấy ngày Việt Nam.
+    const periodStartKey = new Date(
+      periodStart.getTime() + VIETNAM_UTC_OFFSET_IN_MILLISECONDS,
+    )
+      .toISOString()
+      .slice(0, 10);
+    const periodEndKey = new Date(
+      periodEnd.getTime() + VIETNAM_UTC_OFFSET_IN_MILLISECONDS,
+    )
+      .toISOString()
+      .slice(0, 10);
 
     // Lịch được tải cho toàn bộ khoảng của các đơn giao với kỳ lương. Nhờ vậy,
     // đơn vắt qua hai kỳ vẫn tiêu paidLeaveDays từ đầu đơn đúng một lần, thay vì
@@ -802,18 +849,18 @@ class PayrollService {
 
     const payrollSettingResult =
       await PayrollSettingService.getPayrollSetting(tenantId);
-    const { periodStart, periodEnd } = this.buildMonthlyPeriodRange(
+    const { periodStartDate, periodEndDate } = this.buildMonthlyPeriodRange(
       inputData.payrollMonth,
       payrollSettingResult.data.periodStartDay,
     );
-    this.ensurePeriodHasEnded(periodEnd);
+    this.ensurePeriodHasEnded(periodEndDate);
 
     return this.generatePayRoll({
       tenantId,
       currentUserId,
       payrollData: {
-        periodStartDate: periodStart.toISOString().slice(0, 10),
-        periodEndDate: periodEnd.toISOString().slice(0, 10),
+        periodStartDate,
+        periodEndDate,
         userIds: inputData.userIds,
       },
     });
@@ -836,11 +883,12 @@ class PayrollService {
     const [year, month] = inputData.payrollMonth.split("-").map(Number);
     // payrollMonth là tháng chứa ngày kết thúc kỳ lương.
     // Ví dụ payrollMonth 2026-07, start day 26 => 26/06 đến hết 25/07.
-    const { periodStart, periodEnd } = this.buildMonthlyPeriodRange(
-      inputData.payrollMonth,
-      payrollSetting.periodStartDay,
-    );
-    this.ensurePeriodHasEnded(periodEnd);
+    const { periodStartDate, periodEndDate, periodStart, periodEnd } =
+      this.buildMonthlyPeriodRange(
+        inputData.payrollMonth,
+        payrollSetting.periodStartDay,
+      );
+    this.ensurePeriodHasEnded(periodEndDate);
 
     const overlappingPeriod = await PayrollPeriod.findOne({
       tenantId,
@@ -861,8 +909,8 @@ class PayrollService {
       tenantId,
       currentUserId,
       payrollData: {
-        periodStartDate: periodStart.toISOString().slice(0, 10),
-        periodEndDate: periodEnd.toISOString().slice(0, 10),
+        periodStartDate,
+        periodEndDate,
         userIds: inputData.userIds,
       },
     });

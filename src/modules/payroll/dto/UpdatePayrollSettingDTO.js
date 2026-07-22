@@ -39,13 +39,8 @@ class updatePayrollSettingDTO {
       errors.cycle = "Chu kỳ lương phải là MONTHLY";
     }
 
-    if (
-      this.periodStartDay !== undefined &&
-      (!Number.isInteger(this.periodStartDay) ||
-        this.periodStartDay < 1 ||
-        this.periodStartDay > 28)
-    ) {
-      errors.periodStartDay = "Ngày bắt đầu kỳ lương phải từ 1 đến 28";
+    if (this.periodStartDay !== undefined) {
+      errors.periodStartDay = "Không hỗ trợ ngày bắt đầu kỳ lương tùy chỉnh";
     }
 
     if (
