@@ -16,6 +16,7 @@ jest.mock("../../src/models/WorkingSchedule", () => ({
 
 jest.mock("../../src/models/Attendance", () => ({
   find: jest.fn(),
+  exists: jest.fn(),
 }));
 
 jest.mock("../../src/models/PayrollSetting", () => ({
@@ -383,7 +384,7 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
 });
 
 describe("WorkingScheduleAttendanceMapper", () => {
-  test("uses one attendance session to derive normal and overtime schedule status", () => {
+  test("attaches each attendance only to its user and working schedule", () => {
     const user = { _id: "staffA", profile: { firstName: "A" } };
     const schedules = [
       {
@@ -403,35 +404,88 @@ describe("WorkingScheduleAttendanceMapper", () => {
         scheduleType: "OVERTIME",
       },
     ];
-    const attendance = {
-      _id: "attendance1",
+    const normalAttendance = {
+      _id: "normalAttendance",
+      scheduleId: "normalSchedule",
       userId: "staffA",
-      workDate: new Date("2026-07-01T00:00:00.000Z"),
       status: "CHECKED_OUT",
       actualCheckinAt: new Date("2026-07-01T01:00:00.000Z"),
-      actualCheckoutAt: new Date("2026-07-01T12:00:00.000Z"),
-      workedMinutes: 660,
+      actualCheckoutAt: new Date("2026-07-01T10:00:00.000Z"),
+      workedMinutes: 540,
     };
-    const attendanceByUserAndWorkDate = {
-      [getAttendanceKey(attendance.workDate, attendance.userId)]: [attendance],
+    const overtimeAttendance = {
+      _id: "overtimeAttendance",
+      scheduleId: "overtimeSchedule",
+      userId: "staffA",
+      status: "CHECKED_OUT",
+      actualCheckinAt: new Date("2026-07-01T10:00:00.000Z"),
+      actualCheckoutAt: new Date("2026-07-01T12:00:00.000Z"),
+      workedMinutes: 120,
+    };
+    const attendanceByScheduleAndUser = {
+      [getAttendanceKey(normalAttendance.scheduleId, normalAttendance.userId)]:
+        normalAttendance,
+      [getAttendanceKey(
+        overtimeAttendance.scheduleId,
+        overtimeAttendance.userId,
+      )]: overtimeAttendance,
     };
 
     const result = attachAttendancesToUsers(
       schedules,
-      attendanceByUserAndWorkDate,
+      attendanceByScheduleAndUser,
       true,
     );
 
     expect(result[0].userId[0].attendance).toMatchObject({
+      _id: "normalAttendance",
       status: "CHECKED_OUT",
-      workedMinutes: 660,
+      workedMinutes: 540,
       workedMinutesInThisSchedule: 540,
     });
     expect(result[1].userId[0].attendance).toMatchObject({
+      _id: "overtimeAttendance",
       status: "CHECKED_OUT",
-      workedMinutes: 660,
+      workedMinutes: 120,
       workedMinutesInThisSchedule: 120,
       lateMinutes: 0,
+    });
+  });
+
+  test("does not attach an attendance from another schedule on the same day", () => {
+    const user = { _id: "staffA" };
+    const schedule = {
+      _id: "afternoonSchedule",
+      userId: [user],
+      workDate: new Date("2026-07-01T00:00:00.000Z"),
+      startAt: new Date("2026-07-01T06:00:00.000Z"),
+      endAt: new Date("2026-07-01T10:00:00.000Z"),
+      scheduleType: "NORMAL",
+    };
+    const morningAttendance = {
+      _id: "morningAttendance",
+      scheduleId: "morningSchedule",
+      userId: "staffA",
+      status: "CHECKED_OUT",
+      actualCheckinAt: new Date("2026-07-01T06:00:00.000Z"),
+      actualCheckoutAt: new Date("2026-07-01T10:00:00.000Z"),
+    };
+
+    const result = attachAttendancesToUsers(
+      [schedule],
+      {
+        [getAttendanceKey(
+          morningAttendance.scheduleId,
+          morningAttendance.userId,
+        )]: morningAttendance,
+      },
+      true,
+    );
+
+    expect(result[0].userId[0].attendance).toMatchObject({
+      status: "NOT_CHECKED_IN",
+      actualCheckinAt: null,
+      actualCheckoutAt: null,
     });
   });
 
@@ -521,5 +575,121 @@ describe("WorkingScheduleService date filters", () => {
       status: { $ne: "DELETED" },
       scheduleType: "OVERTIME",
     });
+  });
+
+  test("getBranchWorkingSchedules passes branchId and query filters correctly without type error", async () => {
+    User.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([{ _id: "staff1" }]),
+      }),
+    });
+
+    const queryParams = Object.create(null);
+    queryParams.scheduleType = "NORMAL";
+
+    await WorkingScheduleService.getBranchWorkingSchedules(
+      "tenant1",
+      "branch1",
+      queryParams,
+    );
+
+    expect(WorkingSchedule.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant1",
+        status: { $ne: "DELETED" },
+        scheduleType: "NORMAL",
+        userId: { $in: ["staff1"] },
+      }),
+    );
+  });
+
+  test("getWarehouseWorkingSchedules passes warehouseId and query filters correctly without type error", async () => {
+    User.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue([{ _id: "staff2" }]),
+      }),
+    });
+
+    const queryParams = Object.create(null);
+    queryParams.scheduleType = "OVERTIME";
+
+    await WorkingScheduleService.getWarehouseWorkingSchedules(
+      "tenant1",
+      "warehouse1",
+      queryParams,
+    );
+
+    expect(WorkingSchedule.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant1",
+        status: { $ne: "DELETED" },
+        scheduleType: "OVERTIME",
+        userId: { $in: ["staff2"] },
+      }),
+    );
+  });
+});
+
+describe("WorkingScheduleService attendance lock", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    WorkingSchedule.findOne.mockResolvedValue({
+      _id: "schedule1",
+      status: "SCHEDULED",
+    });
+    Attendance.exists.mockResolvedValue(null);
+    WorkingSchedule.findOneAndUpdate.mockResolvedValue({ _id: "schedule1" });
+  });
+
+  test("does not delete or replace a schedule after attendance exists", async () => {
+    Attendance.exists.mockResolvedValue({ _id: "attendance1" });
+
+    await expect(
+      WorkingScheduleService.deleteWorkingSchedule("tenant1", "schedule1"),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(WorkingSchedule.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  test("removes only an assignee who has no attendance", async () => {
+    WorkingSchedule.findOne.mockResolvedValue({
+      _id: "schedule1",
+      status: "SCHEDULED",
+      userId: ["staff1", "staff2"],
+    });
+
+    await WorkingScheduleService.removeUserFromWorkingSchedule(
+      "tenant1",
+      "schedule1",
+      "staff2",
+    );
+
+    expect(Attendance.exists).toHaveBeenCalledWith({
+      tenantId: "tenant1",
+      scheduleId: "schedule1",
+      userId: "staff2",
+    });
+    expect(WorkingSchedule.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.any(Object),
+      { $pull: { userId: "staff2" } },
+      expect.any(Object),
+    );
+  });
+
+  test("does not remove an assignee who already has attendance", async () => {
+    WorkingSchedule.findOne.mockResolvedValue({
+      _id: "schedule1",
+      status: "SCHEDULED",
+      userId: ["staff1", "staff2"],
+    });
+    Attendance.exists.mockResolvedValue({ _id: "attendance1" });
+
+    await expect(
+      WorkingScheduleService.removeUserFromWorkingSchedule(
+        "tenant1",
+        "schedule1",
+        "staff1",
+      ),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(WorkingSchedule.findOneAndUpdate).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,7 @@ const { User, RefreshToken, Tenant } = require("../../../models");
 const Subscription = require("../../../models/Subscription");
 const Plan = require("../../../models/Plan");
 const otpService = require("../../../services/otpService");
+const { sendPasswordResetEmail } = require("../../../services/emailService");
 const { admin, isFirebaseConfigured } = require("../../../config/firebase");
 const { STAFF_ROLES } = require("../../../constants/role");
 
@@ -347,6 +348,112 @@ class AuthService {
     ).select("-password");
 
     return updatedUser;
+  }
+
+  async changePassword(userId, currentPassword, newPassword) {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error("Người dùng không tồn tại");
+    }
+
+    if (!user.password) {
+      throw new Error("Tài khoản của bạn không sử dụng mật khẩu đăng nhập trực tiếp");
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      throw new Error("Mật khẩu hiện tại không chính xác");
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    // Revoke old refresh tokens for security
+    await RefreshToken.updateMany({ userId }, { isRevoked: true });
+
+    return { message: "Đổi mật khẩu thành công" };
+  }
+
+  async sendForgotPasswordOtp(phoneNumber) {
+    if (!phoneNumber || !String(phoneNumber).trim()) {
+      throw new Error("Số điện thoại không được để trống");
+    }
+
+    const user = await User.findOne({
+      phoneNumber: String(phoneNumber).trim(),
+      status: { $ne: "DELETED" },
+    });
+
+    if (!user || user.status === "INACTIVE" || user.status === "SUSPENDED") {
+      throw new Error("Số điện thoại chưa được đăng ký trong hệ thống hoặc tài khoản đã bị khóa.");
+    }
+
+    await otpService.sendOtp(phoneNumber);
+
+    return { message: "Đã gửi mã OTP thành công đến số điện thoại của bạn." };
+  }
+
+  async verifyForgotPasswordOtp(phoneNumber, otpCode) {
+    if (!phoneNumber || !String(phoneNumber).trim()) {
+      throw new Error("Số điện thoại không được để trống");
+    }
+    if (!otpCode || !String(otpCode).trim()) {
+      throw new Error("Mã OTP không được để trống");
+    }
+
+    const user = await User.findOne({
+      phoneNumber: String(phoneNumber).trim(),
+      status: { $ne: "DELETED" },
+    });
+
+    if (!user || user.status === "INACTIVE" || user.status === "SUSPENDED") {
+      throw new Error("Số điện thoại chưa được đăng ký trong hệ thống hoặc tài khoản đã bị khóa.");
+    }
+
+    await otpService.verifyOtp(phoneNumber, otpCode);
+
+    const secret = process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET || "defaultsecret";
+    const resetToken = jwt.sign(
+      { userId: user._id, phoneNumber: user.phoneNumber, type: "password_reset" },
+      secret,
+      { expiresIn: "15m" }
+    );
+
+    return { resetToken, message: "Xác thực mã OTP thành công." };
+  }
+
+  async resetPassword(token, newPassword) {
+    if (!token) {
+      throw new Error("Mã xác thực đặt lại mật khẩu không được để trống");
+    }
+    if (!newPassword || newPassword.length < 6) {
+      throw new Error("Mật khẩu mới phải có ít nhất 6 ký tự");
+    }
+
+    const secret = process.env.ACCESS_TOKEN_SECRET || process.env.JWT_SECRET || "defaultsecret";
+    let decoded;
+    try {
+      decoded = jwt.verify(token, secret);
+    } catch (err) {
+      throw new Error("Mã xác thực đặt lại mật khẩu không hợp lệ hoặc đã hết hạn");
+    }
+
+    if (decoded.type !== "password_reset") {
+      throw new Error("Token không hợp lệ cho thao tác đặt lại mật khẩu");
+    }
+
+    const user = await User.findById(decoded.userId);
+    if (!user || user.status === "DELETED" || user.status === "INACTIVE" || user.status === "SUSPENDED") {
+      throw new Error("Tài khoản không tồn tại hoặc đã bị khóa");
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    // Revoke all existing refresh tokens
+    await RefreshToken.updateMany({ userId: user._id }, { isRevoked: true });
+
+    return { message: "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại." };
   }
 }
 

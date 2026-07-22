@@ -252,21 +252,14 @@ class WorkingScheduleService {
           .map((user) => getUserIdText(user)),
       ),
     ];
-    const workDates = schedules
-      .map((schedule) => schedule.workDate)
+    const scheduleIds = schedules
+      .map((schedule) => schedule._id)
       .filter(Boolean)
-      .map((workDate) => new Date(workDate));
+      .map(String);
 
-    if (!userIds.length || !workDates.length) {
+    if (!userIds.length || !scheduleIds.length) {
       return attachAttendancesToUsers(schedules, {}, detail, lateGraceMinutes);
     }
-
-    const startWorkDate = new Date(
-      Math.min(...workDates.map((workDate) => workDate.getTime())),
-    );
-    const endWorkDate = new Date(
-      Math.max(...workDates.map((workDate) => workDate.getTime())),
-    );
 
     const selectFields = detail
       ? "scheduleId userId workDate status actualCheckinAt actualCheckoutAt checkInLocation checkOutLocation workedMinutes overtimeMinute lateMinutes"
@@ -275,26 +268,20 @@ class WorkingScheduleService {
     const attendances = await Attendance.find({
       tenantId,
       userId: { $in: userIds },
-      workDate: {
-        $gte: startWorkDate,
-        $lte: endWorkDate,
-      },
+      scheduleId: { $in: scheduleIds },
     })
       .select(selectFields)
       .lean();
 
-    const attendanceByUserAndWorkDate = {};
+    const attendanceByScheduleAndUser = {};
     attendances.forEach((attendance) => {
-      const key = getAttendanceKey(attendance.workDate, attendance.userId);
-      if (!attendanceByUserAndWorkDate[key]) {
-        attendanceByUserAndWorkDate[key] = [];
-      }
-      attendanceByUserAndWorkDate[key].push(attendance);
+      const key = getAttendanceKey(attendance.scheduleId, attendance.userId);
+      attendanceByScheduleAndUser[key] = attendance;
     });
 
     return attachAttendancesToUsers(
       schedules,
-      attendanceByUserAndWorkDate,
+      attendanceByScheduleAndUser,
       detail,
       lateGraceMinutes,
     );
@@ -748,8 +735,7 @@ class WorkingScheduleService {
   async getBranchWorkingSchedules(
     tenantId,
     branchId,
-    userId,
-    { page, recordPerPage, startDate, endDate, status, scheduleType } = {},
+    { page, recordPerPage, userId, startDate, endDate, status, scheduleType } = {},
   ) {
     if (!branchId) {
       const error = new Error("Thiếu thông tin chi nhánh");
@@ -757,33 +743,22 @@ class WorkingScheduleService {
       throw error;
     }
 
-    const result = await this.getWorkingScheduleList(tenantId, {
+    return this.getWorkingScheduleList(tenantId, {
       page,
       recordPerPage,
       branchId,
+      userId,
       startDate,
       endDate,
       status,
       scheduleType,
     });
-
-    return {
-      ...result,
-      data: result.data.map((schedule) => ({
-        ...schedule,
-        userId: Array.isArray(schedule.userId)
-          ? schedule.userId.filter(
-              (item) => String(item?._id || item) !== String(userId),
-            )
-          : schedule.userId,
-      })),
-    };
   }
 
   async getWarehouseWorkingSchedules(
     tenantId,
     warehouseId,
-    { page, recordPerPage, startDate, endDate, status, scheduleType } = {},
+    { page, recordPerPage, userId, startDate, endDate, status, scheduleType } = {},
   ) {
     if (!warehouseId) {
       const error = new Error("Thiếu thông tin kho");
@@ -791,27 +766,16 @@ class WorkingScheduleService {
       throw error;
     }
 
-    const data = await this.getWorkingScheduleList(tenantId, {
+    return this.getWorkingScheduleList(tenantId, {
       page,
       recordPerPage,
       warehouseId,
+      userId,
       startDate,
       endDate,
       status,
       scheduleType,
     });
-
-    return {
-      ...result,
-      data: result.data.map((schedule) => ({
-        ...schedule,
-        userId: Array.isArray(schedule.userId)
-          ? schedule.userId.filter(
-              (item) => String(item?._id || item) !== String(userId),
-            )
-          : schedule.userId,
-      })),
-    };
   }
 
   // Lấy chi tiết một lịch làm việc trong tenant hiện tại.
@@ -920,6 +884,15 @@ class WorkingScheduleService {
       throw error;
     }
 
+    const hasAttendance = await Attendance.exists({ tenantId, scheduleId });
+    if (hasAttendance) {
+      const error = new Error(
+        "Không thể xóa hoặc thay thế ca đã phát sinh chấm công",
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+
     await WorkingSchedule.findOneAndUpdate(
       {
         _id: scheduleId,
@@ -944,6 +917,47 @@ class WorkingScheduleService {
       data: {
         id: schedule._id,
       },
+    };
+  }
+
+  async removeUserFromWorkingSchedule(tenantId, scheduleId, userId) {
+    const schedule = await WorkingSchedule.findOne({
+      _id: scheduleId,
+      tenantId,
+      status: { $ne: "DELETED" },
+      userId,
+    });
+    if (!schedule) {
+      const error = new Error("Không tìm thấy nhân viên trong ca làm việc");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const hasAttendance = await Attendance.exists({
+      tenantId,
+      scheduleId,
+      userId,
+    });
+    if (hasAttendance) {
+      const error = new Error(
+        "Không thể gỡ nhân viên đã phát sinh chấm công khỏi ca",
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+
+    if (schedule.userId.length === 1) {
+      return this.deleteWorkingSchedule(tenantId, scheduleId);
+    }
+
+    await WorkingSchedule.findOneAndUpdate(
+      { _id: scheduleId, tenantId, status: { $ne: "DELETED" } },
+      { $pull: { userId } },
+      { new: true, runValidators: true },
+    );
+    return {
+      message: "Đã gỡ nhân viên khỏi ca làm việc",
+      data: { id: scheduleId, userId },
     };
   }
 }

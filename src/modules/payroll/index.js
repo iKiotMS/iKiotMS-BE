@@ -408,7 +408,7 @@ const PayrollController = require("./controller/PayrollController");
  *       409:
  *         description: Payroll period overlaps an existing period
  *       422:
- *         description: Payroll period has not ended, or no valid payslips can be generated
+ *         description: Payroll period has not ended, no valid payslips can be generated, or at least one eligible employee is missing payroll configuration
  *       500:
  *         description: Unexpected server error
  *   get:
@@ -440,6 +440,9 @@ const PayrollController = require("./controller/PayrollController");
  *                       periodStart: { type: string, format: date-time }
  *                       periodEnd: { type: string, format: date-time }
  *                       status: { type: string, enum: [DRAFT, REVIEW, APPROVED, PAID, CANCELLED] }
+ *                       cancelledBy: { type: string, description: User who cancelled this draft period. }
+ *                       cancelledAt: { type: string, format: date-time }
+ *                       cancelReason: { type: string, maxLength: 500 }
  *                       paymentMethod: { type: string, enum: [CASH, BANK_TRANSFER, MOMO, VNPAY, SEPAY] }
  *                       paymentReference: { type: string, description: External bank or receipt reference supplied when marking paid. }
  *                       cashFlowId: { type: string, description: Linked CashFlow expense ID after payment. }
@@ -488,6 +491,9 @@ const PayrollController = require("./controller/PayrollController");
  *                         periodStart: { type: string, format: date-time }
  *                         periodEnd: { type: string, format: date-time }
  *                         status: { type: string, enum: [DRAFT, REVIEW, APPROVED, PAID, CANCELLED] }
+ *                         cancelledBy: { type: string, description: User who cancelled this draft period. }
+ *                         cancelledAt: { type: string, format: date-time }
+ *                         cancelReason: { type: string, maxLength: 500 }
  *                         paymentMethod: { type: string, enum: [CASH, BANK_TRANSFER, MOMO, VNPAY, SEPAY] }
  *                         paymentReference: { type: string, description: External bank or receipt reference supplied when marking paid. }
  *                         cashFlowId: { type: string, description: Linked CashFlow expense ID after payment. }
@@ -598,6 +604,30 @@ const PayrollController = require("./controller/PayrollController");
  *       403: { description: Forbidden }
  *       404: { description: Payroll period not found }
  *       409: { description: Invalid current status }
+ *
+ * /payroll/periods/{periodId}/cancel:
+ *   post:
+ *     tags: [Payroll]
+ *     summary: Cancel a draft payroll period without deleting its history
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: periodId, required: true, schema: { type: string } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string, maxLength: 500 }
+ *     responses:
+ *       200: { description: Period and its payslips changed from DRAFT to CANCELLED }
+ *       400: { description: Cancellation reason is required or invalid }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ *       404: { description: Payroll period not found }
+ *       409: { description: Only a DRAFT payroll period can be cancelled }
  *
  * /payroll/periods/{periodId}/approve:
  *   post:
@@ -950,6 +980,19 @@ function registerPayrollModule(app) {
         res,
         "RETURN_TO_DRAFT",
         "Đã trả kỳ lương về bản nháp",
+      ),
+  );
+
+  app.post(
+    "/payroll/periods/:periodId/cancel",
+    verifyJwt,
+    authorize("payroll", ["update"]),
+    (req, res) =>
+      PayrollController.payrollPeriodAction(
+        req,
+        res,
+        "CANCEL",
+        "Đã hủy kỳ lương nháp",
       ),
   );
 

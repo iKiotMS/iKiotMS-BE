@@ -159,4 +159,40 @@ describe("Payroll period generation", () => {
     });
     expect(findOneSpy).not.toHaveBeenCalled();
   });
+
+  test("keeps skipped employees in preview but blocks saving an incomplete draft", async () => {
+    const skipped = [
+      {
+        userId: new mongoose.Types.ObjectId(),
+        reason: "Nhân viên chưa được gán bảng lương",
+      },
+    ];
+    jest.spyOn(PayrollSettingService, "getPayrollSetting").mockResolvedValue({
+      data: {},
+    });
+    jest.spyOn(PayrollPeriod, "findOne").mockReturnValue({
+      lean: jest.fn().mockResolvedValue(null),
+    });
+    jest.spyOn(PayrollService, "generatePayRoll").mockResolvedValue({
+      data: {
+        payslips: [{ userId: new mongoose.Types.ObjectId() }],
+        skipped,
+        summary: { generatedCount: 1, skippedCount: 1 },
+      },
+    });
+    const startSessionSpy = jest.spyOn(mongoose, "startSession");
+
+    await expect(
+      PayrollService.generatePayrollPeriod({
+        tenantId: new mongoose.Types.ObjectId(),
+        currentUserId: new mongoose.Types.ObjectId(),
+        payrollData: { payrollMonth: "2026-07" },
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 422,
+      message: "Chưa thể tạo kỳ lương vì còn nhân viên thiếu cấu hình",
+      skipped,
+    });
+    expect(startSessionSpy).not.toHaveBeenCalled();
+  });
 });

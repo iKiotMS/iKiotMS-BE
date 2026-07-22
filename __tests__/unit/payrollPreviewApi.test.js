@@ -190,6 +190,31 @@ describe("Payroll preview API", () => {
     );
   });
 
+  test("POST cancel soft-cancels a draft payroll period", async () => {
+    PayrollService.changePayrollPeriodStatus.mockResolvedValue({
+      _id: "period1",
+      status: "CANCELLED",
+      cancelReason: "Sai dữ liệu chấm công",
+    });
+    const response = await request(app)
+      .post("/payroll/periods/64a000000000000000000011/cancel")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ reason: "Sai dữ liệu chấm công" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      success: true,
+      data: { status: "CANCELLED" },
+    });
+    expect(PayrollService.changePayrollPeriodStatus).toHaveBeenCalledWith({
+      tenantId,
+      currentUserId: userId,
+      periodId: "64a000000000000000000011",
+      action: "CANCEL",
+      actionData: { reason: "Sai dữ liệu chấm công" },
+    });
+  });
+
   test("GET /payroll/my-payslips lets staff read only their own published payslips", async () => {
     PayrollService.listMyPayslips.mockResolvedValue({
       data: [{ _id: "payslip1", status: "APPROVED" }],

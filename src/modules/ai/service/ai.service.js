@@ -33,7 +33,7 @@ const functionDeclarations = [
     parameters: {
       type: "OBJECT",
       properties: {
-        productId: { type: "STRING", description: "ID của sản phẩm cần kiểm tra tồn kho" }
+        productId: { type: "STRING", description: "ID, SKU hoặc tên của sản phẩm cần kiểm tra tồn kho" }
       },
       required: ["productId"]
     }
@@ -80,7 +80,7 @@ const functionDeclarations = [
     parameters: {
       type: "OBJECT",
       properties: {
-        customerId: { type: "STRING", description: "ID của khách hàng" }
+        customerId: { type: "STRING", description: "ID hoặc tên/SĐT của khách hàng" }
       },
       required: ["customerId"]
     }
@@ -268,6 +268,122 @@ const functionDeclarations = [
         search: { type: "STRING", description: "Tìm theo số phiếu điều chuyển" }
       }
     }
+  },
+  {
+    name: "getRevenueOverview",
+    description: "Xem thống kê tổng quan doanh thu, tổng số đơn hàng, giá trị trung bình đơn hàng (AOV), số lượng khách hàng và tỷ lệ tăng trưởng % so với kỳ trước.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        fromDate: { type: "STRING", description: "Ngày bắt đầu (YYYY-MM-DD)" },
+        toDate: { type: "STRING", description: "Ngày kết thúc (YYYY-MM-DD)" },
+        branchId: { type: "STRING", description: "Mã chi nhánh (nếu muốn lọc theo chi nhánh)" }
+      }
+    }
+  },
+  {
+    name: "getRevenueSeries",
+    description: "Lấy dữ liệu chuỗi doanh thu và số lượng đơn hàng theo thời gian (theo ngày hoặc theo tháng) để phân tích xu hướng.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        fromDate: { type: "STRING", description: "Ngày bắt đầu (YYYY-MM-DD)" },
+        toDate: { type: "STRING", description: "Ngày kết thúc (YYYY-MM-DD)" },
+        branchId: { type: "STRING", description: "Mã chi nhánh" },
+        groupBy: { type: "STRING", description: "Gom nhóm theo 'day' hoặc 'month'" }
+      }
+    }
+  },
+  {
+    name: "getRevenueByPaymentMethod",
+    description: "Thống kê tổng doanh thu phân loại theo các phương thức thanh toán (Tiền mặt CASH, Chuyển khoản BANK_TRANSFER, MoMo, VNPay, SePay...).",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        fromDate: { type: "STRING", description: "Ngày bắt đầu (YYYY-MM-DD)" },
+        toDate: { type: "STRING", description: "Ngày kết thúc (YYYY-MM-DD)" },
+        branchId: { type: "STRING", description: "Mã chi nhánh" }
+      }
+    }
+  },
+  {
+    name: "getRevenueByStaff",
+    description: "Thống kê báo cáo doanh số bán hàng, số lượng đơn hàng và giá trị trung bình đơn hàng theo từng nhân viên.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        fromDate: { type: "STRING", description: "Ngày bắt đầu (YYYY-MM-DD)" },
+        toDate: { type: "STRING", description: "Ngày kết thúc (YYYY-MM-DD)" },
+        branchId: { type: "STRING", description: "Mã chi nhánh" }
+      }
+    }
+  },
+  {
+    name: "getTopProducts",
+    description: "Thống kê danh sách top sản phẩm bán chạy nhất theo số lượng bán ra hoặc theo doanh thu.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        fromDate: { type: "STRING", description: "Ngày bắt đầu (YYYY-MM-DD)" },
+        toDate: { type: "STRING", description: "Ngày kết thúc (YYYY-MM-DD)" },
+        branchId: { type: "STRING", description: "Mã chi nhánh" },
+        sortBy: { type: "STRING", description: "Sắp xếp theo 'quantity' (số lượng) hoặc 'revenue' (doanh thu)" },
+        limit: { type: "INTEGER", description: "Số lượng sản phẩm top cần lấy (mặc định 10)" }
+      }
+    }
+  },
+  {
+    name: "getInventoryOverviewStats",
+    description: "Thống kê báo cáo tổng giá trị vốn tồn kho, tổng số mặt hàng SKU, số sản phẩm đã hết hàng và danh sách các mặt hàng sắp hết hàng.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        branchId: { type: "STRING", description: "Mã chi nhánh" },
+        warehouseId: { type: "STRING", description: "Mã kho hàng" },
+        lowStockThreshold: { type: "INTEGER", description: "Ngưỡng báo động tồn kho thấp (mặc định 10)" }
+      }
+    }
+  },
+  {
+    name: "getCashflowSummary",
+    description: "Xem báo cáo sổ quỹ tổng quan (tổng thu, tổng chi, thu net) và danh sách các phiếu thu/chi mới nhất.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        fromDate: { type: "STRING", description: "Ngày bắt đầu (YYYY-MM-DD)" },
+        toDate: { type: "STRING", description: "Ngày kết thúc (YYYY-MM-DD)" },
+        flowType: { type: "STRING", description: "Loại dòng tiền ('INCOME' thu hoặc 'EXPENSE' chi)" },
+        branchId: { type: "STRING", description: "Mã chi nhánh" },
+        warehouseId: { type: "STRING", description: "Mã kho hàng" },
+        page: { type: "INTEGER" },
+        limit: { type: "INTEGER" }
+      }
+    }
+  },
+  {
+    name: "getCashDrawerSessions",
+    description: "Xem thông tin báo cáo các phiên bàn giao két tiền, ca làm việc, tiền đầu ca, tiền cuối ca tại cửa hàng/chi nhánh.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        branchId: { type: "STRING", description: "Mã chi nhánh" },
+        status: { type: "STRING", description: "Trạng thái ca két ('OPEN', 'CLOSED')" },
+        page: { type: "INTEGER" },
+        limit: { type: "INTEGER" }
+      }
+    }
+  },
+  {
+    name: "getTenantTickets",
+    description: "Xem danh sách các yêu cầu hỗ trợ kỹ thuật (tickets) của cửa hàng gửi tới hệ thống và trạng thái xử lý.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        status: { type: "STRING", description: "Trạng thái ticket ('OPEN', 'IN_PROGRESS', 'CLOSED')" },
+        page: { type: "INTEGER" },
+        limit: { type: "INTEGER" }
+      }
+    }
   }
 ];
 
@@ -316,7 +432,7 @@ class AIService {
       .join("\n");
 
     const classificationPrompt = `Phân loại câu hỏi mới nhất của người dùng vào một trong ba nhóm:
-- "INTERNAL_DATA": Yêu cầu truy vấn dữ liệu riêng tư của cửa hàng như: doanh thu, đơn hàng, hàng hóa, tồn kho, lương bổng, chấm công, ca làm, khách hàng, nhà cung cấp, chi nhánh, kho hàng.
+- "INTERNAL_DATA": Yêu cầu truy vấn dữ liệu riêng tư của cửa hàng như: doanh thu, lợi nhuận, top bán chạy, báo cáo tài chính, sổ quỹ thu chi, ca làm két tiền, đơn hàng, hàng hóa, tồn kho, lương bổng, chấm công, ca làm, khách hàng, nhà cung cấp, chi nhánh, kho hàng, ticket hỗ trợ.
 - "EXTERNAL_SEARCH": Yêu cầu tra cứu thông tin thời gian thực bên ngoài Internet như: xu hướng thị trường, thời tiết, giá vàng, tin tức thời sự, hot trend mạng xã hội hiện nay.
 - "GENERAL_LLM": Các câu hỏi chào hỏi, tư vấn kinh doanh chung chung không cần tra cứu Internet hay truy cập dữ liệu cửa hàng.
 
@@ -352,10 +468,10 @@ Câu hỏi của người dùng: "${messageText}"`;
 
     const config = {
       systemInstruction: `Bạn là Trợ lý thông minh độc quyền (AI Chat Assistant) của hệ thống quản lý iKiot.
-Nhiệm vụ của bạn là hỗ trợ chủ cửa hàng (TENANT_OWNER) giải đáp các thắc mắc về kinh doanh, nhân sự, đơn hàng, tồn kho bằng các Tools có sẵn.
+Nhiệm vụ của bạn là hỗ trợ chủ cửa hàng (TENANT_OWNER) giải đáp các thắc mắc về kinh doanh, doanh thu, tài chính, nhân sự, đơn hàng, tồn kho bằng các Tools có sẵn.
 Khi câu hỏi yêu cầu dữ liệu của cửa hàng, hãy luôn sử dụng các custom tools MongoDB được cung cấp thay vì tự đoán hoặc suy luận.
 Khi câu hỏi liên quan đến kiến thức chung hoặc xu hướng bên ngoài thị trường, hãy sử dụng tính năng Google Search Grounding để tra cứu thông tin mới nhất từ Internet.
-Hãy trả lời một cách lịch sự, chuyên nghiệp bằng tiếng Việt và định dạng câu trả lời rõ ràng dưới dạng Markdown.`,
+Hãy trả lời một cách lịch sự, chuyên nghiệp bằng tiếng Việt, giải thích số liệu rõ ràng và định dạng câu trả lời bằng Markdown.`,
       tools: tools.length > 0 ? tools : undefined,
     };
 

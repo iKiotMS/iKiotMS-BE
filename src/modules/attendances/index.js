@@ -23,11 +23,11 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       allOf:
  *         - $ref: '#/components/schemas/AttendanceLocationRequest'
  *         - type: object
- *           required: [actualCheckinAt]
+ *           required: [scheduleId, actualCheckinAt]
  *           properties:
  *             scheduleId:
  *               type: string
- *               description: Optional normal schedule anchor. If omitted, the current normal schedule is resolved from actualCheckinAt.
+ *               description: Required working schedule ID selected by the employee before check-in.
  *               example: 665aaa1234567890abcdef12
  *             actualCheckinAt:
  *               type: string
@@ -316,7 +316,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       404:
  *         description: Working schedule not found
  *       409:
- *         description: Already checked in
+ *         description: The employee already has an attendance for this working schedule
  *       422:
  *         description: GPS accuracy is not good enough for check-in
  *
@@ -353,6 +353,67 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Attendance not found
  *       422:
  *         description: Invalid check-out time or GPS accuracy
+ *
+ * /attendances/{attendanceId}/manual-checkout:
+ *   patch:
+ *     tags: [Attendances]
+ *     summary: Add a missing checkout manually
+ *     description: Tenant owners and branch managers can complete a CHECKED_IN attendance within their scope. Warehouse managers cannot edit attendance for other users. The editor, timestamp, and reason are recorded for audit.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: attendanceId
+ *         in: path
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [actualCheckoutAt, reason]
+ *             properties:
+ *               actualCheckoutAt: { type: string, format: date-time }
+ *               reason: { type: string, maxLength: 500 }
+ *     responses:
+ *       200: { description: Manual checkout saved }
+ *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
+ *       403: { description: Manager is outside the employee scope }
+ *       404: { description: Attendance not found }
+ *       409: { description: Attendance is not waiting for checkout }
+ *       422: { description: Checkout time is not after check-in }
+ *
+ * /attendances/manual:
+ *   post:
+ *     tags: [Attendances]
+ *     summary: Create attendance manually or mark an employee absent
+ *     description: Tenant owners and branch managers can create one audited attendance for an assigned employee. Warehouse managers cannot edit attendance for other users. ABSENT is only allowed after the schedule ends.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scheduleId, userId, status, reason]
+ *             properties:
+ *               scheduleId: { type: string }
+ *               userId: { type: string }
+ *               status: { type: string, enum: [CHECKED_IN, CHECKED_OUT, ABSENT] }
+ *               actualCheckinAt: { type: string, format: date-time }
+ *               actualCheckoutAt: { type: string, format: date-time }
+ *               reason: { type: string, maxLength: 500 }
+ *     responses:
+ *       201: { description: Manual attendance created }
+ *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
+ *       403: { description: Manager is outside the employee scope }
+ *       404: { description: Assigned schedule or employee not found }
+ *       409: { description: Attendance already exists for this employee and schedule }
+ *       422: { description: Attendance time or absent action is not allowed }
  */
 function registerAttendanceModule(app) {
   app.get(
@@ -381,6 +442,20 @@ function registerAttendanceModule(app) {
     verifyJwt,
     authorize("attendances", "create"),
     AttendanceController.checkIn.bind(AttendanceController),
+  );
+
+  app.patch(
+    "/attendances/:attendanceId/manual-checkout",
+    verifyJwt,
+    authorize("attendances", "update"),
+    AttendanceController.manualCheckout.bind(AttendanceController),
+  );
+
+  app.post(
+    "/attendances/manual",
+    verifyJwt,
+    authorize("attendances", "update"),
+    AttendanceController.createManualAttendance.bind(AttendanceController),
   );
 
   app.post(

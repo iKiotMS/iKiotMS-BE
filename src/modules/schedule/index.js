@@ -161,6 +161,23 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *     responses:
  *       200:
  *         description: Deleted
+ *       409:
+ *         description: Schedule has attendance and cannot be deleted or replaced
+ *
+ * /working-schedules/{scheduleId}/users/{userId}:
+ *   delete:
+ *     tags: [Schedule]
+ *     summary: Remove one employee from a working schedule
+ *     description: Only employees without attendance can be removed. If this is the final employee, the schedule is deleted.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - { in: path, name: scheduleId, required: true, schema: { type: string } }
+ *       - { in: path, name: userId, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: Employee removed }
+ *       404: { description: Employee is not assigned to the schedule }
+ *       409: { description: Employee already has attendance }
  *
  * /working-schedules/bulk:
  *   post:
@@ -522,6 +539,15 @@ function registerScheduleModule(app) {
     verifyJwt,
     authorize("schedules", ["read", "read_own"]),
     WorkingScheduleController.getWorkingScheduleById.bind(
+      WorkingScheduleController,
+    ),
+  );
+
+  app.delete(
+    "/working-schedules/:scheduleId/users/:userId",
+    verifyJwt,
+    authorize("schedules", ["delete"]),
+    WorkingScheduleController.removeUserFromWorkingSchedule.bind(
       WorkingScheduleController,
     ),
   );

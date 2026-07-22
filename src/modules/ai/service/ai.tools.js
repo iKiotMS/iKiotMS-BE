@@ -5,6 +5,8 @@ const {
   Subscription,
   Order,
   StockMovementRequest,
+  Ticket,
+  CashDrawerSession,
 } = require("../../../models");
 
 const ProductService = require("../../product/service/ProductService");
@@ -20,6 +22,7 @@ const LeaveRequestService = require("../../leaveRequest/service/LeaveRequestServ
 const WorkingScheduleService = require("../../schedule/service/WorkingScheduleService");
 const PaySheetService = require("../../payroll/service/PaySheetService");
 const InventoryService = require("../../inventory/service/InventoryService");
+const StatsService = require("../../stats/service/StatsService");
 const { attachUserName, USER_NAME_SELECT } = require("../../../utils/userName");
 
 const manageAttendanceService = new ManageAttendanceService();
@@ -30,14 +33,32 @@ const manageAttendanceService = new ManageAttendanceService();
 async function searchProducts(tenantId, query) {
   const page = query?.page || 1;
   const limit = query?.limit || 10;
-  return await ProductService.getProducts(tenantId, { ...query, page, limit });
+  const searchKeyword = query?.search || query?.q;
+  return await ProductService.searchProducts(tenantId, {
+    q: searchKeyword,
+    ...query,
+    page,
+    limit,
+  });
 }
 
 /**
  * 2. getProductStockLevel
  */
 async function getProductStockLevel(tenantId, { productId }) {
-  return await ProductService.getProductById(tenantId, productId);
+  if (!productId) {
+    throw new Error("productId is required");
+  }
+  let targetId = productId;
+  if (!mongoose.Types.ObjectId.isValid(productId)) {
+    const searchRes = await ProductService.searchProducts(tenantId, { q: productId, limit: 1 });
+    if (searchRes?.data?.length > 0) {
+      targetId = searchRes.data[0]._id;
+    } else {
+      throw new Error(`Product not found for: ${productId}`);
+    }
+  }
+  return await ProductService.getProductById(tenantId, targetId);
 }
 
 /**
@@ -71,7 +92,32 @@ async function searchCustomers(tenantId, query) {
  * 6. getCustomerPurchaseHistory
  */
 async function getCustomerPurchaseHistory(tenantId, { customerId }) {
-  return await CustomerService.getCustomerById(tenantId, customerId);
+  if (!customerId) {
+    throw new Error("customerId is required");
+  }
+  let targetId = customerId;
+  if (!mongoose.Types.ObjectId.isValid(customerId)) {
+    const searchRes = await CustomerService.getCustomers(tenantId, { search: customerId, page: 1, limit: 1 });
+    if (searchRes?.data?.length > 0) {
+      targetId = searchRes.data[0]._id;
+    } else {
+      throw new Error(`Customer not found for: ${customerId}`);
+    }
+  }
+  const customer = await CustomerService.getCustomerById(tenantId, targetId);
+  const orders = await Order.find({ tenantId, customerId: targetId })
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .populate("branchId", "name")
+    .populate("items.productItemId", "sku productName")
+    .lean();
+
+  return {
+    customer,
+    purchaseHistory: orders,
+    totalOrders: orders.length,
+    totalSpent: orders.reduce((sum, o) => sum + (o.grandTotal || 0), 0),
+  };
 }
 
 /**
@@ -125,11 +171,33 @@ async function getStaffList(tenantId, query) {
 async function getStaffAttendanceReport(tenantId, query) {
   const page = query?.page || 1;
   const recordPerPage = query?.recordPerPage || 10;
-  return await manageAttendanceService.getAttendances(tenantId, {
+  const result = await manageAttendanceService.getAttendances(tenantId, {
     ...query,
     page,
     recordPerPage,
   });
+
+  if (result?.data?.length > 0) {
+    const userIds = result.data.map((a) => a.userId).filter(Boolean);
+    const users = await mongoose
+      .model("User")
+      .find({ _id: { $in: userIds } })
+      .select("profile.firstName profile.lastName email phoneNumber role")
+      .lean();
+    const userMap = {};
+    users.forEach((u) => {
+      userMap[u._id.toString()] = {
+        name: `${u.profile?.firstName || ""} ${u.profile?.lastName || ""}`.trim() || u.email || u.phoneNumber,
+        email: u.email,
+        role: u.role,
+      };
+    });
+    result.data = result.data.map((a) => ({
+      ...a,
+      userInfo: userMap[a.userId?.toString()] || null,
+    }));
+  }
+  return result;
 }
 
 /**
@@ -221,24 +289,22 @@ async function getRecentOrders(tenantId, query) {
 }
 
 /**
- * 20. getOrderDetailsByCode (Nâng cấp & Sửa đổi ở hàm import)
+ * 20. getOrderDetailsByCode
  */
 async function getOrderDetailsByCode(tenantId, { orderCode }) {
   if (!orderCode) {
     throw new Error("orderCode is required");
   }
-  // Check if orderCode is a valid MongoDB ObjectId
   if (mongoose.Types.ObjectId.isValid(orderCode)) {
     return await OrderService.getOrderById(tenantId, orderCode);
   }
-  
-  // Otherwise query by paymentReference
+
   const order = await Order.findOne({
     tenantId,
     $or: [
       { paymentReference: orderCode },
-      { paymentReference: { $regex: new RegExp(`^${orderCode}$`, "i") } }
-    ]
+      { paymentReference: { $regex: new RegExp(`^${orderCode}$`, "i") } },
+    ],
   })
     .populate("customerId", "name phone")
     .populate("userId", USER_NAME_SELECT)
@@ -268,6 +334,186 @@ async function getStockMovementHistory(tenantId, query) {
     .lean();
 }
 
+/**
+ * 22. getRevenueOverview
+ */
+async function getRevenueOverview(tenantId, query) {
+  const now = new Date();
+  const fromDate = query?.fromDate ? new Date(query.fromDate) : new Date(now.getFullYear(), now.getMonth(), 1);
+  const toDate = query?.toDate ? new Date(query.toDate) : now;
+  const mockUser = { tenantId, role: "TENANT_OWNER" };
+  return await StatsService.getOverview(mockUser, {
+    fromDate,
+    toDate,
+    branchId: query?.branchId,
+  });
+}
+
+/**
+ * 23. getRevenueSeries
+ */
+async function getRevenueSeries(tenantId, query) {
+  const now = new Date();
+  const fromDate = query?.fromDate ? new Date(query.fromDate) : new Date(now.getFullYear(), now.getMonth(), 1);
+  const toDate = query?.toDate ? new Date(query.toDate) : now;
+  const mockUser = { tenantId, role: "TENANT_OWNER" };
+  return await StatsService.getRevenueSeries(mockUser, {
+    fromDate,
+    toDate,
+    branchId: query?.branchId,
+    groupBy: query?.groupBy || "day",
+  });
+}
+
+/**
+ * 24. getRevenueByPaymentMethod
+ */
+async function getRevenueByPaymentMethod(tenantId, query) {
+  const now = new Date();
+  const fromDate = query?.fromDate ? new Date(query.fromDate) : new Date(now.getFullYear(), now.getMonth(), 1);
+  const toDate = query?.toDate ? new Date(query.toDate) : now;
+  const mockUser = { tenantId, role: "TENANT_OWNER" };
+  return await StatsService.getRevenueByPaymentMethod(mockUser, {
+    fromDate,
+    toDate,
+    branchId: query?.branchId,
+  });
+}
+
+/**
+ * 25. getRevenueByStaff
+ */
+async function getRevenueByStaff(tenantId, query) {
+  const now = new Date();
+  const fromDate = query?.fromDate ? new Date(query.fromDate) : new Date(now.getFullYear(), now.getMonth(), 1);
+  const toDate = query?.toDate ? new Date(query.toDate) : now;
+  const mockUser = { tenantId, role: "TENANT_OWNER" };
+  return await StatsService.getRevenueByStaff(mockUser, {
+    fromDate,
+    toDate,
+    branchId: query?.branchId,
+  });
+}
+
+/**
+ * 26. getTopProducts
+ */
+async function getTopProducts(tenantId, query) {
+  const now = new Date();
+  const fromDate = query?.fromDate ? new Date(query.fromDate) : new Date(now.getFullYear(), now.getMonth(), 1);
+  const toDate = query?.toDate ? new Date(query.toDate) : now;
+  const mockUser = { tenantId, role: "TENANT_OWNER" };
+  return await StatsService.getTopProducts(mockUser, {
+    fromDate,
+    toDate,
+    branchId: query?.branchId,
+    sortBy: query?.sortBy || "quantity",
+    limit: query?.limit || 10,
+  });
+}
+
+/**
+ * 27. getInventoryOverviewStats
+ */
+async function getInventoryOverviewStats(tenantId, query) {
+  const mockUser = { tenantId, role: "TENANT_OWNER" };
+  return await StatsService.getInventory(mockUser, {
+    branchId: query?.branchId,
+    warehouseId: query?.warehouseId,
+    lowStockThreshold: query?.lowStockThreshold || 10,
+  });
+}
+
+/**
+ * 28. getCashflowSummary
+ */
+async function getCashflowSummary(tenantId, query) {
+  const now = new Date();
+  const fromDate = query?.fromDate ? new Date(query.fromDate) : new Date(now.getFullYear(), now.getMonth(), 1);
+  const toDate = query?.toDate ? new Date(query.toDate) : now;
+  const mockUser = { tenantId, role: "TENANT_OWNER" };
+  const summary = await StatsService.getCashflow(mockUser, {
+    fromDate,
+    toDate,
+    branchId: query?.branchId,
+    warehouseId: query?.warehouseId,
+    flowType: query?.flowType,
+  });
+  const list = await StatsService.getCashflowList(mockUser, {
+    fromDate,
+    toDate,
+    branchId: query?.branchId,
+    warehouseId: query?.warehouseId,
+    flowType: query?.flowType,
+    page: query?.page || 1,
+    limit: query?.limit || 10,
+  });
+  return { summary, recentTransactions: list.data, pagination: list.pagination };
+}
+
+/**
+ * 29. getCashDrawerSessions
+ */
+async function getCashDrawerSessions(tenantId, query) {
+  const page = query?.page || 1;
+  const limit = query?.limit || 10;
+  const skip = (page - 1) * limit;
+  const filter = { tenantId };
+  if (query?.branchId) filter.branchId = query.branchId;
+  if (query?.status) filter.status = query.status;
+
+  const [data, total] = await Promise.all([
+    CashDrawerSession.find(filter)
+      .sort({ businessDate: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate("branchId", "name")
+      .populate("openedBy currentStaffId", "profile.firstName profile.lastName phoneNumber")
+      .lean(),
+    CashDrawerSession.countDocuments(filter),
+  ]);
+
+  return {
+    data,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
+/**
+ * 30. getTenantTickets
+ */
+async function getTenantTickets(tenantId, query) {
+  const page = query?.page || 1;
+  const limit = query?.limit || 10;
+  const skip = (page - 1) * limit;
+  const filter = { tenantId, isDeletedByTenant: { $ne: true } };
+  if (query?.status) filter.status = query.status;
+
+  const [data, total] = await Promise.all([
+    Ticket.find(filter)
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Ticket.countDocuments(filter),
+  ]);
+
+  return {
+    data,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
 module.exports = {
   searchProducts,
   getProductStockLevel,
@@ -290,4 +536,13 @@ module.exports = {
   getRecentOrders,
   getOrderDetailsByCode,
   getStockMovementHistory,
+  getRevenueOverview,
+  getRevenueSeries,
+  getRevenueByPaymentMethod,
+  getRevenueByStaff,
+  getTopProducts,
+  getInventoryOverviewStats,
+  getCashflowSummary,
+  getCashDrawerSessions,
+  getTenantTickets,
 };

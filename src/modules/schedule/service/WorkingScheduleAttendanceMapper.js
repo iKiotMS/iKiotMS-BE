@@ -1,7 +1,3 @@
-function getDateText(dateValue) {
-  return new Date(dateValue).toISOString().slice(0, 10);
-}
-
 function calculateOverlapMinutes(startA, endA, startB, endB) {
   if (!startA || !endA || !startB || !endB) {
     return 0;
@@ -15,25 +11,6 @@ function calculateOverlapMinutes(startA, endA, startB, endB) {
   }
 
   return Math.floor((end - start) / (60 * 1000));
-}
-
-function attendanceOverlapsSchedule(attendance, schedule) {
-  if (!attendance?.actualCheckinAt) {
-    return false;
-  }
-
-  const checkinAt = new Date(attendance.actualCheckinAt);
-  const checkoutAt = attendance.actualCheckoutAt
-    ? new Date(attendance.actualCheckoutAt)
-    : null;
-  const scheduleStart = new Date(schedule.startAt);
-  const scheduleEnd = new Date(schedule.endAt);
-
-  if (!checkoutAt) {
-    return checkinAt >= scheduleStart && checkinAt < scheduleEnd;
-  }
-
-  return checkinAt < scheduleEnd && checkoutAt > scheduleStart;
 }
 
 function getWorkedMinutesInSchedule(attendance, schedule) {
@@ -54,7 +31,7 @@ function getLateMinutes(attendance, schedule, lateGraceMinutes = 15) {
     return 0;
   }
 
-  if (!attendanceOverlapsSchedule(attendance, schedule)) {
+  if (!attendance?.actualCheckinAt) {
     return null;
   }
 
@@ -72,8 +49,8 @@ function getLateMinutes(attendance, schedule, lateGraceMinutes = 15) {
   return rawLateMinutes <= lateGraceMinutes ? 0 : rawLateMinutes;
 }
 
-function getScheduleAttendanceStatus(attendance, schedule) {
-  if (!attendanceOverlapsSchedule(attendance, schedule)) {
+function getScheduleAttendanceStatus(attendance) {
+  if (!attendance) {
     return "NOT_CHECKED_IN";
   }
 
@@ -81,7 +58,7 @@ function getScheduleAttendanceStatus(attendance, schedule) {
 }
 
 function buildAttendanceSummary(attendance, schedule, lateGraceMinutes) {
-  if (!attendance || !attendanceOverlapsSchedule(attendance, schedule)) {
+  if (!attendance) {
     return {
       status: "NOT_CHECKED_IN",
       actualCheckinAt: null,
@@ -93,7 +70,7 @@ function buildAttendanceSummary(attendance, schedule, lateGraceMinutes) {
 
   return {
     _id: attendance._id,
-    status: getScheduleAttendanceStatus(attendance, schedule),
+    status: getScheduleAttendanceStatus(attendance),
     actualCheckinAt: attendance.actualCheckinAt || null,
     actualCheckoutAt: attendance.actualCheckoutAt || null,
     workedMinutesInThisSchedule: getWorkedMinutesInSchedule(
@@ -105,7 +82,7 @@ function buildAttendanceSummary(attendance, schedule, lateGraceMinutes) {
 }
 
 function buildAttendanceDetail(attendance, schedule, lateGraceMinutes) {
-  if (!attendance || !attendanceOverlapsSchedule(attendance, schedule)) {
+  if (!attendance) {
     return {
       status: "NOT_CHECKED_IN",
       actualCheckinAt: null,
@@ -117,7 +94,7 @@ function buildAttendanceDetail(attendance, schedule, lateGraceMinutes) {
 
   return {
     _id: attendance._id,
-    status: getScheduleAttendanceStatus(attendance, schedule),
+    status: getScheduleAttendanceStatus(attendance),
     actualCheckinAt: attendance.actualCheckinAt || null,
     actualCheckoutAt: attendance.actualCheckoutAt || null,
     checkInLocation: attendance.checkInLocation || null,
@@ -148,25 +125,19 @@ function getUserIdText(user) {
   return String(user?._id || user);
 }
 
-function getAttendanceKey(workDate, userId) {
-  return `${getDateText(workDate)}:${String(userId)}`;
+function getAttendanceKey(scheduleId, userId) {
+  return `${String(scheduleId)}:${String(userId)}`;
 }
 
-function findScheduleAttendance(schedule, userId, attendanceByUserAndWorkDate) {
-  const attendances =
-    attendanceByUserAndWorkDate[getAttendanceKey(schedule.workDate, userId)] ||
-    [];
-
+function findScheduleAttendance(schedule, userId, attendanceByScheduleAndUser) {
   return (
-    attendances.find((attendance) => {
-      return attendanceOverlapsSchedule(attendance, schedule);
-    }) || null
+    attendanceByScheduleAndUser[getAttendanceKey(schedule._id, userId)] || null
   );
 }
 
 function attachAttendancesToUsers(
   schedules,
-  attendanceByUserAndWorkDate,
+  attendanceByScheduleAndUser,
   detail,
   lateGraceMinutes = 15,
 ) {
@@ -177,7 +148,7 @@ function attachAttendancesToUsers(
       const attendance = findScheduleAttendance(
         schedule,
         userId,
-        attendanceByUserAndWorkDate,
+        attendanceByScheduleAndUser,
       );
 
       if (typeof user === "object" && user !== null) {

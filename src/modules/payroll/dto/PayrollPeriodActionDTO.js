@@ -9,8 +9,16 @@ class PayrollPeriodActionDTO {
   validate(action) {
     const errors = {};
 
-    if (action === "RETURN_TO_DRAFT" && !this.reason?.trim()) {
-      errors.reason = "Lý do trả lại bản nháp là bắt buộc";
+    if (
+      ["RETURN_TO_DRAFT", "CANCEL"].includes(action) &&
+      (typeof this.reason !== "string" || !this.reason.trim())
+    ) {
+      errors.reason =
+        action === "CANCEL"
+          ? "Lý do hủy kỳ lương là bắt buộc"
+          : "Lý do trả lại bản nháp là bắt buộc";
+    } else if (this.reason?.trim().length > 500) {
+      errors.reason = "Lý do không được vượt quá 500 ký tự";
     }
     if (
       action === "MARK_PAID" &&

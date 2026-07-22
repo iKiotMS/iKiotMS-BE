@@ -36,6 +36,12 @@ describe("Attendance UTC handling", () => {
     }).not.toThrow();
 
     expect(() => {
+      service.checkDate(new Date("2026-07-02T05:00:00.000Z"), schedule);
+    }).toThrow(
+      "Nhân viên chỉ được check-in trong khoảng thời gian của ca làm và trước ca làm 30 phút",
+    );
+
+    expect(() => {
       service.checkDate(new Date("2026-07-02T00:29:00.000Z"), schedule);
     }).toThrow(
       "Nhân viên chỉ được check-in trong khoảng thời gian của ca làm và trước ca làm 30 phút",
