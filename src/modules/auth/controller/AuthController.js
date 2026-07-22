@@ -297,6 +297,135 @@ class AuthController {
       });
     }
   }
+
+  async changePassword(req, res) {
+    try {
+      const userId = req.user?.userId;
+      const { currentPassword, oldPassword, newPassword, confirmPassword } = req.body;
+      const passwordToMatch = currentPassword || oldPassword;
+
+      if (!userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      if (!passwordToMatch || !newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "Vui lòng nhập đầy đủ mật khẩu hiện tại và mật khẩu mới",
+        });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: "Mật khẩu mới phải có ít nhất 6 ký tự",
+        });
+      }
+
+      if (confirmPassword && newPassword !== confirmPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "Xác nhận mật khẩu mới không khớp",
+        });
+      }
+
+      const result = await AuthService.changePassword(userId, passwordToMatch, newPassword);
+
+      res.status(200).json({
+        success: true,
+        message: result.message,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message || "Đổi mật khẩu thất bại",
+      });
+    }
+  }
+
+  async sendForgotPasswordOtp(req, res) {
+    try {
+      const { phoneNumber } = req.body;
+
+      if (!phoneNumber) {
+        return res.status(400).json({
+          success: false,
+          message: "Số điện thoại không được để trống",
+        });
+      }
+
+      const result = await AuthService.sendForgotPasswordOtp(phoneNumber);
+
+      res.status(200).json({
+        success: true,
+        message: result.message,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message || "Gửi mã OTP thất bại",
+      });
+    }
+  }
+
+  async verifyForgotPasswordOtp(req, res) {
+    try {
+      const { phoneNumber, otpCode } = req.body;
+
+      if (!phoneNumber || !otpCode) {
+        return res.status(400).json({
+          success: false,
+          message: "Thiếu thông tin số điện thoại hoặc mã OTP",
+        });
+      }
+
+      const result = await AuthService.verifyForgotPasswordOtp(phoneNumber, otpCode);
+
+      res.status(200).json({
+        success: true,
+        resetToken: result.resetToken,
+        message: result.message,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message || "Xác thực mã OTP thất bại",
+      });
+    }
+  }
+
+  async resetPassword(req, res) {
+    try {
+      const { token, resetToken, newPassword, confirmPassword } = req.body;
+      const tokenToUse = token || resetToken;
+
+      if (!tokenToUse || !newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "Thiếu thông tin token hoặc mật khẩu mới",
+        });
+      }
+
+      if (confirmPassword && newPassword !== confirmPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "Xác nhận mật khẩu mới không khớp",
+        });
+      }
+
+      const result = await AuthService.resetPassword(tokenToUse, newPassword);
+
+      res.status(200).json({
+        success: true,
+        message: result.message,
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message || "Đặt lại mật khẩu thất bại",
+      });
+    }
+  }
 }
 
 module.exports = new AuthController();
