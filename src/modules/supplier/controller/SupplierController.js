@@ -1,5 +1,4 @@
 const SupplierService = require("../service/SupplierService");
-const sepayService = require("../../../services/sepayService");
 
 class SupplierController {
   async create(req, res) {
@@ -81,65 +80,6 @@ class SupplierController {
         success: false,
         message: error.message,
       });
-    }
-  }
-
-  async initiateQr(req, res) {
-    try {
-      const { tenantId, userId } = req.user;
-      const { amount, note } = req.body;
-      if (!amount) {
-        return res.status(400).json({ success: false, message: "amount is required" });
-      }
-      const result = await SupplierService.initiateQr(
-        tenantId,
-        req.params.id,
-        Number(amount),
-        userId,
-        note,
-      );
-      res.status(200).json({ success: true, data: result });
-    } catch (error) {
-      res.status(400).json({ success: false, message: error.message });
-    }
-  }
-
-  // Called by SePay when money arrives and content contains a SUP-prefixed reference
-  async handleSepaySupplierWebhook(req, res) {
-    try {
-      const payload = req.body;
-
-      if (payload.transferType !== "in") {
-        return res.status(200).json({ success: true });
-      }
-
-      const authHeader = req.headers["authorization"] || req.headers["Authorization"] || "";
-      const apiKey = authHeader.startsWith("Apikey ") ? authHeader.slice(7).trim() : null;
-
-      const tenant = await sepayService.findTenantByWebhookKey(apiKey);
-      if (!tenant) {
-        return res.status(200).json({ success: false, message: "Unknown API key" });
-      }
-
-      const paymentReference = sepayService.extractSupplierRef(payload.content ?? "");
-      if (!paymentReference) {
-        return res.status(200).json({ success: false, message: "No supplier reference found" });
-      }
-
-      const supplier = await SupplierService.completeDebtPayment(
-        tenant._id,
-        paymentReference,
-        payload.transferAmount,
-      );
-
-      if (!supplier) {
-        return res.status(200).json({ success: false, message: "Intent not found or already processed" });
-      }
-
-      res.status(200).json({ success: true, message: "Supplier debt payment confirmed" });
-    } catch (error) {
-      console.error("SePay supplier webhook error:", error);
-      res.status(200).json({ success: false, message: error.message });
     }
   }
 
