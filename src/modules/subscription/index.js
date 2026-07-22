@@ -221,6 +221,116 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         description: Bad request (trial plan or no subscription found)
  *       401:
  *         description: Unauthorized
+ * /admin/plans:
+ *   get:
+ *     tags:
+ *       - Subscription
+ *     summary: List all subscription plans (SUPER_ADMIN)
+ *     description: Returns every plan, including inactive ones, for the admin management table.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Plans retrieved successfully
+ *       403:
+ *         description: Forbidden (not SUPER_ADMIN)
+ *       500:
+ *         description: Server error
+ * /admin/plans/{id}:
+ *   put:
+ *     tags:
+ *       - Subscription
+ *     summary: Update a subscription plan (SUPER_ADMIN)
+ *     description: >-
+ *       Partial update of a plan's editable fields. `planCode` and `billingCycle`
+ *       are immutable and ignored. Invalidates the cached public plans list.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               planName:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               displayFeatures:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               price:
+ *                 type: number
+ *               maxBranches:
+ *                 type: number
+ *                 description: "-1 = unlimited"
+ *               maxUsers:
+ *                 type: number
+ *                 description: "-1 = unlimited"
+ *               maxProducts:
+ *                 type: number
+ *                 description: "-1 = unlimited"
+ *               trialDays:
+ *                 type: number
+ *               features:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               isPopular:
+ *                 type: boolean
+ *               isActive:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Plan updated successfully
+ *       400:
+ *         description: Invalid plan data
+ *       403:
+ *         description: Forbidden (not SUPER_ADMIN)
+ *       404:
+ *         description: Plan not found
+ * /admin/plans/{id}/active:
+ *   patch:
+ *     tags:
+ *       - Subscription
+ *     summary: Enable or disable a plan (SUPER_ADMIN)
+ *     description: Soft toggle a plan's active state. Inactive plans disappear from the public GET /plans list.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - isActive
+ *             properties:
+ *               isActive:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Plan active state updated
+ *       400:
+ *         description: isActive (boolean) is required
+ *       403:
+ *         description: Forbidden (not SUPER_ADMIN)
+ *       404:
+ *         description: Plan not found
  * /webhook/sepay:
  *   post:
  *     tags:
@@ -333,6 +443,26 @@ const registerSubscriptionModule = (app) => {
       ),
       protected: true,
     },
+    {
+      method: "get",
+      path: "/admin/plans",
+      handler: SubscriptionController.listAllPlans.bind(SubscriptionController),
+      protected: true,
+    },
+    {
+      method: "put",
+      path: "/admin/plans/:id",
+      handler: SubscriptionController.updatePlan.bind(SubscriptionController),
+      protected: true,
+    },
+    {
+      method: "patch",
+      path: "/admin/plans/:id/active",
+      handler: SubscriptionController.togglePlanActive.bind(
+        SubscriptionController,
+      ),
+      protected: true,
+    },
   ];
 
   subscriptionRoutes.forEach((route) => {
@@ -348,6 +478,10 @@ const registerSubscriptionModule = (app) => {
       app.post(route.path, ...handlers);
     } else if (route.method === "get") {
       app.get(route.path, ...handlers);
+    } else if (route.method === "put") {
+      app.put(route.path, ...handlers);
+    } else if (route.method === "patch") {
+      app.patch(route.path, ...handlers);
     }
   });
 

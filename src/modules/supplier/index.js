@@ -182,11 +182,15 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *         description: Failed to verify managed schedule access or unexpected server error
  */
 const registerSupplierModule = (app) => {
+  // SePay webhook — no auth (called by SePay)
+  app.post("/webhook/sepay/supplier", SupplierController.handleSepaySupplierWebhook.bind(SupplierController));
+
   app.post("/suppliers", verifyJwt, authorize("suppliers", "create"), SupplierController.create.bind(SupplierController));
   app.get("/suppliers", verifyJwt, authorize("suppliers", "read"), SupplierController.getList.bind(SupplierController));
   app.get("/suppliers/:id", verifyJwt, authorize("suppliers", "read"), SupplierController.getDetail.bind(SupplierController));
   app.patch("/suppliers/:id", verifyJwt, authorize("suppliers", "update"), SupplierController.update.bind(SupplierController));
   app.delete("/suppliers/:id", verifyJwt, authorize("suppliers", "delete"), SupplierController.delete.bind(SupplierController));
+  app.post("/suppliers/:id/payments/initiate-qr", verifyJwt, authorize("suppliers", "pay_debt"), SupplierController.initiateQr.bind(SupplierController));
   app.post("/suppliers/:id/payments", verifyJwt, authorize("suppliers", "pay_debt"), SupplierController.payDebt.bind(SupplierController));
 
   console.log("✓ Supplier module registered");

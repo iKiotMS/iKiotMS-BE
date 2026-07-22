@@ -3,6 +3,14 @@ const { User, RefreshToken, Tenant } = require("../../../models");
 const Subscription = require("../../../models/Subscription");
 const Plan = require("../../../models/Plan");
 const otpService = require("../../../services/otpService");
+const { admin, isFirebaseConfigured } = require("../../../config/firebase");
+const { STAFF_ROLES } = require("../../../constants/role");
+
+// Marker messages for role-gated Google sign-in rejections. The controller
+// maps errors carrying `isRoleDenied` to HTTP 403 (rather than 401).
+const ROLE_DENIED_MOBILE =
+  "Ứng dụng chỉ dành cho nhân viên và quản lý";
+const ROLE_DENIED_WEB = "Tài khoản khách hàng không thể đăng nhập tại đây";
 
 class AuthService {
   async login(phoneNumber, password, userAgent) {
@@ -25,6 +33,73 @@ class AuthService {
       throw new Error("Invalid phone number or password");
     }
 
+    return await this.issueSession(user, userAgent);
+  }
+
+  /**
+   * Logs a user in via a Google (Firebase) ID token. The token is verified
+   * with firebase-admin; the user is then resolved by the token's email —
+   * so the account must have that email set on their profile beforehand
+   * (there is no auto-provisioning here). `platform` picks the role gate:
+   *   - "mobile": employee-only (STAFF_ROLES)
+   *   - "web": every role except CUSTOMER
+   */
+  async firebaseLogin(idToken, platform, userAgent) {
+    if (!isFirebaseConfigured()) {
+      throw new Error("Đăng nhập Google chưa được cấu hình trên máy chủ");
+    }
+
+    let decoded;
+    try {
+      decoded = await admin.auth().verifyIdToken(idToken);
+    } catch (error) {
+      throw new Error("Phiên đăng nhập Google không hợp lệ hoặc đã hết hạn");
+    }
+
+    const email = (decoded.email || "").toLowerCase().trim();
+    if (!email) {
+      throw new Error("Tài khoản Google không có địa chỉ email");
+    }
+    if (decoded.email_verified === false) {
+      throw new Error("Email Google chưa được xác thực");
+    }
+
+    // Match by email. No matching user → reject (the stated rule: an email
+    // not present in the DB is refused).
+    const user = await User.findOne({ email }).lean();
+    if (!user) {
+      throw new Error("Email này chưa được đăng ký trong hệ thống");
+    }
+
+    if (
+      user.status === "SUSPENDED" ||
+      user.status === "INACTIVE" ||
+      user.status === "DELETED"
+    ) {
+      throw new Error("Tài khoản không hoạt động");
+    }
+
+    if (platform === "mobile") {
+      if (!STAFF_ROLES.includes(user.role)) {
+        const err = new Error(ROLE_DENIED_MOBILE);
+        err.isRoleDenied = true;
+        throw err;
+      }
+    } else if (user.role === "CUSTOMER") {
+      const err = new Error(ROLE_DENIED_WEB);
+      err.isRoleDenied = true;
+      throw err;
+    }
+
+    return await this.issueSession(user, userAgent);
+  }
+
+  /**
+   * Issues an access/refresh token pair for an already-authenticated user,
+   * persists the refresh token, and stamps lastLogin. Shared by password and
+   * Google sign-in.
+   */
+  async issueSession(user, userAgent) {
     const tokens = this.generateTokens(user);
 
     await RefreshToken.create({
@@ -225,19 +300,22 @@ class AuthService {
 
     const flatUpdate = {};
 
-    // 1. Handle root level fields (like email)
-    if (user.role === "TENANT_OWNER" && data.email !== undefined) {
-      if (data.email !== user.email) {
+    // 1. Handle root-level fields (email). Any role may set their own email —
+    // it is the enrollment key for Google (Firebase) sign-in. Because sign-in
+    // resolves the user by email across the whole collection, uniqueness is
+    // enforced globally, not just within the tenant.
+    if (data.email !== undefined) {
+      const normalizedEmail = String(data.email).toLowerCase().trim();
+      if (normalizedEmail && normalizedEmail !== (user.email || "")) {
         const existingEmail = await User.findOne({
-          tenantId,
-          email: data.email.toLowerCase().trim(),
+          email: normalizedEmail,
           _id: { $ne: userId },
         });
         if (existingEmail) {
           throw new Error("Email already exists");
         }
       }
-      flatUpdate.email = data.email;
+      flatUpdate.email = normalizedEmail;
     }
 
     // 2. Handle nested profile fields based on role permissions
@@ -273,3 +351,5 @@ class AuthService {
 }
 
 module.exports = new AuthService();
+module.exports.ROLE_DENIED_MOBILE = ROLE_DENIED_MOBILE;
+module.exports.ROLE_DENIED_WEB = ROLE_DENIED_WEB;

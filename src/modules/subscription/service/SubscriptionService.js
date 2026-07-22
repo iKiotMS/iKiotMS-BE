@@ -385,6 +385,40 @@ class SubscriptionService {
       .lean();
   }
 
+  // Admin: every plan, including inactive ones, for the management table.
+  async listAllPlans() {
+    return await Plan.find({}).select("-__v").sort({ price: 1 }).lean();
+  }
+
+  // Admin: partial update. `payload` comes from UpdatePlanDTO.toPayload(),
+  // which already excludes planCode/billingCycle (stable keys).
+  async updatePlan(planId, payload) {
+    const plan = await Plan.findByIdAndUpdate(
+      planId,
+      { $set: payload },
+      { new: true, runValidators: true },
+    )
+      .select("-__v")
+      .lean();
+
+    if (!plan) throw new Error("Plan not found");
+    return plan;
+  }
+
+  // Admin: soft enable/disable a plan (removes it from the public /plans list).
+  async setPlanActive(planId, isActive) {
+    const plan = await Plan.findByIdAndUpdate(
+      planId,
+      { $set: { isActive } },
+      { new: true, runValidators: true },
+    )
+      .select("-__v")
+      .lean();
+
+    if (!plan) throw new Error("Plan not found");
+    return plan;
+  }
+
   async upgradePlan(tenantId, userId, newPlanCode) {
     try {
       // 1. Find current subscription

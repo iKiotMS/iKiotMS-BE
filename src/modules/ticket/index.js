@@ -9,6 +9,7 @@ const registerTicketModule = (app) => {
 
   // Admin/Tenant shared route
   app.get("/tickets/:id", verifyJwt, TicketController.getTicketDetail.bind(TicketController));
+  app.delete("/tickets/:id", verifyJwt, TicketController.deleteTicket.bind(TicketController));
 
   // Admin routes
   app.get("/admin/tickets", verifyJwt, TicketController.listAllTickets.bind(TicketController));

@@ -45,6 +45,23 @@ const planSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    // Marketing description shown on the plan card (landing + billing)
+    description: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    // Human-readable bullet points shown to customers (Vietnamese).
+    // Distinct from `features`, which holds feature-flag keys used by checkPlanFeature.
+    displayFeatures: {
+      type: [String],
+      default: [],
+    },
+    // Highlights this plan as the recommended/popular tier in the UI
+    isPopular: {
+      type: Boolean,
+      default: false,
+    },
     isActive: {
       type: Boolean,
       default: true,
