@@ -387,11 +387,15 @@ class ProductService {
         .select("-suppliers")
         .lean();
 
+      const invQuery = {
+        tenantId,
+        productItemId: { $in: items.map((i) => i._id) },
+      };
+      if (query.locationId) invQuery.locationId = query.locationId;
+      if (query.locationType) invQuery.locationType = query.locationType;
+
       const inventories = items.length
-        ? await Inventory.find({
-            tenantId,
-            productItemId: { $in: items.map((i) => i._id) },
-          }).lean()
+        ? await Inventory.find(invQuery).lean()
         : [];
 
       const inventoryMap = {};

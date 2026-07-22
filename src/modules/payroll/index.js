@@ -199,7 +199,6 @@ const PayrollController = require("./controller/PayrollController");
  *       type: object
  *       properties:
  *         cycle: { type: string, enum: [MONTHLY] }
- *         periodStartDay: { type: integer, minimum: 1, maximum: 28 }
  *         approveAfterPeriodEndDays: { type: integer, minimum: 0 }
  *         payAfterPeriodEndDays: { type: integer, minimum: 0 }
  *         autoGenerate: { type: boolean }
@@ -230,7 +229,7 @@ const PayrollController = require("./controller/PayrollController");
  *   post:
  *     tags: [Payroll]
  *     summary: Generate a payroll preview
- *     description: Calculates a completed monthly payroll period without saving it. Period dates are derived from PayrollSetting.periodStartDay; arbitrary date ranges are not accepted.
+ *     description: Calculates a completed monthly payroll period without saving it. Period dates always span the full calendar month; arbitrary date ranges are not accepted.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -375,7 +374,7 @@ const PayrollController = require("./controller/PayrollController");
  *   post:
  *     tags: [Payroll]
  *     summary: Generate and save a draft payroll period
- *     description: payrollMonth is the month containing the period end date. Dates are derived from PayrollSetting.periodStartDay, and the period must already have ended.
+ *     description: payrollMonth is the month containing the period end date. Period dates always span the full calendar month, and the period must already have ended.
  *     security:
  *       - bearerAuth: []
  *     requestBody:

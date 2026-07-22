@@ -30,7 +30,7 @@ describe("Payroll period generation", () => {
     };
 
     jest.spyOn(PayrollSettingService, "getPayrollSetting").mockResolvedValue({
-      data: { periodStartDay: 26 },
+      data: {},
     });
     jest.spyOn(PayrollPeriod, "findOne").mockReturnValue({
       lean: jest.fn().mockResolvedValue(null),
@@ -59,8 +59,8 @@ describe("Payroll period generation", () => {
     expect(PayrollService.generatePayRoll).toHaveBeenCalledWith(
       expect.objectContaining({
         payrollData: expect.objectContaining({
-          periodStartDate: "2026-06-26",
-          periodEndDate: "2026-07-25",
+          periodStartDate: "2026-07-01",
+          periodEndDate: "2026-07-31",
         }),
       }),
     );
@@ -68,8 +68,11 @@ describe("Payroll period generation", () => {
       [
         expect.objectContaining({
           name: "Kỳ lương 07/2026",
-          periodStart: new Date("2026-06-26T00:00:00.000Z"),
-          periodEnd: new Date("2026-07-25T23:59:59.999Z"),
+          // 00:00 ngày 26/06 và 23:59:59.999 ngày 25/07 tại Việt Nam,
+          // 00:00 ngày 01/07 và 23:59:59.999 ngày 31/07 tại Việt Nam,
+          // được lưu dưới dạng hai instant UTC tương ứng trong MongoDB.
+          periodStart: new Date("2026-06-30T17:00:00.000Z"),
+          periodEnd: new Date("2026-07-31T16:59:59.999Z"),
           status: "DRAFT",
         }),
       ],
@@ -90,7 +93,7 @@ describe("Payroll period generation", () => {
 
   test("uses the configured monthly range for payroll preview", async () => {
     jest.spyOn(PayrollSettingService, "getPayrollSetting").mockResolvedValue({
-      data: { periodStartDay: 26 },
+      data: {},
     });
     const previewResult = { data: { payslips: [], skipped: [] } };
     const generateSpy = jest
@@ -106,8 +109,8 @@ describe("Payroll period generation", () => {
     expect(generateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         payrollData: {
-          periodStartDate: "2026-06-26",
-          periodEndDate: "2026-07-25",
+          periodStartDate: "2026-07-01",
+          periodEndDate: "2026-07-31",
           userIds: undefined,
         },
       }),
@@ -118,7 +121,7 @@ describe("Payroll period generation", () => {
   test("rejects a period overlapping an existing payroll period", async () => {
     const conflictingPayrollPeriodId = new mongoose.Types.ObjectId();
     jest.spyOn(PayrollSettingService, "getPayrollSetting").mockResolvedValue({
-      data: { periodStartDay: 1 },
+      data: {},
     });
     jest.spyOn(PayrollPeriod, "findOne").mockReturnValue({
       lean: jest.fn().mockResolvedValue({
@@ -140,7 +143,7 @@ describe("Payroll period generation", () => {
 
   test("rejects a payroll period that has not ended", async () => {
     jest.spyOn(PayrollSettingService, "getPayrollSetting").mockResolvedValue({
-      data: { periodStartDay: 1 },
+      data: {},
     });
     const findOneSpy = jest.spyOn(PayrollPeriod, "findOne");
 

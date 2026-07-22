@@ -5,7 +5,8 @@ class createPayrollSettingDTO {
   constructor(tenantId, data) {
     this.tenantId = tenantId;
     this.cycle = data.cycle;
-    this.periodStartDay = Number(data.periodStartDay);
+    this.periodStartDay =
+      data.periodStartDay === undefined ? undefined : Number(data.periodStartDay);
     this.approveAfterPeriodEndDays = Number(data.approveAfterPeriodEndDays);
     this.payAfterPeriodEndDays = Number(data.payAfterPeriodEndDays);
     this.autoGenerate = data.autoGenerate ?? false;
@@ -35,12 +36,8 @@ class createPayrollSettingDTO {
       error.cycle = "Chu kỳ lương phải thuộc: " + PayrollCycle.join(", ");
     }
 
-    if (
-      !Number.isInteger(this.periodStartDay) ||
-      this.periodStartDay < 1 ||
-      this.periodStartDay > 28
-    ) {
-      error.periodStartDay = "Ngày bắt đầu kỳ lương phải từ 1 đến 28";
+    if (this.periodStartDay !== undefined) {
+      error.periodStartDay = "Không hỗ trợ ngày bắt đầu kỳ lương tùy chỉnh";
     }
 
     if (
@@ -102,7 +99,6 @@ class createPayrollSettingDTO {
     return {
       tenantId: this.tenantId,
       cycle: this.cycle,
-      periodStartDay: this.periodStartDay,
       approveAfterPeriodEndDays: this.approveAfterPeriodEndDays,
       payAfterPeriodEndDays: this.payAfterPeriodEndDays,
       autoGenerate: this.autoGenerate,
