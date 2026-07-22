@@ -56,6 +56,12 @@ class SepayService {
     return match ? match[0].toUpperCase() : null;
   }
 
+  // Match SUP prefix for supplier debt payment references
+  extractSupplierRef(content = '') {
+    const match = content.match(/SUP[0-9A-F]{6,10}/i);
+    return match ? match[0].toUpperCase() : null;
+  }
+
   // Find tenant by their stored SePay webhook key (select: false field — must +select)
   async findTenantByWebhookKey(apiKey) {
     if (!apiKey) return null;
