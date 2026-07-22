@@ -21,6 +21,9 @@ class CheckinDTO {
     if (!this.userId) {
       errors.push("Thiếu thông tin user");
     }
+    if (!this.scheduleId) {
+      errors.push("Thiếu thông tin ca làm việc");
+    }
     if (
       !this.actualCheckinAt ||
       Number.isNaN(this.actualCheckinAt.getTime())

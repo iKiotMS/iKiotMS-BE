@@ -23,11 +23,11 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       allOf:
  *         - $ref: '#/components/schemas/AttendanceLocationRequest'
  *         - type: object
- *           required: [actualCheckinAt]
+ *           required: [scheduleId, actualCheckinAt]
  *           properties:
  *             scheduleId:
  *               type: string
- *               description: Optional normal schedule anchor. If omitted, the current normal schedule is resolved from actualCheckinAt.
+ *               description: Required working schedule ID selected by the employee before check-in.
  *               example: 665aaa1234567890abcdef12
  *             actualCheckinAt:
  *               type: string
@@ -316,7 +316,7 @@ const { authorize } = require("../../middlewares/authorizationMiddleware");
  *       404:
  *         description: Working schedule not found
  *       409:
- *         description: Already checked in
+ *         description: The employee already has an attendance for this working schedule
  *       422:
  *         description: GPS accuracy is not good enough for check-in
  *

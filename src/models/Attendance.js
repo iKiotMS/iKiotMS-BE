@@ -15,6 +15,7 @@ const attendanceSchema = new mongoose.Schema(
     scheduleId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "WorkingSchedule",
+      required: [true, "Working schedule is required"],
     },
     workDate: {
       type: Date,
@@ -71,5 +72,7 @@ const attendanceSchema = new mongoose.Schema(
 );
 attendanceSchema.index({ tenantId: 1, userId: 1, workDate: 1 });
 attendanceSchema.index({ tenantId: 1, userId: 1, status: 1 });
+// Một nhân viên chỉ có đúng một bản ghi chấm công cho mỗi ca làm việc.
+attendanceSchema.index({ userId: 1, scheduleId: 1 }, { unique: true });
 
 module.exports = mongoose.model("Attendance", attendanceSchema);

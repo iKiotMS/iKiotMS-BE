@@ -214,13 +214,22 @@ class WorkingScheduleController {
       );
 
       if (!hasPermission(req.user.role, "schedules", "read")) {
-        const scheduleUserId = result.userId?._id || result.userId;
-        if (String(scheduleUserId) !== String(req.user.userId)) {
+        const assignedUsers = Array.isArray(result.userId)
+          ? result.userId
+          : [result.userId];
+        const assignedUser = assignedUsers.find(
+          (user) => String(user?._id || user) === String(req.user.userId),
+        );
+
+        if (!assignedUser) {
           return res.status(403).json({
             success: false,
             message: "Forbidden: You do not have permission to access this schedule",
           });
         }
+
+        // Staff chỉ nhận dữ liệu chấm công của chính mình trong lịch này.
+        return res.status(200).json({ ...result, userId: assignedUser });
       }
 
       return res.status(200).json(result);

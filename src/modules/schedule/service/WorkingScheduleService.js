@@ -252,21 +252,14 @@ class WorkingScheduleService {
           .map((user) => getUserIdText(user)),
       ),
     ];
-    const workDates = schedules
-      .map((schedule) => schedule.workDate)
+    const scheduleIds = schedules
+      .map((schedule) => schedule._id)
       .filter(Boolean)
-      .map((workDate) => new Date(workDate));
+      .map(String);
 
-    if (!userIds.length || !workDates.length) {
+    if (!userIds.length || !scheduleIds.length) {
       return attachAttendancesToUsers(schedules, {}, detail, lateGraceMinutes);
     }
-
-    const startWorkDate = new Date(
-      Math.min(...workDates.map((workDate) => workDate.getTime())),
-    );
-    const endWorkDate = new Date(
-      Math.max(...workDates.map((workDate) => workDate.getTime())),
-    );
 
     const selectFields = detail
       ? "scheduleId userId workDate status actualCheckinAt actualCheckoutAt checkInLocation checkOutLocation workedMinutes overtimeMinute lateMinutes"
@@ -275,26 +268,20 @@ class WorkingScheduleService {
     const attendances = await Attendance.find({
       tenantId,
       userId: { $in: userIds },
-      workDate: {
-        $gte: startWorkDate,
-        $lte: endWorkDate,
-      },
+      scheduleId: { $in: scheduleIds },
     })
       .select(selectFields)
       .lean();
 
-    const attendanceByUserAndWorkDate = {};
+    const attendanceByScheduleAndUser = {};
     attendances.forEach((attendance) => {
-      const key = getAttendanceKey(attendance.workDate, attendance.userId);
-      if (!attendanceByUserAndWorkDate[key]) {
-        attendanceByUserAndWorkDate[key] = [];
-      }
-      attendanceByUserAndWorkDate[key].push(attendance);
+      const key = getAttendanceKey(attendance.scheduleId, attendance.userId);
+      attendanceByScheduleAndUser[key] = attendance;
     });
 
     return attachAttendancesToUsers(
       schedules,
-      attendanceByUserAndWorkDate,
+      attendanceByScheduleAndUser,
       detail,
       lateGraceMinutes,
     );
