@@ -11,7 +11,6 @@ module.exports = {
   Brand: require("./Brand"),
   Category: require("./Category"),
   Supplier: require("./Supplier"),
-  SupplierPaymentIntent: require("./SupplierPaymentIntent"),
   Product: require("./Product"),
   ProductItem: require("./ProductItem"),
   Inventory: require("./Inventory"),
