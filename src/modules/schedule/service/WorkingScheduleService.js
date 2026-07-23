@@ -596,6 +596,76 @@ class WorkingScheduleService {
   }
 
   // Lấy danh sách lịch làm việc, có filter theo nhân viên, ngày và trạng thái.
+  async updateWorkingSchedule(
+    tenantId,
+    scheduleId,
+    updatedBy,
+    data,
+    userRole,
+  ) {
+    const dto = new BulkWorkingScheduleDTO(tenantId, updatedBy, {
+      schedules: [data],
+    });
+    const validation = dto.validate();
+    if (!validation.isValid) {
+      const error = new Error("Dữ liệu lịch làm việc không hợp lệ");
+      error.statusCode = 400;
+      error.errors = validation.errors;
+      throw error;
+    }
+
+    const current = await WorkingSchedule.findOne({
+      _id: scheduleId,
+      tenantId,
+      status: "SCHEDULED",
+    });
+    if (!current) {
+      const error = new Error("Không tìm thấy lịch làm việc có thể sửa");
+      error.statusCode = 404;
+      throw error;
+    }
+    if (await Attendance.exists({ tenantId, scheduleId })) {
+      const error = new Error("Không thể sửa ca đã phát sinh chấm công");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const input = dto.schedules[0];
+    const userIds = this.normalizeScheduleUserIds(input.userId);
+    await this.validateTenantStaff(tenantId, userIds, userRole);
+    const templates = await this.getTenantShiftTemplates(tenantId, [
+      input.shiftTemplateId,
+    ]);
+    const template = templates[String(input.shiftTemplateId)];
+    const workDate = buildWorkDate(input.workDate);
+    const { startAt, endAt } = configWorkAndEndDate(input.workDate, template);
+    await this.checkScheduleOverlaps(tenantId, [
+      {
+        userId: userIds,
+        startAt,
+        endAt,
+        scheduleIdToExclude: scheduleId,
+      },
+    ]);
+
+    const updated = await WorkingSchedule.findOneAndUpdate(
+      { _id: scheduleId, tenantId, status: "SCHEDULED" },
+      {
+        $set: {
+          userId: userIds,
+          shiftTemplateId: input.shiftTemplateId,
+          workDate,
+          startAt,
+          endAt,
+          scheduleType: input.scheduleType,
+          managedBy: updatedBy,
+        },
+      },
+      { new: true, runValidators: true },
+    );
+    return { message: "Cập nhật lịch làm việc thành công", data: updated };
+  }
+
   async getWorkingScheduleList(
     tenantId,
     {

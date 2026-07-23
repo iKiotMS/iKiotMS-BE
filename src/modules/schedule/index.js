@@ -163,6 +163,29 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         description: Deleted
  *       409:
  *         description: Schedule has attendance and cannot be deleted or replaced
+ *   patch:
+ *     tags: [Schedule]
+ *     summary: Update a working schedule in place
+ *     description: Updates assignees, shift template, work date, and schedule type without changing the schedule ID. Schedules with attendance cannot be updated.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId, shiftTemplateId, workDate]
+ *             properties:
+ *               userId: { oneOf: [{ type: string }, { type: array, items: { type: string } }] }
+ *               shiftTemplateId: { type: string }
+ *               workDate: { type: string, format: date }
+ *               scheduleType: { type: string, enum: [NORMAL, OVERTIME] }
+ *     responses:
+ *       200: { description: Working schedule updated }
+ *       400: { description: Validation error or overlapping schedule }
+ *       404: { description: Editable schedule not found }
+ *       409: { description: Schedule already has attendance }
  *
  * /working-schedules/{scheduleId}/users/{userId}:
  *   delete:
@@ -469,6 +492,15 @@ function registerScheduleModule(app) {
     verifyJwt,
     authorize("schedules", ["delete"]),
     ShiftTemplateController.deleteShiftTemplate.bind(ShiftTemplateController),
+  );
+
+  app.patch(
+    "/working-schedules/:scheduleId",
+    verifyJwt,
+    authorize("schedules", ["update"]),
+    WorkingScheduleController.updateWorkingSchedule.bind(
+      WorkingScheduleController,
+    ),
   );
 
   app.post(

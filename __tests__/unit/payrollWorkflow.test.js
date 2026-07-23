@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const Attendance = require("../../src/models/Attendance");
 const CashFlow = require("../../src/models/CashFlow");
 const PayrollPeriod = require("../../src/models/PayrollPeriod");
 const Payslip = require("../../src/models/Payslip");
@@ -8,6 +9,31 @@ const NotificationService = require("../../src/services/notificationService");
 describe("Payroll draft editing and status workflow", () => {
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  test("computes draft recalculation state from attendance timestamps", async () => {
+    const changedAt = new Date("2025-08-01T00:00:00.000Z");
+    const query = {
+      sort: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ updatedAt: changedAt }),
+    };
+    jest.spyOn(Attendance, "findOne").mockReturnValue(query);
+
+    const result = await PayrollService.getAttendanceRecalculationState(
+      new mongoose.Types.ObjectId(),
+      {
+        status: "DRAFT",
+        periodStart: new Date("2025-07-01"),
+        periodEnd: new Date("2025-07-31"),
+        createdAt: new Date("2025-07-31T12:00:00.000Z"),
+      },
+    );
+
+    expect(result).toEqual({
+      needsRecalculation: true,
+      attendanceChangedAt: changedAt,
+    });
   });
 
   test("replaces manual adjustments and recalculates net salary", async () => {
@@ -65,6 +91,12 @@ describe("Payroll draft editing and status workflow", () => {
       status: "DRAFT",
       save: jest.fn().mockResolvedValue(undefined),
     };
+    jest
+      .spyOn(PayrollService, "getAttendanceRecalculationState")
+      .mockResolvedValue({
+        needsRecalculation: false,
+        attendanceChangedAt: null,
+      });
     const session = {
       withTransaction: jest.fn(async (callback) => callback()),
       endSession: jest.fn(),

@@ -75,6 +75,7 @@ class AttendanceController {
         success: false,
         message: error.message,
         errors: error.errors,
+        payrollPeriodId: error.payrollPeriodId,
       });
     }
   }
@@ -122,6 +123,7 @@ class AttendanceController {
         success: false,
         message: error.message,
         errors: error.errors,
+        payrollPeriodId: error.payrollPeriodId,
       });
     }
   }
@@ -145,6 +147,7 @@ class AttendanceController {
         success: false,
         message: error.message,
         errors: error.errors,
+        payrollPeriodId: error.payrollPeriodId,
       });
     }
   }
@@ -167,6 +170,7 @@ class AttendanceController {
         success: false,
         message: error.message,
         errors: error.errors,
+        payrollPeriodId: error.payrollPeriodId,
       });
     }
   }
@@ -221,6 +225,7 @@ class AttendanceController {
         success: false,
         message: error.message,
         errors: error.errors,
+        payrollPeriodId: error.payrollPeriodId,
       });
     }
   }
@@ -254,6 +259,7 @@ class AttendanceController {
         success: false,
         message: error.message,
         errors: error.errors,
+        payrollPeriodId: error.payrollPeriodId,
       });
     }
   }
