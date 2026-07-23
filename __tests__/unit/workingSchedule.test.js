@@ -692,4 +692,42 @@ describe("WorkingScheduleService attendance lock", () => {
     ).rejects.toMatchObject({ statusCode: 409 });
     expect(WorkingSchedule.findOneAndUpdate).not.toHaveBeenCalled();
   });
+
+  test("updates a schedule in place without changing its id", async () => {
+    const validateSpy = jest
+      .spyOn(WorkingScheduleService, "validateTenantStaff")
+      .mockResolvedValue(undefined);
+    const templateSpy = jest
+      .spyOn(WorkingScheduleService, "getTenantShiftTemplates")
+      .mockResolvedValue({
+        shift1: { _id: "shift1", startTime: "08:00", endTime: "17:00" },
+      });
+    const overlapSpy = jest
+      .spyOn(WorkingScheduleService, "checkScheduleOverlaps")
+      .mockResolvedValue(undefined);
+    WorkingSchedule.findOneAndUpdate.mockResolvedValue({ _id: "schedule1" });
+
+    const result = await WorkingScheduleService.updateWorkingSchedule(
+      "tenant1",
+      "schedule1",
+      "manager1",
+      {
+        userId: ["staff1"],
+        shiftTemplateId: "shift1",
+        workDate: "2025-07-23",
+        scheduleType: "NORMAL",
+      },
+      "TENANT_OWNER",
+    );
+
+    expect(result.data._id).toBe("schedule1");
+    expect(WorkingSchedule.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: "schedule1" }),
+      expect.objectContaining({ $set: expect.any(Object) }),
+      expect.any(Object),
+    );
+    validateSpy.mockRestore();
+    templateSpy.mockRestore();
+    overlapSpy.mockRestore();
+  });
 });

@@ -1,5 +1,8 @@
 const BaseService = require("../../../common/services/baseService");
 const { Attendance, User, WorkingSchedule } = require("../../../models");
+const {
+  assertAttendanceCanChange,
+} = require("./PayrollAttendancePolicy");
 
 class ManageAttendanceService extends BaseService {
   sameId(left, right) {
@@ -342,6 +345,8 @@ class ManageAttendanceService extends BaseService {
       throw error;
     }
 
+    await assertAttendanceCanChange(tenantId, attendance.workDate);
+
     attendance.actualCheckoutAt = dto.actualCheckoutAt;
     attendance.workedMinutes = Math.floor(
       (dto.actualCheckoutAt.getTime() - attendance.actualCheckinAt.getTime()) /
@@ -378,6 +383,7 @@ class ManageAttendanceService extends BaseService {
 
     this.assertCanManuallyCheckout(manager, { userId: targetUser });
     const now = new Date();
+    await assertAttendanceCanChange(tenantId, schedule.workDate);
 
     if (dto.status === "ABSENT") {
       if (!schedule.endAt || new Date(schedule.endAt) > now) {
@@ -411,7 +417,7 @@ class ManageAttendanceService extends BaseService {
     }
 
     try {
-      return await Attendance.create({
+      const attendance = await Attendance.create({
         tenantId,
         userId: dto.userId,
         scheduleId: schedule._id,
@@ -434,6 +440,7 @@ class ManageAttendanceService extends BaseService {
         manuallyCreatedAt: now,
         manualCreationReason: dto.reason,
       });
+      return attendance;
     } catch (error) {
       if (error?.code === 11000) {
         const conflict = new Error("Nhân viên đã có chấm công cho ca này");

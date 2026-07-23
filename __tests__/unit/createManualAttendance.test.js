@@ -3,6 +3,9 @@ jest.mock("../../src/models", () => ({
   WorkingSchedule: { findOne: jest.fn() },
   User: { findOne: jest.fn() },
 }));
+jest.mock("../../src/models/PayrollPeriod", () => ({
+  findOne: jest.fn().mockResolvedValue(null),
+}));
 
 const { Attendance, WorkingSchedule, User } = require("../../src/models");
 const CreateManualAttendanceDTO = require("../../src/modules/attendances/dto/CreateManualAttendanceDTO");

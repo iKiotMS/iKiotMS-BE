@@ -53,6 +53,25 @@ class WorkingScheduleController {
     }
   }
 
+  async updateWorkingSchedule(req, res) {
+    try {
+      const result = await WorkingScheduleService.updateWorkingSchedule(
+        req.user.tenantId,
+        req.params.scheduleId,
+        req.user.userId,
+        this.getRequestData(req),
+        req.user.role,
+      );
+      return res.status(200).json(result);
+    } catch (error) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+        errors: error.errors,
+      });
+    }
+  }
+
   async getBranchWorkingSchedules(req, res) {
     try {
       const tenantId = req.user.tenantId;

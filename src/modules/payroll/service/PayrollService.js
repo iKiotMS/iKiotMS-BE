@@ -44,6 +44,29 @@ function mergeTimeRanges(ranges) {
 }
 
 class PayrollService {
+  async getAttendanceRecalculationState(tenantId, payrollPeriod) {
+    if (payrollPeriod.status !== "DRAFT") {
+      return { needsRecalculation: false, attendanceChangedAt: null };
+    }
+
+    const latestAttendance = await Attendance.findOne({
+      tenantId,
+      workDate: {
+        $gte: payrollPeriod.periodStart,
+        $lte: payrollPeriod.periodEnd,
+      },
+      updatedAt: { $gt: payrollPeriod.createdAt },
+    })
+      .sort({ updatedAt: -1 })
+      .select("updatedAt")
+      .lean();
+
+    return {
+      needsRecalculation: Boolean(latestAttendance),
+      attendanceChangedAt: latestAttendance?.updatedAt || null,
+    };
+  }
+
   //===============================================================================
   //==================== Helper Functions ===========================================
   //===============================================================================
@@ -1035,10 +1058,13 @@ class PayrollService {
       }
     });
 
-    const dataWithCost = data.map((p) => ({
-      ...p,
-      totalCost: costMap[p._id.toString()] || 0,
-    }));
+    const dataWithCost = await Promise.all(
+      data.map(async (p) => ({
+        ...p,
+        totalCost: costMap[p._id.toString()] || 0,
+        ...(await this.getAttendanceRecalculationState(tenantId, p)),
+      })),
+    );
 
     return {
       data: dataWithCost,
@@ -1107,6 +1133,7 @@ class PayrollService {
     const payrollPeriodWithCost = {
       ...payrollPeriod,
       totalCost,
+      ...(await this.getAttendanceRecalculationState(tenantId, payrollPeriod)),
     };
 
     return {
@@ -1335,6 +1362,19 @@ class PayrollService {
       );
       error.statusCode = 409;
       throw error;
+    }
+    if (action === "SUBMIT") {
+      const attendanceState = await this.getAttendanceRecalculationState(
+        tenantId,
+        payrollPeriod,
+      );
+      if (attendanceState.needsRecalculation) {
+        const error = new Error(
+          "Attendance đã thay đổi sau khi tạo kỳ lương. Hãy hủy và tạo lại kỳ lương trước khi gửi duyệt",
+        );
+        error.statusCode = 409;
+        throw error;
+      }
     }
     if (
       action === "SUBMIT" &&

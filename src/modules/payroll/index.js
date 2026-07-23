@@ -579,7 +579,7 @@ const PayrollController = require("./controller/PayrollController");
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden }
  *       404: { description: Payroll period not found }
- *       409: { description: Invalid current status }
+ *       409: { description: Invalid current status or attendance changed and payroll must be regenerated }
  *       422: { description: Payroll period has no payslips }
  *
  * /payroll/periods/{periodId}/return-to-draft:

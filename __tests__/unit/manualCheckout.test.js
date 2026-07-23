@@ -2,6 +2,9 @@ jest.mock("../../src/models", () => ({
   Attendance: { findOne: jest.fn() },
   User: {},
 }));
+jest.mock("../../src/models/PayrollPeriod", () => ({
+  findOne: jest.fn().mockResolvedValue(null),
+}));
 
 const { Attendance } = require("../../src/models");
 const ManualCheckoutDTO = require("../../src/modules/attendances/dto/ManualCheckoutDTO");
