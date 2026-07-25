@@ -178,7 +178,7 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
     });
   });
 
-  test("merges users into an existing schedule with the same shift/date/time", async () => {
+  test("rejects an identical schedule for an already assigned staff member", async () => {
     schedules.push({
       _id: "existingSchedule",
       tenantId: "tenant1",
@@ -193,38 +193,36 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
       status: "SCHEDULED",
     });
 
-    const result = await WorkingScheduleService.createBulkWorkingSchedules(
-      "tenant1",
-      "manager1",
-      {
-        schedules: [
-          {
-            userId: ["staffA", "staffB"],
-            shiftTemplateId: "morningShift",
-            workDate: "2026-07-01",
-          },
-        ],
-      },
-      "TENANT_OWNER",
-    );
+    await expect(
+      WorkingScheduleService.createBulkWorkingSchedules(
+        "tenant1",
+        "manager1",
+        {
+          schedules: [
+            {
+              userId: "staffA",
+              shiftTemplateId: "morningShift",
+              workDate: "2026-07-01",
+            },
+          ],
+        },
+        "TENANT_OWNER",
+      ),
+    ).rejects.toMatchObject({
+      message: "Bị trùng ca làm việc ngày 2026-07-01",
+      statusCode: 409,
+      duplicatedWorkingSchedule: expect.objectContaining({
+        _id: "existingSchedule",
+      }),
+      conflictingSchedules: [
+        expect.objectContaining({ _id: "existingSchedule" }),
+      ],
+    });
 
-    expect(result.message).toBe("Phân ca thành công");
-    expect(result.data).toHaveLength(1);
     expect(WorkingSchedule.create).not.toHaveBeenCalled();
-    expect(WorkingSchedule.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: "existingSchedule", tenantId: "tenant1" },
-      {
-        $addToSet: {
-          userId: { $each: ["staffA", "staffB"] },
-        },
-        $set: {
-          managedBy: "manager1",
-        },
-      },
-      { new: true, runValidators: true },
-    );
+    expect(WorkingSchedule.findOneAndUpdate).not.toHaveBeenCalled();
     expect(schedules).toHaveLength(1);
-    expect(schedules[0].userId).toEqual(["staffA", "staffB"]);
+    expect(schedules[0].userId).toEqual(["staffA"]);
   });
 
   test("creates a new schedule when no matching schedule exists", async () => {
@@ -373,8 +371,11 @@ describe("WorkingScheduleService.createBulkWorkingSchedules", () => {
         "TENANT_OWNER",
       ),
     ).rejects.toMatchObject({
-      message: "Nhân viên đã có lịch làm việc bị trùng thời gian",
-      statusCode: 400,
+      message: "Bị trùng ca làm việc ngày 2026-07-01",
+      statusCode: 409,
+      conflictingSchedules: [
+        expect.objectContaining({ _id: "existingSchedule" }),
+      ],
     });
 
     expect(WorkingSchedule.findOneAndUpdate).not.toHaveBeenCalled();
