@@ -676,9 +676,9 @@ class StaffService extends BaseService {
       ...accessFilter,
     };
 
-    const staff = await User.findOne(targetFilter).select(
-      "role leaveBalance",
-    );
+    const staff = await User.findOne(targetFilter)
+      .select("role leaveBalance")
+      .lean();
 
     if (!staff) {
       const error = new Error(
@@ -696,10 +696,16 @@ class StaffService extends BaseService {
       throw error;
     }
 
-    const currentAnnualLeaveDays =
-      staff.leaveBalance?.annualLeaveDays ?? 12;
-    const currentRemainingDays =
-      staff.leaveBalance?.remainingDays ?? currentAnnualLeaveDays;
+    const hasAnnualLeaveDays =
+      typeof staff.leaveBalance?.annualLeaveDays === "number";
+    const hasRemainingDays =
+      typeof staff.leaveBalance?.remainingDays === "number";
+    const currentAnnualLeaveDays = hasAnnualLeaveDays
+      ? staff.leaveBalance.annualLeaveDays
+      : 12;
+    const currentRemainingDays = hasRemainingDays
+      ? staff.leaveBalance.remainingDays
+      : currentAnnualLeaveDays;
     const usedDays = currentAnnualLeaveDays - currentRemainingDays;
 
     if (usedDays < 0) {
@@ -722,8 +728,12 @@ class StaffService extends BaseService {
     const updatedStaff = await User.findOneAndUpdate(
       {
         ...targetFilter,
-        "leaveBalance.annualLeaveDays": currentAnnualLeaveDays,
-        "leaveBalance.remainingDays": currentRemainingDays,
+        "leaveBalance.annualLeaveDays": hasAnnualLeaveDays
+          ? currentAnnualLeaveDays
+          : { $exists: false },
+        "leaveBalance.remainingDays": hasRemainingDays
+          ? currentRemainingDays
+          : { $exists: false },
       },
       {
         $set: {
@@ -792,9 +802,9 @@ class StaffService extends BaseService {
       ...accessFilter,
     };
 
-    const staff = await User.findOne(targetFilter).select(
-      "role leaveBalance",
-    );
+    const staff = await User.findOne(targetFilter)
+      .select("role leaveBalance")
+      .lean();
 
     if (!staff) {
       const error = new Error(
@@ -812,10 +822,16 @@ class StaffService extends BaseService {
       throw error;
     }
 
-    const currentAnnualLeaveDays =
-      staff.leaveBalance?.annualLeaveDays ?? 12;
-    const currentRemainingDays =
-      staff.leaveBalance?.remainingDays ?? currentAnnualLeaveDays;
+    const hasAnnualLeaveDays =
+      typeof staff.leaveBalance?.annualLeaveDays === "number";
+    const hasRemainingDays =
+      typeof staff.leaveBalance?.remainingDays === "number";
+    const currentAnnualLeaveDays = hasAnnualLeaveDays
+      ? staff.leaveBalance.annualLeaveDays
+      : 12;
+    const currentRemainingDays = hasRemainingDays
+      ? staff.leaveBalance.remainingDays
+      : currentAnnualLeaveDays;
     const usedDays = currentAnnualLeaveDays - currentRemainingDays;
 
     if (usedDays !== 0) {
@@ -829,8 +845,12 @@ class StaffService extends BaseService {
     const updatedStaff = await User.findOneAndUpdate(
       {
         ...targetFilter,
-        "leaveBalance.annualLeaveDays": currentAnnualLeaveDays,
-        "leaveBalance.remainingDays": currentRemainingDays,
+        "leaveBalance.annualLeaveDays": hasAnnualLeaveDays
+          ? currentAnnualLeaveDays
+          : { $exists: false },
+        "leaveBalance.remainingDays": hasRemainingDays
+          ? currentRemainingDays
+          : { $exists: false },
       },
       {
         $set: {

@@ -149,6 +149,63 @@ describe("StaffService business rules", () => {
     expect(mockUser.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
+  test("creates leave balance when the embedded fields do not exist", async () => {
+    jest
+      .spyOn(StaffService, "buildStaffAccessFilter")
+      .mockResolvedValue({});
+    mockUser.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          _id: STAFF_ID,
+          role: "STAFF",
+        }),
+      }),
+    });
+
+    const updatedStaff = {
+      _id: STAFF_ID,
+      leaveBalance: { annualLeaveDays: 15, remainingDays: 15 },
+    };
+    const updateQuery = {
+      select: jest.fn(),
+      populate: jest.fn(),
+    };
+    updateQuery.select.mockReturnValue(updateQuery);
+    updateQuery.populate
+      .mockReturnValueOnce(updateQuery)
+      .mockResolvedValueOnce(updatedStaff);
+    mockUser.findOneAndUpdate.mockReturnValue(updateQuery);
+
+    const result = await StaffService.createLeaveBalance({
+      tenantId: TENANT_ID,
+      requesterId: "64a000000000000000000005",
+      requesterRole: "TENANT_OWNER",
+      staffId: STAFF_ID,
+      data: { annualLeaveDays: 15 },
+    });
+
+    expect(mockUser.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT_ID,
+        _id: STAFF_ID,
+        "leaveBalance.annualLeaveDays": { $exists: false },
+        "leaveBalance.remainingDays": { $exists: false },
+      }),
+      {
+        $set: {
+          "leaveBalance.annualLeaveDays": 15,
+          "leaveBalance.remainingDays": 15,
+        },
+      },
+      { new: true, runValidators: true },
+    );
+    expect(result.leaveBalance).toEqual({
+      annualLeaveDays: 15,
+      remainingDays: 15,
+      usedDays: 0,
+    });
+  });
+
   test("rejects deactivating an already inactive staff account", async () => {
     const session = createSession();
     const staff = {
