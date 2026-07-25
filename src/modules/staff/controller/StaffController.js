@@ -20,6 +20,7 @@ class StaffController {
     try {
       const tenantId = req.user.tenantId;
       const userRole = req.user.role;
+      const createdBy = req.user.userId;
       const data = req.body;
       const subscription = req.subscription;
 
@@ -27,6 +28,7 @@ class StaffController {
         tenantId,
         data,
         userRole,
+        createdBy,
         subscription,
       });
 
@@ -164,6 +166,7 @@ class StaffController {
         userRole,
         staffId,
         replacementManagerId: data.replacementManagerId,
+        deletionReason: data.deletionReason,
       });
 
       res.status(200).json({ message: result.message, staff: result.data });

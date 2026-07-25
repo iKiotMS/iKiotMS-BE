@@ -1,6 +1,7 @@
-const createStaffDTO = (tenantId, data) => {
+const createStaffDTO = (tenantId, data, createdBy) => {
   return {
     tenantId: tenantId,
+    createdBy,
     email: data.email,
     phoneNumber: data.phoneNumber,
     role: data.role,
