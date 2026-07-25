@@ -222,11 +222,14 @@ class WorkingScheduleService {
         .lean();
 
       if (existingSchedule) {
+        const shiftName =
+          existingSchedule.shiftTemplateId?.name || "ca làm việc";
         const error = new Error(
-          "Nhân viên đã có lịch làm việc bị trùng thời gian",
+          `Bị trùng ${shiftName} ngày ${getLocalDateText(existingSchedule.workDate)}`,
         );
-        error.statusCode = 400;
+        error.statusCode = 409;
         error.duplicatedWorkingSchedule = existingSchedule;
+        error.conflictingSchedules = [existingSchedule];
         throw error;
       }
     }
@@ -534,12 +537,7 @@ class WorkingScheduleService {
         status: { $nin: ["CANCELLED", "DELETED"] },
       });
 
-      await this.checkScheduleOverlaps(tenantId, [
-        {
-          ...schedule,
-          scheduleIdToExclude: existingSchedule?._id,
-        },
-      ]);
+      await this.checkScheduleOverlaps(tenantId, [schedule]);
 
       if (existingSchedule) {
         const updatedSchedule = await WorkingSchedule.findOneAndUpdate(

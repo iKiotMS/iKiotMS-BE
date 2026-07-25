@@ -29,6 +29,11 @@ class WorkingScheduleController {
         success: false,
         message: error.message,
         duplicatedWorkingSchedule: error.duplicatedWorkingSchedule,
+        conflictingSchedules:
+          error.conflictingSchedules ||
+          (error.duplicatedWorkingSchedule
+            ? [error.duplicatedWorkingSchedule]
+            : undefined),
       });
     }
   }

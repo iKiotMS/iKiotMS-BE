@@ -41,6 +41,25 @@ const userSchema = new mongoose.Schema(
       enum: ["ACTIVE", "INACTIVE", "SUSPENDED", "DELETED"],
       default: "ACTIVE",
     },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletionReason: {
+      type: String,
+      trim: true,
+      default: null,
+    },
     lastLogin: {
       type: Date,
     },

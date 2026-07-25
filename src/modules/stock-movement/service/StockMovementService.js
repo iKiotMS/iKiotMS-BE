@@ -149,6 +149,9 @@ class StockMovementService {
         payload.fromLocationType = role === "WAREHOUSE_MANAGER" ? "warehouse" : "branch";
       }
       if (!payload.fromLocationId || !payload.fromLocationType) throw new Error("fromLocation is required");
+      if (String(payload.fromLocationId) === String(payload.toLocationId)) {
+        throw new Error("Source and destination locations cannot be the same");
+      }
       if (payload.details) {
         for (const item of payload.details) {
           if (!item.quantity || item.quantity <= 0) throw new Error("quantity must be > 0");
@@ -157,6 +160,12 @@ class StockMovementService {
             item.importPrice = productItem ? (productItem.costPrice || 0) : 0;
           }
         }
+        await this._validateSourceStock(
+          tenantId,
+          payload.fromLocationId,
+          payload.fromLocationType,
+          payload.details,
+        );
       }
     } else if (movementType === "ADJUST") {
       if (isManagedStaff) {
@@ -282,20 +291,14 @@ class StockMovementService {
         }
 
         // Check stock limits against fromLocation
+        await this._validateSourceStock(
+          tenantId,
+          request.fromLocationId,
+          request.fromLocationType,
+          details,
+          session,
+        );
         for (const item of details) {
-          if (!item.productItemId || !item.quantity || item.quantity <= 0) throw new Error("Valid positive quantity is required");
-          
-          const inventory = await mongoose.model("Inventory").findOne({
-            tenantId,
-            locationId: request.fromLocationId,
-            locationType: request.fromLocationType,
-            productItemId: item.productItemId
-          }).session(session);
-
-          const currentStock = inventory ? inventory.stock : 0;
-          if (item.quantity > currentStock) {
-            throw new Error(`Quantity ${item.quantity} exceeds available stock ${currentStock} at source location`);
-          }
           if (item.importPrice === undefined || item.importPrice === null) {
             const productItem = await mongoose.model("ProductItem").findOne({ _id: item.productItemId, tenantId }).lean();
             item.importPrice = productItem ? (productItem.costPrice || 0) : 0;
@@ -402,6 +405,15 @@ class StockMovementService {
     }
 
     if (request.status !== "DRAFT") throw new Error("Can only OPEN a DRAFT request");
+
+    if (request.movementType === "EXPORT" || request.movementType === "RETURN") {
+      await this._validateSourceStock(
+        user.tenantId,
+        request.fromLocationId,
+        request.fromLocationType,
+        request.details,
+      );
+    }
     
     request.status = "OPENING";
     await request.save();
@@ -436,6 +448,15 @@ class StockMovementService {
 
     if (request.status !== "OPENING") throw new Error("Can only CLOSE an OPENING request");
     if (!request.details || request.details.length === 0) throw new Error("Cannot close request without details");
+
+    if (request.movementType === "EXPORT" || request.movementType === "RETURN") {
+      await this._validateSourceStock(
+        user.tenantId,
+        request.fromLocationId,
+        request.fromLocationType,
+        request.details,
+      );
+    }
     
     request.status = "CLOSED";
     await request.save();
@@ -481,6 +502,14 @@ class StockMovementService {
       const lowStockCrossings = [];
 
       if (request.movementType === "EXPORT" || request.movementType === "RETURN") {
+        await this._validateSourceStock(
+          tenantId,
+          request.fromLocationId,
+          request.fromLocationType,
+          request.details,
+          session,
+        );
+
         for (const item of request.details) {
           const updated = await InventoryService.adjustStock(
             tenantId,
@@ -683,6 +712,19 @@ class StockMovementService {
         }
         const difference = item.receivedQuantity - item.quantity;
         if (difference !== 0) {
+          if (difference < 0) {
+            const inv = await mongoose.model("Inventory").findOne({
+              tenantId,
+              locationId: request.fromLocationId,
+              locationType: request.fromLocationType,
+              productItemId: item.productItemId,
+            }).session(session);
+            const currentStock = inv ? inv.stock : 0;
+            if (currentStock + difference < 0) {
+              throw new Error(`Adjustment would reduce stock below 0 (current stock: ${currentStock}, adjustment: ${difference})`);
+            }
+          }
+
           hasDifference = true;
           await InventoryService.adjustStock(
             tenantId,
@@ -924,6 +966,31 @@ class StockMovementService {
       if (r.fromLocationId) r.fromLocationName = locationMap[r.fromLocationId.toString()] || null;
       if (r.toLocationId) r.toLocationName = locationMap[r.toLocationId.toString()] || null;
     });
+  }
+
+  async _validateSourceStock(tenantId, locationId, locationType, details, session = null) {
+    if (!details || details.length === 0) return;
+    for (const item of details) {
+      if (!item.productItemId || !item.quantity || item.quantity <= 0) {
+        throw new Error("Valid positive quantity is required");
+      }
+      const query = mongoose.model("Inventory").findOne({
+        tenantId,
+        locationId,
+        locationType,
+        productItemId: item.productItemId,
+      });
+      if (session) {
+        query.session(session);
+      }
+      const inventory = await query;
+      const currentStock = inventory ? inventory.stock : 0;
+      if (item.quantity > currentStock) {
+        throw new Error(
+          `Quantity ${item.quantity} exceeds available stock ${currentStock} at source location`,
+        );
+      }
+    }
   }
 }
 

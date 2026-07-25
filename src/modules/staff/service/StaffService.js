@@ -1,4 +1,12 @@
-const { User, Branch, Warehouse } = require("../../../models");
+const {
+  User,
+  Branch,
+  Warehouse,
+  RefreshToken,
+} = require("../../../models");
+const mongoose = require("mongoose");
+const LeaveRequest = require("../../../models/LeaveRequest");
+const Paysheet = require("../../../models/Paysheet");
 const BaseService = require("../../../common/services/baseService");
 const { STAFF_ROLES } = require("../../../constants/role");
 const { createStaffDTO, updateStaffDTO } = require("../dto/StaffDTO");
@@ -64,6 +72,74 @@ class StaffService extends BaseService {
     if (!staff) {
       throw new Error("Invalid staff ID");
     }
+  }
+
+  async validatePaySheetAssignment(tenantId, paySheetId) {
+    if (paySheetId === undefined || paySheetId === null) {
+      return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(paySheetId)) {
+      throw staffValidationError(
+        "paySheetId",
+        "Mã bảng lương không hợp lệ",
+      );
+    }
+
+    const paySheetExists = await Paysheet.exists({
+      _id: paySheetId,
+      tenantId,
+      status: "ACTIVE",
+    });
+
+    if (!paySheetExists) {
+      throw staffValidationError(
+        "paySheetId",
+        "Bảng lương không tồn tại hoặc đã bị xóa",
+      );
+    }
+  }
+
+  async assertNoActiveHandoverAssignment(tenantId, staffId, session) {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    const activeHandover = await LeaveRequest.exists({
+      tenantId,
+      handoverToUserId: staffId,
+      status: { $in: ["PENDING", "APPROVED"] },
+      endDate: { $gte: today },
+    }).session(session);
+
+    if (activeHandover) {
+      const error = new Error(
+        "Không thể vô hiệu hóa hoặc xóa nhân viên đang được chỉ định nhận bàn giao trong đơn nghỉ còn hiệu lực",
+      );
+      error.statusCode = 409;
+      throw error;
+    }
+  }
+
+  anonymizeDeletedStaff(staff, deletedBy, deletionReason) {
+    const deletedStaffId = String(staff._id);
+
+    staff.phoneNumber = `deleted_${deletedStaffId}`;
+    staff.email = null;
+    staff.password = undefined;
+    staff.fcmTokens = [];
+    staff.status = "DELETED";
+    staff.deletedBy = deletedBy;
+    staff.deletedAt = new Date();
+    staff.deletionReason =
+      typeof deletionReason === "string" && deletionReason.trim()
+        ? deletionReason.trim()
+        : null;
+
+    staff.profile = staff.profile || {};
+    staff.profile.identificationId = null;
+    staff.profile.taxNumber = null;
+    staff.profile.address = null;
+    staff.profile.avatarUrl = null;
   }
 
   async buildStaffAccessFilter({
@@ -310,7 +386,13 @@ class StaffService extends BaseService {
     }
   }
 
-  async createStaff({ tenantId, data, userRole, subscription }) {
+  async createStaff({
+    tenantId,
+    data,
+    userRole,
+    createdBy,
+    subscription,
+  }) {
     checktenantId(tenantId);
     data = normalizeWorkplaceUpdateData(data || {});
     data.phoneNumber = validateStaffPhoneNumber(data.phoneNumber);
@@ -333,6 +415,8 @@ class StaffService extends BaseService {
       data.warehouseId,
       tenantId,
     );
+
+    await this.validatePaySheetAssignment(tenantId, data.paySheetId);
 
     await this.checkStaffUniqueness({
       tenantId,
@@ -364,7 +448,7 @@ class StaffService extends BaseService {
       email: data.email,
     });
 
-    return await this.create(createStaffDTO(tenantId, data));
+    return await this.create(createStaffDTO(tenantId, data, createdBy));
   }
 
   async getStaffList({
@@ -524,6 +608,10 @@ class StaffService extends BaseService {
       staffId,
     );
 
+    if (Object.hasOwn(data, "paySheetId")) {
+      await this.validatePaySheetAssignment(tenantId, data.paySheetId);
+    }
+
     await this.checkStaffUniqueness({
       tenantId,
       email: data.email,
@@ -588,9 +676,9 @@ class StaffService extends BaseService {
       ...accessFilter,
     };
 
-    const staff = await User.findOne(targetFilter).select(
-      "role leaveBalance",
-    );
+    const staff = await User.findOne(targetFilter)
+      .select("role leaveBalance")
+      .lean();
 
     if (!staff) {
       const error = new Error(
@@ -608,10 +696,16 @@ class StaffService extends BaseService {
       throw error;
     }
 
-    const currentAnnualLeaveDays =
-      staff.leaveBalance?.annualLeaveDays ?? 12;
-    const currentRemainingDays =
-      staff.leaveBalance?.remainingDays ?? currentAnnualLeaveDays;
+    const hasAnnualLeaveDays =
+      typeof staff.leaveBalance?.annualLeaveDays === "number";
+    const hasRemainingDays =
+      typeof staff.leaveBalance?.remainingDays === "number";
+    const currentAnnualLeaveDays = hasAnnualLeaveDays
+      ? staff.leaveBalance.annualLeaveDays
+      : 12;
+    const currentRemainingDays = hasRemainingDays
+      ? staff.leaveBalance.remainingDays
+      : currentAnnualLeaveDays;
     const usedDays = currentAnnualLeaveDays - currentRemainingDays;
 
     if (usedDays < 0) {
@@ -634,8 +728,12 @@ class StaffService extends BaseService {
     const updatedStaff = await User.findOneAndUpdate(
       {
         ...targetFilter,
-        "leaveBalance.annualLeaveDays": currentAnnualLeaveDays,
-        "leaveBalance.remainingDays": currentRemainingDays,
+        "leaveBalance.annualLeaveDays": hasAnnualLeaveDays
+          ? currentAnnualLeaveDays
+          : { $exists: false },
+        "leaveBalance.remainingDays": hasRemainingDays
+          ? currentRemainingDays
+          : { $exists: false },
       },
       {
         $set: {
@@ -704,9 +802,9 @@ class StaffService extends BaseService {
       ...accessFilter,
     };
 
-    const staff = await User.findOne(targetFilter).select(
-      "role leaveBalance",
-    );
+    const staff = await User.findOne(targetFilter)
+      .select("role leaveBalance")
+      .lean();
 
     if (!staff) {
       const error = new Error(
@@ -724,10 +822,16 @@ class StaffService extends BaseService {
       throw error;
     }
 
-    const currentAnnualLeaveDays =
-      staff.leaveBalance?.annualLeaveDays ?? 12;
-    const currentRemainingDays =
-      staff.leaveBalance?.remainingDays ?? currentAnnualLeaveDays;
+    const hasAnnualLeaveDays =
+      typeof staff.leaveBalance?.annualLeaveDays === "number";
+    const hasRemainingDays =
+      typeof staff.leaveBalance?.remainingDays === "number";
+    const currentAnnualLeaveDays = hasAnnualLeaveDays
+      ? staff.leaveBalance.annualLeaveDays
+      : 12;
+    const currentRemainingDays = hasRemainingDays
+      ? staff.leaveBalance.remainingDays
+      : currentAnnualLeaveDays;
     const usedDays = currentAnnualLeaveDays - currentRemainingDays;
 
     if (usedDays !== 0) {
@@ -741,8 +845,12 @@ class StaffService extends BaseService {
     const updatedStaff = await User.findOneAndUpdate(
       {
         ...targetFilter,
-        "leaveBalance.annualLeaveDays": currentAnnualLeaveDays,
-        "leaveBalance.remainingDays": currentRemainingDays,
+        "leaveBalance.annualLeaveDays": hasAnnualLeaveDays
+          ? currentAnnualLeaveDays
+          : { $exists: false },
+        "leaveBalance.remainingDays": hasRemainingDays
+          ? currentRemainingDays
+          : { $exists: false },
       },
       {
         $set: {
@@ -867,6 +975,18 @@ class StaffService extends BaseService {
         if (!staff) {
           throw new Error("Staff not found");
         }
+        if (staff.status === "INACTIVE") {
+          const error = new Error("Tài khoản nhân viên đã bị vô hiệu hóa");
+          error.statusCode = 409;
+          throw error;
+        }
+
+        await this.assertNoActiveHandoverAssignment(
+          tenantId,
+          staff._id,
+          session,
+        );
+
         if (
           ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(staff.role) &&
           userRole !== "TENANT_OWNER"
@@ -927,6 +1047,7 @@ class StaffService extends BaseService {
     replacementManagerId,
     userId,
     userRole,
+    deletionReason,
   }) {
     const session = await User.startSession();
     try {
@@ -941,6 +1062,13 @@ class StaffService extends BaseService {
         if (!staff) {
           throw new Error("Staff not found");
         }
+
+        await this.assertNoActiveHandoverAssignment(
+          tenantId,
+          staff._id,
+          session,
+        );
+
         if (
           ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(staff.role) &&
           userRole !== "TENANT_OWNER"
@@ -965,14 +1093,14 @@ class StaffService extends BaseService {
             session,
           });
         }
-        staff.password = undefined;
-        staff.status = "DELETED";
-        staff.role = ["BRANCH_MANAGER", "WAREHOUSE_MANAGER"].includes(
-          staff.role,
-        )
-          ? "STAFF"
-          : staff.role;
+        this.anonymizeDeletedStaff(staff, userId, deletionReason);
         await staff.save({ session });
+
+        await RefreshToken.updateMany(
+          { userId: staff._id, isRevoked: false },
+          { $set: { isRevoked: true } },
+          { session },
+        );
 
         const deletedAccount = await this.getStaffAccountResponse(
           staff._id,
