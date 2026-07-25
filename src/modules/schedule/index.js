@@ -218,6 +218,8 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *     responses:
  *       201:
  *         description: Created
+ *       409:
+ *         description: Duplicate or overlapping shift. Response includes the conflicting schedule.
  *
  * /working-schedules:
  *   get:

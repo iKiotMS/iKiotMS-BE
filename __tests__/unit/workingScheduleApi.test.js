@@ -110,12 +110,13 @@ describe("Working Schedule API response", () => {
   });
 
   test("POST /working-schedules/bulk returns the error output from the API", async () => {
-    const error = new Error("Nhân viên đã có lịch làm việc bị trùng thời gian");
-    error.statusCode = 400;
+    const error = new Error("Bị trùng Ca sáng ngày 2026-07-01");
+    error.statusCode = 409;
     error.duplicatedWorkingSchedule = {
       _id: "schedule1",
       userId: ["staffA"],
     };
+    error.conflictingSchedules = [error.duplicatedWorkingSchedule];
     WorkingScheduleService.createBulkWorkingSchedules.mockRejectedValue(error);
 
     const response = await request(app)
@@ -131,14 +132,20 @@ describe("Working Schedule API response", () => {
         ],
       });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(409);
     expect(response.body).toEqual({
       success: false,
-      message: "Nhân viên đã có lịch làm việc bị trùng thời gian",
+      message: "Bị trùng Ca sáng ngày 2026-07-01",
       duplicatedWorkingSchedule: {
         _id: "schedule1",
         userId: ["staffA"],
       },
+      conflictingSchedules: [
+        {
+          _id: "schedule1",
+          userId: ["staffA"],
+        },
+      ],
     });
   });
 
