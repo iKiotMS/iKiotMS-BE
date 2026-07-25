@@ -63,6 +63,11 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *           type: string
  *           format: date
  *           example: 2026-06-12
+ *         paySheetId:
+ *           type: string
+ *           nullable: true
+ *           example: 665abc1234567890abcdef12
+ *           description: Active paysheet in the authenticated tenant. Use null for no assignment.
  *         warehouseId:
  *           type: string
  *           example: null
@@ -128,7 +133,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *               type: string
  *               nullable: true
  *               example: 665abc1234567890abcdef12
- *               description: Paysheet assigned to the staff. Use null to remove the assignment.
+ *               description: Active paysheet in the authenticated tenant. Use null to remove the assignment.
  *             warehouseId:
  *               type: string
  *               example: null
@@ -160,6 +165,10 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *           type: string
  *           description: Required when deleting or deactivating a branch manager or warehouse manager. For branch managers, replacement must be an active staff member in the same branch. For warehouse managers, replacement can be any active staff member in the tenant.
  *           example: 665abc1234567890abcdef12
+ *         deletionReason:
+ *           type: string
+ *           description: Optional reason recorded when the staff is soft-deleted. Ignored by account deactivation.
+ *           example: Nhân viên nghỉ việc
  *     StaffRoleOption:
  *       type: object
  *       properties:
@@ -281,7 +290,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *             schema:
  *               $ref: '#/components/schemas/Staff'
  *       400:
- *         description: Validation failed, including invalid phone numbers or identification information
+ *         description: Validation failed, including invalid phone numbers, identification information, or a missing/deleted paysheet
  *         content:
  *           application/json:
  *             schema:
@@ -419,7 +428,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *       200:
  *         description: Staff updated successfully
  *       400:
- *         description: Validation failed. Identification number, date of birth, and gender must be consistent. Phone numbers cannot be changed through this endpoint; reserved phone numbers receive a category-specific error.
+ *         description: Validation failed. Identification information must be consistent, phone numbers cannot be changed here, and paySheetId must reference an active paysheet in the same tenant.
  *         content:
  *           application/json:
  *             schema:
@@ -434,7 +443,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *     tags:
  *       - Staff
  *     summary: Delete staff
- *     description: Soft delete a staff user by setting status to DELETED. If the staff is a branch manager or warehouse manager, replacementManagerId is required and the replacement staff is promoted before deletion.
+ *     description: Soft delete a staff user while preserving the record, role, workplace, and linked business history. Phone number, email, identification number, tax number, address, avatar, password, and FCM tokens are anonymized or cleared; refresh tokens are revoked. Staff assigned as handover on a current or future leave request cannot be deleted. If the staff is a branch manager or warehouse manager, replacementManagerId is required.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -476,6 +485,8 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         description: Forbidden
  *       404:
  *         description: Staff not found
+ *       409:
+ *         description: Staff is assigned as handover on an effective leave request
  * /staff/{staffId}/leave-balance:
  *   post:
  *     tags: [Staff]
@@ -624,7 +635,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *     tags:
  *       - Staff
  *     summary: Deactivate staff account
- *     description: Remove the staff password and set status to INACTIVE. If the staff is a branch manager or warehouse manager, replacementManagerId is required and the replacement staff is promoted before deactivation.
+ *     description: Remove the staff password and set status to INACTIVE. Staff already inactive or assigned as handover on a current or future leave request cannot be deactivated. If the staff is a branch manager or warehouse manager, replacementManagerId is required.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -666,6 +677,8 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *         description: Forbidden
  *       404:
  *         description: Staff not found
+ *       409:
+ *         description: Staff is already inactive or is assigned as handover on an effective leave request
  */
 function registerStaffModule(app) {
   app.post(
