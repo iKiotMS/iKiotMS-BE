@@ -60,6 +60,7 @@ function getScheduleAttendanceStatus(attendance) {
 function buildAttendanceSummary(attendance, schedule, lateGraceMinutes) {
   if (!attendance) {
     return {
+      sourceScheduleId: null,
       status: "NOT_CHECKED_IN",
       actualCheckinAt: null,
       actualCheckoutAt: null,
@@ -70,6 +71,7 @@ function buildAttendanceSummary(attendance, schedule, lateGraceMinutes) {
 
   return {
     _id: attendance._id,
+    sourceScheduleId: attendance.scheduleId,
     status: getScheduleAttendanceStatus(attendance),
     actualCheckinAt: attendance.actualCheckinAt || null,
     actualCheckoutAt: attendance.actualCheckoutAt || null,
@@ -84,6 +86,7 @@ function buildAttendanceSummary(attendance, schedule, lateGraceMinutes) {
 function buildAttendanceDetail(attendance, schedule, lateGraceMinutes) {
   if (!attendance) {
     return {
+      sourceScheduleId: null,
       status: "NOT_CHECKED_IN",
       actualCheckinAt: null,
       actualCheckoutAt: null,
@@ -94,6 +97,7 @@ function buildAttendanceDetail(attendance, schedule, lateGraceMinutes) {
 
   return {
     _id: attendance._id,
+    sourceScheduleId: attendance.scheduleId,
     status: getScheduleAttendanceStatus(attendance),
     actualCheckinAt: attendance.actualCheckinAt || null,
     actualCheckoutAt: attendance.actualCheckoutAt || null,
@@ -184,6 +188,130 @@ function pickScheduleUser(schedule, userId) {
   });
 }
 
+function getScheduleValueId(value) {
+  return String(value?._id || value || "");
+}
+
+function getScheduleTimeValue(value) {
+  if (!value) return "";
+
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? String(value) : String(timestamp);
+}
+
+function getDuplicateScheduleKey(schedule) {
+  const statusGroup =
+    schedule.status === "CANCELLED" ? "CANCELLED" : "ACTIVE";
+
+  return [
+    getScheduleValueId(schedule.tenantId),
+    schedule.scheduleType || "NORMAL",
+    getScheduleValueId(schedule.shiftTemplateId),
+    getScheduleTimeValue(schedule.workDate),
+    getScheduleTimeValue(schedule.startAt),
+    getScheduleTimeValue(schedule.endAt),
+    statusGroup,
+  ].join(":");
+}
+
+function hasAttendance(user) {
+  const attendance = user?.attendance;
+  return Boolean(
+    attendance?._id ||
+      (attendance?.status && attendance.status !== "NOT_CHECKED_IN"),
+  );
+}
+
+function getScheduleCreatedTime(schedule) {
+  const createdAt = new Date(schedule.createdAt || 0).getTime();
+  return Number.isNaN(createdAt) ? 0 : createdAt;
+}
+
+function compareSchedulesForCanonical(left, right) {
+  const leftHasAttendance = getScheduleUsers(left).some(hasAttendance);
+  const rightHasAttendance = getScheduleUsers(right).some(hasAttendance);
+
+  if (leftHasAttendance !== rightHasAttendance) {
+    return leftHasAttendance ? -1 : 1;
+  }
+
+  const createdAtDifference =
+    getScheduleCreatedTime(left) - getScheduleCreatedTime(right);
+  if (createdAtDifference !== 0) {
+    return createdAtDifference;
+  }
+
+  return getScheduleValueId(left._id).localeCompare(
+    getScheduleValueId(right._id),
+  );
+}
+
+/**
+ * Dữ liệu cũ có thể chứa nhiều WorkingSchedule giống hệt nhau. Hàm này chỉ
+ * chuẩn hóa response, không sửa DB. Mỗi khung giờ chỉ được trả một lần và
+ * attendance thật được ưu tiên hơn trạng thái NOT_CHECKED_IN tổng hợp.
+ */
+function deduplicateWorkingSchedules(schedules) {
+  const groups = new Map();
+
+  schedules.forEach((schedule) => {
+    const key = getDuplicateScheduleKey(schedule);
+    const group = groups.get(key) || [];
+    group.push(schedule);
+    groups.set(key, group);
+  });
+
+  return Array.from(groups.values()).map((group) => {
+    const orderedSchedules = [...group].sort(compareSchedulesForCanonical);
+    const canonicalSchedule = orderedSchedules[0];
+    const selectedUsers = new Map();
+    const attendanceCountByUser = new Map();
+
+    orderedSchedules.forEach((schedule) => {
+      getScheduleUsers(schedule).forEach((user) => {
+        const userId = getUserIdText(user);
+        const currentUser = selectedUsers.get(userId);
+
+        if (
+          !currentUser ||
+          (!hasAttendance(currentUser) && hasAttendance(user))
+        ) {
+          selectedUsers.set(userId, user);
+        }
+
+        if (hasAttendance(user)) {
+          attendanceCountByUser.set(
+            userId,
+            (attendanceCountByUser.get(userId) || 0) + 1,
+          );
+        }
+      });
+    });
+
+    const attendanceConflictUserIds = Array.from(
+      attendanceCountByUser.entries(),
+    )
+      .filter(([, count]) => count > 1)
+      .map(([userId]) => userId);
+    const canonicalScheduleId = getScheduleValueId(canonicalSchedule._id);
+    const duplicateScheduleIds = orderedSchedules
+      .map((schedule) => getScheduleValueId(schedule._id))
+      .filter((scheduleId) => scheduleId !== canonicalScheduleId);
+
+    return {
+      ...canonicalSchedule,
+      userId: Array.from(selectedUsers.values()),
+      dataIntegrity: {
+        isDuplicate: duplicateScheduleIds.length > 0,
+        duplicateCount: orderedSchedules.length,
+        duplicateScheduleIds,
+        attendanceConflict: attendanceConflictUserIds.length > 0,
+        attendanceConflictUserIds,
+      },
+    };
+  });
+}
+
 module.exports = {
   buildAttendanceSummary,
   buildAttendanceDetail,
@@ -194,4 +322,5 @@ module.exports = {
   getAttendanceKey,
   attachAttendancesToUsers,
   pickScheduleUser,
+  deduplicateWorkingSchedules,
 };

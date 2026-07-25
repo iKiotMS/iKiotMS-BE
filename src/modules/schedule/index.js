@@ -74,6 +74,30 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *           nullable: true
  *           enum: [PUBLIC_HOLIDAY, COMPANY_HOLIDAY]
  *           example: PUBLIC_HOLIDAY
+ *     WorkingScheduleDataIntegrity:
+ *       type: object
+ *       description: Metadata cảnh báo khi BE phát hiện các bản ghi lịch trùng nhau. API chỉ gộp response và không tự sửa dữ liệu trong DB.
+ *       properties:
+ *         isDuplicate:
+ *           type: boolean
+ *           example: true
+ *         duplicateCount:
+ *           type: integer
+ *           example: 2
+ *         duplicateScheduleIds:
+ *           type: array
+ *           items:
+ *             type: string
+ *           example: [6a5d5186b0f7c580a7e9f3da]
+ *         attendanceConflict:
+ *           type: boolean
+ *           description: True khi cùng một nhân viên có attendance trên nhiều schedule trùng.
+ *           example: false
+ *         attendanceConflictUserIds:
+ *           type: array
+ *           items:
+ *             type: string
+ *           example: []
  *
  * /shift-templates:
  *   post:
@@ -225,7 +249,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *   get:
  *     tags: [Schedule]
  *     summary: Get working schedules with attendance summary
- *     description: Returns working schedules with each assigned user's lightweight attendance field and dayInfo for normal, Sunday, holiday, or Sunday holiday dates. If no attendance exists for a user, attendance.status is NOT_CHECKED_IN.
+ *     description: Returns working schedules with each assigned user's lightweight attendance field and dayInfo. Exact duplicate schedules are returned once; dataIntegrity contains duplicate IDs and attendance conflict information. Reading this endpoint never modifies duplicate records in the database.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -266,7 +290,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *           enum: [NORMAL, OVERTIME]
  *     responses:
  *       200:
- *         description: Working schedule list with attendance summary
+ *         description: Deduplicated working schedule list with attendance summary and WorkingScheduleDataIntegrity metadata
  *       403:
  *         description: Forbidden
  *
@@ -274,7 +298,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *   get:
  *     tags: [Schedule]
  *     summary: Get current user's working schedules
- *     description: Returns schedules assigned to the authenticated user with lightweight attendance summary and dayInfo.
+ *     description: Returns deduplicated schedules assigned to the authenticated user with lightweight attendance summary, dayInfo, and dataIntegrity metadata.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -308,7 +332,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *   get:
  *     tags: [Schedule]
  *     summary: Get current branch manager's working schedules
- *     description: Uses branchId from the authenticated branch manager. Staff cannot access this endpoint.
+ *     description: Uses branchId from the authenticated branch manager and returns duplicate schedules once with dataIntegrity metadata. Staff cannot access this endpoint.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -344,7 +368,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *   get:
  *     tags: [Schedule]
  *     summary: Get current warehouse manager's working schedules
- *     description: Uses warehouseId from the authenticated warehouse manager. Staff cannot access this endpoint.
+ *     description: Uses warehouseId from the authenticated warehouse manager and returns duplicate schedules once with dataIntegrity metadata. Staff cannot access this endpoint.
  *     security:
  *       - bearerAuth: []
  *     parameters:

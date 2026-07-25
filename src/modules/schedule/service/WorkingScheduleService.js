@@ -13,6 +13,7 @@ const {
 } = require("../dto/WorkingScheduleDTO");
 const {
   attachAttendancesToUsers,
+  deduplicateWorkingSchedules,
   getAttendanceKey,
   getScheduleUsers,
   getUserIdText,
@@ -397,25 +398,45 @@ class WorkingScheduleService {
       }
     }
 
-    const [workingSchedules, total] = await Promise.all([
-      WorkingSchedule.find(filter)
-        .populate(populatedFields)
-        .select(selectedFields)
-        .sort({ workDate: 1, startAt: 1 })
-        .skip(pagination.skip)
-        .limit(pagination.recordPerPage)
-        .lean(),
-      WorkingSchedule.countDocuments(filter),
-    ]);
+    const workingSchedules = await WorkingSchedule.find(filter)
+      .populate(populatedFields)
+      .select(selectedFields)
+      .sort({ workDate: 1, startAt: 1, createdAt: 1, _id: 1 })
+      .lean();
 
     const schedulesWithAttendance = await this.attachAttendanceSummaries(
       tenantId,
       workingSchedules,
       detail,
     );
+    const deduplicatedSchedules = deduplicateWorkingSchedules(
+      schedulesWithAttendance,
+    );
+    const duplicateGroups = deduplicatedSchedules.filter(
+      (schedule) => schedule.dataIntegrity.isDuplicate,
+    );
+
+    if (duplicateGroups.length > 0) {
+      console.warn(
+        "[WorkingScheduleService] Phát hiện dữ liệu lịch làm việc bị trùng:",
+        duplicateGroups.map((schedule) => ({
+          scheduleId: schedule._id,
+          duplicateScheduleIds:
+            schedule.dataIntegrity.duplicateScheduleIds,
+          attendanceConflict:
+            schedule.dataIntegrity.attendanceConflict,
+        })),
+      );
+    }
+
+    const total = deduplicatedSchedules.length;
+    const paginatedSchedules = deduplicatedSchedules.slice(
+      pagination.skip,
+      pagination.skip + pagination.recordPerPage,
+    );
     const data = await this.attachScheduleDayInfo(
       tenantId,
-      schedulesWithAttendance,
+      paginatedSchedules,
     );
 
     return {
@@ -685,7 +706,7 @@ class WorkingScheduleService {
     }
 
     const selectedFields =
-      "userId shiftTemplateId workDate startAt endAt scheduleType status managedBy";
+      "userId shiftTemplateId workDate startAt endAt scheduleType status managedBy createdAt";
     const populatedFields = [
       {
         path: "userId",

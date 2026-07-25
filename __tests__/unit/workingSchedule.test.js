@@ -33,6 +33,7 @@ const Attendance = require("../../src/models/Attendance");
 const WorkingScheduleService = require("../../src/modules/schedule/service/WorkingScheduleService");
 const {
   attachAttendancesToUsers,
+  deduplicateWorkingSchedules,
   getAttendanceKey,
   getLateMinutes,
 } = require("../../src/modules/schedule/service/WorkingScheduleAttendanceMapper");
@@ -528,6 +529,151 @@ describe("WorkingScheduleAttendanceMapper", () => {
         15,
       ),
     ).toBe(20);
+  });
+
+  test("returns duplicate schedules once and keeps the oldest schedule when neither has attendance", () => {
+    const user = {
+      _id: "staffA",
+      attendance: { status: "NOT_CHECKED_IN" },
+    };
+    const duplicateSlot = {
+      tenantId: "tenant1",
+      userId: [user],
+      shiftTemplateId: { _id: "shift1", name: "Ca hành chính" },
+      scheduleType: "NORMAL",
+      workDate: new Date("2026-07-20T00:00:00.000Z"),
+      startAt: new Date("2026-07-20T01:00:00.000Z"),
+      endAt: new Date("2026-07-20T10:00:00.000Z"),
+      status: "SCHEDULED",
+    };
+
+    const result = deduplicateWorkingSchedules([
+      {
+        ...duplicateSlot,
+        _id: "olderSchedule",
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+      },
+      {
+        ...duplicateSlot,
+        _id: "newerSchedule",
+        createdAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]._id).toBe("olderSchedule");
+    expect(result[0].dataIntegrity).toEqual({
+      isDuplicate: true,
+      duplicateCount: 2,
+      duplicateScheduleIds: ["newerSchedule"],
+      attendanceConflict: false,
+      attendanceConflictUserIds: [],
+    });
+  });
+
+  test("prefers the duplicate schedule containing attendance", () => {
+    const duplicateSlot = {
+      tenantId: "tenant1",
+      shiftTemplateId: "shift1",
+      scheduleType: "NORMAL",
+      workDate: new Date("2026-07-20T00:00:00.000Z"),
+      startAt: new Date("2026-07-20T01:00:00.000Z"),
+      endAt: new Date("2026-07-20T10:00:00.000Z"),
+      status: "SCHEDULED",
+    };
+
+    const result = deduplicateWorkingSchedules([
+      {
+        ...duplicateSlot,
+        _id: "olderSchedule",
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+        userId: [
+          {
+            _id: "staffA",
+            attendance: { status: "NOT_CHECKED_IN" },
+          },
+        ],
+      },
+      {
+        ...duplicateSlot,
+        _id: "newerSchedule",
+        createdAt: new Date("2026-07-20T00:00:00.000Z"),
+        userId: [
+          {
+            _id: "staffA",
+            attendance: {
+              _id: "attendance1",
+              status: "CHECKED_OUT",
+              sourceScheduleId: "newerSchedule",
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]._id).toBe("newerSchedule");
+    expect(result[0].userId[0].attendance._id).toBe("attendance1");
+    expect(result[0].dataIntegrity).toMatchObject({
+      isDuplicate: true,
+      duplicateScheduleIds: ["olderSchedule"],
+      attendanceConflict: false,
+    });
+  });
+
+  test("reports a conflict when duplicate schedules both have attendance", () => {
+    const duplicateSlot = {
+      tenantId: "tenant1",
+      shiftTemplateId: "shift1",
+      scheduleType: "NORMAL",
+      workDate: new Date("2026-07-20T00:00:00.000Z"),
+      startAt: new Date("2026-07-20T01:00:00.000Z"),
+      endAt: new Date("2026-07-20T10:00:00.000Z"),
+      status: "SCHEDULED",
+    };
+
+    const result = deduplicateWorkingSchedules([
+      {
+        ...duplicateSlot,
+        _id: "olderSchedule",
+        createdAt: new Date("2026-06-01T00:00:00.000Z"),
+        userId: [
+          {
+            _id: "staffA",
+            attendance: {
+              _id: "attendance1",
+              status: "CHECKED_IN",
+              sourceScheduleId: "olderSchedule",
+            },
+          },
+        ],
+      },
+      {
+        ...duplicateSlot,
+        _id: "newerSchedule",
+        createdAt: new Date("2026-07-20T00:00:00.000Z"),
+        userId: [
+          {
+            _id: "staffA",
+            attendance: {
+              _id: "attendance2",
+              status: "CHECKED_OUT",
+              sourceScheduleId: "newerSchedule",
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]._id).toBe("olderSchedule");
+    expect(result[0].dataIntegrity).toMatchObject({
+      isDuplicate: true,
+      duplicateCount: 2,
+      duplicateScheduleIds: ["newerSchedule"],
+      attendanceConflict: true,
+      attendanceConflictUserIds: ["staffA"],
+    });
   });
 });
 
