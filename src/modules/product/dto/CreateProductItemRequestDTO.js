@@ -60,7 +60,9 @@ class CreateProductItemRequestDTO {
           if (!["branch", "warehouse"].includes(stockItem.locationType)) {
             errors.push(`initialStock[${index}].locationType must be 'branch' or 'warehouse'`);
           }
-          if (stockItem.stock === undefined || typeof stockItem.stock !== "number" || stockItem.stock < 0) {
+          // stock is optional (defaults to 0 in InventoryService.initializeStock),
+          // matching CreateProductRequestDTO which doesn't validate it at all.
+          if (stockItem.stock !== undefined && (typeof stockItem.stock !== "number" || stockItem.stock < 0)) {
             errors.push(`initialStock[${index}].stock must be a non-negative number`);
           }
         });
