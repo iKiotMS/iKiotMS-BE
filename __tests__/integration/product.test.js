@@ -100,6 +100,7 @@ describe("Product API - Quota Checks", () => {
     status: "ACTIVE",
     items: [
       {
+        productName: `Product ${index} Default`,
         productCode: `P${index}`,
         sku: `SKU${Date.now()}${index}`,
         retailPrice: 100000,
@@ -198,5 +199,57 @@ describe("Product API - Quota Checks", () => {
 
     expect(response.status).toBe(403);
     expect(response.body.message).toContain("No active subscription");
+  });
+
+  test("PATCH /products/items/:itemId - should update productName (version name)", async () => {
+    const { owner } = await createTestTenant("PRO");
+    const token = generateToken(owner);
+
+    // 1. Create a product with a default item/variant
+    const prodRes = await request(app)
+      .post("/products")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        name: "Test Product",
+        status: "ACTIVE",
+        items: [
+          {
+            productName: "Original Variant Name",
+            productCode: "V-001",
+            sku: "SKU-V001",
+            retailPrice: 100000,
+            costPrice: 50000,
+          },
+        ],
+      });
+
+    expect(prodRes.status).toBe(201);
+    
+    // Fetch product details to get item ID
+    const getRes = await request(app)
+      .get(`/products/${prodRes.body.data._id}`)
+      .set("Authorization", `Bearer ${token}`);
+    
+    expect(getRes.status).toBe(200);
+    const item = getRes.body.data.items[0];
+    expect(item).toBeDefined();
+    expect(item.productName).toBe("Original Variant Name");
+
+    // 2. Update the variant name
+    const updateRes = await request(app)
+      .patch(`/products/items/${item._id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        productName: "Updated Variant Name",
+      });
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.data.productName).toBe("Updated Variant Name");
+
+    // 3. Retrieve detail to verify persistence
+    const verifyRes = await request(app)
+      .get(`/products/${prodRes.body.data._id}`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(verifyRes.body.data.items[0].productName).toBe("Updated Variant Name");
   });
 });

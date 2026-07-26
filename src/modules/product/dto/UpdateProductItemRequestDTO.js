@@ -1,5 +1,6 @@
 class UpdateProductItemRequestDTO {
   constructor(data) {
+    if (data.productName !== undefined) this.productName = data.productName;
     if (data.productCode !== undefined) this.productCode = data.productCode;
     if (data.sku !== undefined) this.sku = data.sku;
     if (data.retailPrice !== undefined) this.retailPrice = data.retailPrice;
@@ -14,6 +15,10 @@ class UpdateProductItemRequestDTO {
 
   validate() {
     const errors = [];
+
+    if (this.productName !== undefined && (typeof this.productName !== "string" || this.productName.trim() === "")) {
+      errors.push("Product name must be a non-empty string");
+    }
 
     if (this.productCode !== undefined && (typeof this.productCode !== "string" || this.productCode.trim() === "")) {
       errors.push("Product code must be a non-empty string");
