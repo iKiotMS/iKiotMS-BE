@@ -89,6 +89,12 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *           items:
  *             type: string
  *           example: [6a5d5186b0f7c580a7e9f3da]
+ *         duplicateUserIds:
+ *           type: array
+ *           description: Những nhân viên thực sự bị phân trùng trong các schedule trên.
+ *           items:
+ *             type: string
+ *           example: [6a57202859c87657d93f3733]
  *         attendanceConflict:
  *           type: boolean
  *           description: True khi cùng một nhân viên có attendance trên nhiều schedule trùng.
@@ -249,7 +255,7 @@ const { cacheKeys } = require("../../utils/cacheHelpers");
  *   get:
  *     tags: [Schedule]
  *     summary: Get working schedules with attendance summary
- *     description: Returns working schedules with each assigned user's lightweight attendance field and dayInfo. Exact duplicate schedules are returned once; dataIntegrity contains duplicate IDs and attendance conflict information. Reading this endpoint never modifies duplicate records in the database.
+ *     description: Returns working schedules with each assigned user's lightweight attendance field and dayInfo. Duplicate assignments for the same user and exact shift are returned once; different users on the same shift are not treated as duplicates. dataIntegrity contains duplicate schedule IDs, affected user IDs, and attendance conflict information. Reading this endpoint never modifies duplicate records in the database.
  *     security:
  *       - bearerAuth: []
  *     parameters:

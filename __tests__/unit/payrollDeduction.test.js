@@ -128,6 +128,194 @@ describe("Payroll deduction calculation", () => {
     );
   });
 
+  test("uses late time after grace when no late penalty is configured", () => {
+    const workSchedule = {
+      _id: "schedule1",
+      scheduleType: "NORMAL",
+      workDate: new Date("2026-07-01T00:00:00.000Z"),
+      startAt: new Date("2026-07-01T01:00:00.000Z"),
+      endAt: new Date("2026-07-01T09:00:00.000Z"),
+    };
+    const buildPreview = (lateMinutes) =>
+      PayrollService.calculatePayslipPreview({
+        context: {
+          user: { _id: "user1", tenantId: "tenant1" },
+          paySheet: {
+            _id: "paysheet1",
+            basicPay: {
+              payType: "PAY_BY_SHIFT",
+              amountPerShift: 480000,
+            },
+            deductions: [],
+          },
+          workingSchedules: [workSchedule],
+          attendances: [
+            {
+              scheduleId: "schedule1",
+              workDate: workSchedule.workDate,
+              actualCheckinAt: new Date(
+                workSchedule.startAt.getTime() + lateMinutes * 60000,
+              ),
+              actualCheckoutAt: workSchedule.endAt,
+            },
+          ],
+        },
+        periodStart: new Date("2026-07-01T00:00:00.000Z"),
+        periodEnd: new Date("2026-07-31T23:59:59.999Z"),
+        holidayByDate: {},
+        payrollSetting: {
+          standardWorkingDays: 26,
+          standardWorkingHoursPerDay: 8,
+          lateGraceMinutes: 15,
+        },
+      });
+
+    const withinGrace = buildPreview(10);
+    const beyondGrace = buildPreview(20);
+
+    expect(withinGrace).toMatchObject({
+      basePay: 480000,
+      deduction: 0,
+      netSalary: 480000,
+    });
+    expect(beyondGrace).toMatchObject({
+      basePay: 460000,
+      deduction: 0,
+      netSalary: 460000,
+    });
+  });
+
+  test("late penalty replaces late-time salary reduction but not early leave", () => {
+    const workSchedule = {
+      _id: "schedule1",
+      scheduleType: "NORMAL",
+      workDate: new Date("2026-07-01T00:00:00.000Z"),
+      startAt: new Date("2026-07-01T01:00:00.000Z"),
+      endAt: new Date("2026-07-01T09:00:00.000Z"),
+    };
+    const preview = PayrollService.calculatePayslipPreview({
+      context: {
+        user: { _id: "user1", tenantId: "tenant1" },
+        paySheet: {
+          _id: "paysheet1",
+          basicPay: {
+            payType: "PAY_BY_SHIFT",
+            amountPerShift: 480000,
+          },
+          deductions: [
+            {
+              name: "Đi muộn theo lần",
+              enable: true,
+              deductionType: "LATE",
+              conditionType: "BY_OCCURRENCE",
+              deductionValue: 20000,
+            },
+          ],
+        },
+        workingSchedules: [workSchedule],
+        attendances: [
+          {
+            scheduleId: "schedule1",
+            workDate: workSchedule.workDate,
+            actualCheckinAt: new Date("2026-07-01T01:30:00.000Z"),
+            actualCheckoutAt: new Date("2026-07-01T08:30:00.000Z"),
+          },
+        ],
+      },
+      periodStart: new Date("2026-07-01T00:00:00.000Z"),
+      periodEnd: new Date("2026-07-31T23:59:59.999Z"),
+      holidayByDate: {},
+      payrollSetting: {
+        standardWorkingDays: 26,
+        standardWorkingHoursPerDay: 8,
+        lateGraceMinutes: 15,
+      },
+    });
+
+    expect(preview).toMatchObject({
+      totalWorkedHours: 7,
+      basePay: 450000,
+      deduction: 20000,
+      netSalary: 430000,
+    });
+    expect(preview.deductionLines[0]).toMatchObject({
+      deductionType: "LATE",
+      violationMinutes: 30,
+      units: 1,
+      amount: 20000,
+    });
+  });
+
+  test("early-leave penalty replaces early-leave salary reduction", () => {
+    const workSchedule = {
+      _id: "schedule1",
+      scheduleType: "NORMAL",
+      workDate: new Date("2026-07-01T00:00:00.000Z"),
+      startAt: new Date("2026-07-01T01:00:00.000Z"),
+      endAt: new Date("2026-07-01T09:00:00.000Z"),
+    };
+    const buildPreview = (deductions) =>
+      PayrollService.calculatePayslipPreview({
+        context: {
+          user: { _id: "user1", tenantId: "tenant1" },
+          paySheet: {
+            _id: "paysheet1",
+            basicPay: {
+              payType: "PAY_BY_SHIFT",
+              amountPerShift: 480000,
+            },
+            deductions,
+          },
+          workingSchedules: [workSchedule],
+          attendances: [
+            {
+              scheduleId: "schedule1",
+              workDate: workSchedule.workDate,
+              actualCheckinAt: workSchedule.startAt,
+              actualCheckoutAt: new Date("2026-07-01T08:30:00.000Z"),
+            },
+          ],
+        },
+        periodStart: new Date("2026-07-01T00:00:00.000Z"),
+        periodEnd: new Date("2026-07-31T23:59:59.999Z"),
+        holidayByDate: {},
+        payrollSetting: {
+          standardWorkingDays: 26,
+          standardWorkingHoursPerDay: 8,
+        },
+      });
+
+    const withoutPenalty = buildPreview([]);
+    const withPenalty = buildPreview([
+      {
+        name: "Về sớm theo lần",
+        enable: true,
+        deductionType: "EARLY_LEAVE",
+        conditionType: "BY_OCCURRENCE",
+        deductionValue: 30000,
+      },
+    ]);
+
+    expect(withoutPenalty).toMatchObject({
+      totalWorkedHours: 7.5,
+      basePay: 450000,
+      deduction: 0,
+      netSalary: 450000,
+    });
+    expect(withPenalty).toMatchObject({
+      totalWorkedHours: 7.5,
+      basePay: 480000,
+      deduction: 30000,
+      netSalary: 450000,
+    });
+    expect(withPenalty.deductionLines[0]).toMatchObject({
+      deductionType: "EARLY_LEAVE",
+      violationMinutes: 30,
+      units: 1,
+      amount: 30000,
+    });
+  });
+
   test("skips unsupported legacy percentage/coefficient deductions", () => {
     const preview = PayrollService.calculatePayslipPreview({
       context: {

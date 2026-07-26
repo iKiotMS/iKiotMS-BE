@@ -566,6 +566,7 @@ describe("WorkingScheduleAttendanceMapper", () => {
       isDuplicate: true,
       duplicateCount: 2,
       duplicateScheduleIds: ["newerSchedule"],
+      duplicateUserIds: ["staffA"],
       attendanceConflict: false,
       attendanceConflictUserIds: [],
     });
@@ -617,6 +618,7 @@ describe("WorkingScheduleAttendanceMapper", () => {
     expect(result[0].dataIntegrity).toMatchObject({
       isDuplicate: true,
       duplicateScheduleIds: ["olderSchedule"],
+      duplicateUserIds: ["staffA"],
       attendanceConflict: false,
     });
   });
@@ -671,9 +673,45 @@ describe("WorkingScheduleAttendanceMapper", () => {
       isDuplicate: true,
       duplicateCount: 2,
       duplicateScheduleIds: ["newerSchedule"],
+      duplicateUserIds: ["staffA"],
       attendanceConflict: true,
       attendanceConflictUserIds: ["staffA"],
     });
+  });
+
+  test("does not treat different employees on the same shift as duplicates", () => {
+    const sameSlot = {
+      tenantId: "tenant1",
+      shiftTemplateId: "shift1",
+      scheduleType: "NORMAL",
+      workDate: new Date("2026-07-20T00:00:00.000Z"),
+      startAt: new Date("2026-07-20T01:00:00.000Z"),
+      endAt: new Date("2026-07-20T10:00:00.000Z"),
+      status: "SCHEDULED",
+      createdAt: new Date("2026-07-01T00:00:00.000Z"),
+    };
+
+    const result = deduplicateWorkingSchedules([
+      {
+        ...sameSlot,
+        _id: "scheduleA",
+        userId: [{ _id: "staffA" }],
+      },
+      {
+        ...sameSlot,
+        _id: "scheduleB",
+        userId: [{ _id: "staffB" }],
+      },
+    ]);
+
+    expect(result).toHaveLength(2);
+    expect(result.map((schedule) => schedule._id)).toEqual([
+      "scheduleA",
+      "scheduleB",
+    ]);
+    expect(result.every((schedule) => {
+      return schedule.dataIntegrity.isDuplicate === false;
+    })).toBe(true);
   });
 });
 
