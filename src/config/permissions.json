@@ -88,8 +88,9 @@
     "attendances": ["read_own", "create", "update"],
     "leaveRequests": ["create", "read_mine","cancel"],
     "payslips": ["read_own"],
-    "holidays":["read"]
-
+    "holidays":["read"],
+    "categories": ["read"],
+    "brands": ["read"]
   },
   "CUSTOMER": {
     "profile": ["read"]
