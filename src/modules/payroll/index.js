@@ -119,6 +119,7 @@ const PayrollController = require("./controller/PayrollController");
  *           example: Đi muộn
  *         enable:
  *           type: boolean
+ *           description: For a supported enabled LATE or EARLY_LEAVE rule, the configured penalty replaces salary reduction for that same missing-time reason. Without a rule, salary remains prorated by actual payable time; LATE also respects grace time.
  *           example: true
  *         deductionType:
  *           type: string

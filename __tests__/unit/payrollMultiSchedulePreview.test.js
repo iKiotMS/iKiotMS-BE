@@ -153,12 +153,12 @@ describe("Payroll preview with multiple schedules", () => {
       payrollSetting: { standardWorkingDays: 26 },
     });
 
-    // 5 ngày chuẩn, trong đó hai ngày chỉ làm 450/480 và 420/480 phút.
-    expect(preview.basePay).toBe(2406250);
+    // Rule phạt đi muộn thay thế phần giảm lương do 90 phút check-in muộn.
+    expect(preview.basePay).toBe(2500000);
 
     // 500.000/ngày / 8 giờ × 2 giờ OT × hệ số 1,5.
     expect(preview.overtimePay).toBe(187500);
-    expect(preview.grossSalary).toBe(2593750);
+    expect(preview.grossSalary).toBe(2687500);
 
     expect(preview.totalWorkedDays).toBe(5);
     expect(preview.totalWorkedHours).toBe(40.5);
@@ -181,7 +181,7 @@ describe("Payroll preview with multiple schedules", () => {
       amount: 50000,
     });
 
-    expect(preview.netSalary).toBe(3043750);
+    expect(preview.netSalary).toBe(3137500);
     expect(preview.calculationWarnings).toEqual([]);
   });
 });

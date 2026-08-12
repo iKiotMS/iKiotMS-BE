@@ -212,17 +212,186 @@ class PayrollService {
     }, 0);
   }
 
-  attachPayableMinutesToSchedules(schedules, attendances) {
+  getScheduleMinutes(schedule) {
+    const scheduleStart = new Date(schedule.startAt).getTime();
+    const scheduleEnd = new Date(schedule.endAt).getTime();
+
+    if (
+      Number.isNaN(scheduleStart) ||
+      Number.isNaN(scheduleEnd) ||
+      scheduleEnd <= scheduleStart
+    ) {
+      return 0;
+    }
+
+    return Math.floor((scheduleEnd - scheduleStart) / 60000);
+  }
+
+  getScheduleAttendances(schedule, attendances) {
+    const scheduleId = String(schedule._id || "");
+    const attendancesByScheduleId = attendances.filter((attendance) => {
+      return (
+        attendance.scheduleId &&
+        scheduleId &&
+        String(attendance.scheduleId?._id || attendance.scheduleId) ===
+          scheduleId
+      );
+    });
+
+    if (attendancesByScheduleId.length > 0) {
+      return attendancesByScheduleId;
+    }
+
+    // Dữ liệu cũ có thể thiếu scheduleId. Chỉ fallback sang attendance thực sự
+    // giao với khung giờ ca để tránh lấy nhầm một ca khác trong cùng ngày.
+    const scheduleStart = new Date(schedule.startAt).getTime();
+    const scheduleEnd = new Date(schedule.endAt).getTime();
+
+    return attendances.filter((attendance) => {
+      if (!attendance.actualCheckinAt) return false;
+
+      const checkinAt = new Date(attendance.actualCheckinAt).getTime();
+      const checkoutAt = attendance.actualCheckoutAt
+        ? new Date(attendance.actualCheckoutAt).getTime()
+        : checkinAt;
+
+      return checkinAt < scheduleEnd && checkoutAt > scheduleStart;
+    });
+  }
+
+  getScheduleLateInfo(schedule, attendances, lateGraceMinutes = 15) {
+    if (schedule.scheduleType === "OVERTIME") {
+      return { rawMinutes: 0, violationMinutes: 0 };
+    }
+
+    const matchingAttendances = this.getScheduleAttendances(
+      schedule,
+      attendances,
+    ).filter((attendance) => attendance.actualCheckinAt);
+
+    if (matchingAttendances.length === 0) {
+      return { rawMinutes: 0, violationMinutes: 0 };
+    }
+
+    const firstAttendance = matchingAttendances.reduce(
+      (earliest, attendance) => {
+        return new Date(attendance.actualCheckinAt).getTime() <
+          new Date(earliest.actualCheckinAt).getTime()
+          ? attendance
+          : earliest;
+      },
+    );
+    const rawMinutes = Math.max(
+      0,
+      Math.floor(
+        (new Date(firstAttendance.actualCheckinAt).getTime() -
+          new Date(schedule.startAt).getTime()) /
+          60000,
+      ),
+    );
+    const storedLateMinutes = Number(firstAttendance.lateMinutes);
+    const hasStoredLateMinutes =
+      firstAttendance.lateMinutes !== undefined &&
+      firstAttendance.lateMinutes !== null &&
+      Number.isFinite(storedLateMinutes);
+    const violationMinutes = hasStoredLateMinutes
+      ? Math.max(0, storedLateMinutes)
+      : rawMinutes <= lateGraceMinutes
+        ? 0
+        : rawMinutes;
+
+    return { rawMinutes, violationMinutes };
+  }
+
+  getScheduleEarlyLeaveMinutes(schedule, attendances) {
+    if (schedule.scheduleType === "OVERTIME") {
+      return 0;
+    }
+
+    const matchingAttendances = this.getScheduleAttendances(
+      schedule,
+      attendances,
+    ).filter((attendance) => attendance.actualCheckoutAt);
+
+    if (matchingAttendances.length === 0) {
+      return 0;
+    }
+
+    // Nhiều attendance trong một ca dùng checkout muộn nhất để không tính trùng
+    // thời gian về sớm.
+    const latestCheckout = Math.max(
+      ...matchingAttendances.map((attendance) =>
+        new Date(attendance.actualCheckoutAt).getTime(),
+      ),
+    );
+
+    return Math.max(
+      0,
+      Math.floor(
+        (new Date(schedule.endAt).getTime() - latestCheckout) / 60000,
+      ),
+    );
+  }
+
+  isSupportedDeduction(item) {
+    return (
+      (!item.amountType || item.amountType === "FIXED_AMOUNT") &&
+      (item.deductionType === "FIXED" ||
+        ["BY_OCCURRENCE", "BY_BLOCK"].includes(item.conditionType))
+    );
+  }
+
+  attachPayableMinutesToSchedules(
+    schedules,
+    attendances,
+    {
+      hasActiveLatePenalty = false,
+      hasActiveEarlyLeavePenalty = false,
+      lateGraceMinutes = 15,
+    } = {},
+  ) {
     // payableMinutes là field tính tạm cho payroll, không được lưu trong
     // WorkingSchedule. Ca không có phút công thực tế sẽ không tạo payroll line.
     return schedules
       .map((schedule) => {
+        const actualWorkedMinutes = this.getSchedulePayableMinutes(
+          schedule,
+          attendances,
+        );
+        const { rawMinutes, violationMinutes } = this.getScheduleLateInfo(
+          schedule,
+          attendances,
+          lateGraceMinutes,
+        );
+        // Có rule phạt: hoàn lại toàn bộ phần công hụt do check-in muộn vì tiền
+        // phạt sẽ thay thế khoản giảm theo thời gian. Không có rule: chỉ hoàn lại
+        // thời gian nằm trong grace, phần vi phạm vẫn giảm theo phút thực tế.
+        const restoredLateMinutes = hasActiveLatePenalty
+          ? rawMinutes
+          : Math.max(0, rawMinutes - violationMinutes);
+        const earlyLeaveMinutes = this.getScheduleEarlyLeaveMinutes(
+          schedule,
+          attendances,
+        );
+        // Tương tự đi muộn, rule về sớm thay thế phần lương bị giảm bởi chính
+        // khoảng thời gian về sớm; các khoảng thiếu công khác vẫn giữ nguyên.
+        const restoredEarlyLeaveMinutes = hasActiveEarlyLeavePenalty
+          ? earlyLeaveMinutes
+          : 0;
+        const payableMinutes = Math.min(
+          this.getScheduleMinutes(schedule),
+          actualWorkedMinutes +
+            restoredLateMinutes +
+            restoredEarlyLeaveMinutes,
+        );
+
         return {
           ...schedule,
-          payableMinutes: this.getSchedulePayableMinutes(schedule, attendances),
+          actualWorkedMinutes,
+          payableMinutes,
         };
       })
-      .filter((schedule) => schedule.payableMinutes > 0);
+      .filter((schedule) => schedule.actualWorkedMinutes > 0);
   }
 
   allocateLeaveDays({ leaveRequests, schedules, periodStart, periodEnd }) {
@@ -425,9 +594,37 @@ class PayrollService {
     holidayByDate,
     payrollSetting = { standardWorkingDays: 26 },
   }) {
+    const enabledDeductions = (context.paySheet.deductions || []).filter(
+      (item) => item.enable,
+    );
+    const supportedDeductions = enabledDeductions.filter((item) =>
+      this.isSupportedDeduction(item),
+    );
+    const hasActiveLatePenalty = supportedDeductions.some(
+      (item) => item.deductionType === "LATE",
+    );
+    const hasActiveEarlyLeavePenalty = supportedDeductions.some(
+      (item) => item.deductionType === "EARLY_LEAVE",
+    );
+    const lateGraceMinutes = payrollSetting.lateGraceMinutes ?? 15;
+    const lateViolationMinutes = context.workingSchedules
+      .filter((schedule) => schedule.scheduleType !== "OVERTIME")
+      .map((schedule) => {
+        return this.getScheduleLateInfo(
+          schedule,
+          context.attendances,
+          lateGraceMinutes,
+        ).violationMinutes;
+      })
+      .filter((minutes) => minutes > 0);
     const payableSchedules = this.attachPayableMinutesToSchedules(
       context.workingSchedules,
       context.attendances,
+      {
+        hasActiveLatePenalty,
+        hasActiveEarlyLeavePenalty,
+        lateGraceMinutes,
+      },
     );
 
     const payroll = calculatePayrollBySchedules({
@@ -444,8 +641,8 @@ class PayrollService {
       payrollSetting,
     });
 
-    const totalWorkedMinutes = payroll.lines.reduce((total, line) => {
-      return total + (line.payableMinutes || 0);
+    const totalWorkedMinutes = payableSchedules.reduce((total, schedule) => {
+      return total + (schedule.actualWorkedMinutes || 0);
     }, 0);
     // Một ngày có thể có nhiều ca, nhưng chỉ đếm một ngày công. Ca OT không
     // tự tạo thêm ngày công vì nó đã được cộng riêng vào overtimePay.
@@ -529,67 +726,22 @@ class PayrollService {
 
     //==============Late Minutes Deuction calc
 
-    // lateMinutes đã được attendance module tính sẵn sau khi áp dụng grace time.
-    // Mỗi phần tử dương tương ứng một lần vi phạm để dùng cho BY_OCCURRENCE/BLOCK.
-    const lateViolationMinutes = context.attendances
-      .map((attendance) => Number(attendance.lateMinutes || 0))
-      .filter((minutes) => minutes > 0);
+    // Mỗi phần tử dương tương ứng một lần vi phạm sau grace time. Khi attendance
+    // cũ chưa lưu lateMinutes, payroll tự suy ra từ check-in và cấu hình grace.
     // Về sớm chưa có field lưu sẵn nên được suy ra từ schedule.endAt và checkout.
-    // Ưu tiên ghép bằng scheduleId; dữ liệu cũ thiếu scheduleId sẽ ghép theo ngày.
+    // Ưu tiên ghép bằng scheduleId; dữ liệu cũ sẽ fallback theo khung giờ giao nhau.
 
     //=================Early Leave Deduction calc
 
     const earlyLeaveViolationMinutes = context.workingSchedules
       .filter((schedule) => schedule.scheduleType !== "OVERTIME")
-      .map((schedule) => {
-        const scheduleId = String(schedule._id || "");
-        const scheduleDate = new Date(schedule.workDate)
-          .toISOString()
-          .slice(0, 10);
-        const matchingAttendances = context.attendances.filter((attendance) => {
-          if (!attendance.actualCheckoutAt) return false;
-          if (attendance.scheduleId && scheduleId) {
-            return String(attendance.scheduleId) === scheduleId;
-          }
-
-          const attendanceDate = new Date(
-            attendance.workDate || attendance.actualCheckinAt,
-          )
-            .toISOString()
-            .slice(0, 10);
-          return attendanceDate === scheduleDate;
-        });
-
-        if (matchingAttendances.length === 0) return 0;
-        // Nếu một ca có nhiều attendance, checkout muộn nhất đại diện thời điểm
-        // nhân viên thực sự rời ca, tránh tính về sớm hai lần.
-        const latestCheckout = Math.max(
-          ...matchingAttendances.map((attendance) =>
-            new Date(attendance.actualCheckoutAt).getTime(),
-          ),
-        );
-        return Math.max(
-          0,
-          Math.floor(
-            (new Date(schedule.endAt).getTime() - latestCheckout) / 60000,
-          ),
-        );
-      })
+      .map((schedule) =>
+        this.getScheduleEarlyLeaveMinutes(schedule, context.attendances),
+      )
       .filter((minutes) => minutes > 0);
-
-    const enabledDeductions = (context.paySheet.deductions || []).filter(
-      (item) => item.enable,
-    );
 
     // Chỉ nhận deduction fixed amount theo schema mới. Rule percentage hoặc
     // BY_SALARY_COEFFICIENT cũ bị bỏ qua và trả warning để không trừ nhầm tiền.
-    const supportedDeductions = enabledDeductions.filter(
-      (item) =>
-        (!item.amountType || item.amountType === "FIXED_AMOUNT") &&
-        (item.deductionType === "FIXED" ||
-          ["BY_OCCURRENCE", "BY_BLOCK"].includes(item.conditionType)),
-    );
-
     if (supportedDeductions.length !== enabledDeductions.length) {
       calculationWarnings.push("UNSUPPORTED_DEDUCTION_RULE");
     }

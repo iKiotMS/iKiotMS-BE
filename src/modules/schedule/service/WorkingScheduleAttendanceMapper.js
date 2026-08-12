@@ -227,89 +227,131 @@ function getScheduleCreatedTime(schedule) {
   return Number.isNaN(createdAt) ? 0 : createdAt;
 }
 
-function compareSchedulesForCanonical(left, right) {
-  const leftHasAttendance = getScheduleUsers(left).some(hasAttendance);
-  const rightHasAttendance = getScheduleUsers(right).some(hasAttendance);
+function compareScheduleAssignments(left, right) {
+  const leftHasAttendance = hasAttendance(left.user);
+  const rightHasAttendance = hasAttendance(right.user);
 
   if (leftHasAttendance !== rightHasAttendance) {
     return leftHasAttendance ? -1 : 1;
   }
 
   const createdAtDifference =
-    getScheduleCreatedTime(left) - getScheduleCreatedTime(right);
+    getScheduleCreatedTime(left.schedule) -
+    getScheduleCreatedTime(right.schedule);
   if (createdAtDifference !== 0) {
     return createdAtDifference;
   }
 
-  return getScheduleValueId(left._id).localeCompare(
-    getScheduleValueId(right._id),
+  return getScheduleValueId(left.schedule._id).localeCompare(
+    getScheduleValueId(right.schedule._id),
   );
 }
 
 /**
  * Dữ liệu cũ có thể chứa nhiều WorkingSchedule giống hệt nhau. Hàm này chỉ
- * chuẩn hóa response, không sửa DB. Mỗi khung giờ chỉ được trả một lần và
- * attendance thật được ưu tiên hơn trạng thái NOT_CHECKED_IN tổng hợp.
+ * chuẩn hóa response, không sửa DB. Chỉ phân ca trùng của cùng một nhân viên
+ * mới được gộp; hai nhân viên khác nhau làm cùng khung giờ vẫn là hai dữ liệu
+ * hợp lệ. Attendance thật được ưu tiên hơn NOT_CHECKED_IN tổng hợp.
  */
 function deduplicateWorkingSchedules(schedules) {
-  const groups = new Map();
+  const assignmentGroups = new Map();
 
   schedules.forEach((schedule) => {
-    const key = getDuplicateScheduleKey(schedule);
-    const group = groups.get(key) || [];
-    group.push(schedule);
-    groups.set(key, group);
-  });
+    const scheduleKey = getDuplicateScheduleKey(schedule);
 
-  return Array.from(groups.values()).map((group) => {
-    const orderedSchedules = [...group].sort(compareSchedulesForCanonical);
-    const canonicalSchedule = orderedSchedules[0];
-    const selectedUsers = new Map();
-    const attendanceCountByUser = new Map();
+    getScheduleUsers(schedule).forEach((user) => {
+      const userId = getUserIdText(user);
+      const assignmentKey = `${scheduleKey}:${userId}`;
+      const group = assignmentGroups.get(assignmentKey) || [];
 
-    orderedSchedules.forEach((schedule) => {
-      getScheduleUsers(schedule).forEach((user) => {
-        const userId = getUserIdText(user);
-        const currentUser = selectedUsers.get(userId);
-
-        if (
-          !currentUser ||
-          (!hasAttendance(currentUser) && hasAttendance(user))
-        ) {
-          selectedUsers.set(userId, user);
-        }
-
-        if (hasAttendance(user)) {
-          attendanceCountByUser.set(
-            userId,
-            (attendanceCountByUser.get(userId) || 0) + 1,
-          );
-        }
-      });
+      group.push({ schedule, user, userId });
+      assignmentGroups.set(assignmentKey, group);
     });
-
-    const attendanceConflictUserIds = Array.from(
-      attendanceCountByUser.entries(),
-    )
-      .filter(([, count]) => count > 1)
-      .map(([userId]) => userId);
-    const canonicalScheduleId = getScheduleValueId(canonicalSchedule._id);
-    const duplicateScheduleIds = orderedSchedules
-      .map((schedule) => getScheduleValueId(schedule._id))
-      .filter((scheduleId) => scheduleId !== canonicalScheduleId);
-
-    return {
-      ...canonicalSchedule,
-      userId: Array.from(selectedUsers.values()),
-      dataIntegrity: {
-        isDuplicate: duplicateScheduleIds.length > 0,
-        duplicateCount: orderedSchedules.length,
-        duplicateScheduleIds,
-        attendanceConflict: attendanceConflictUserIds.length > 0,
-        attendanceConflictUserIds,
-      },
-    };
   });
+
+  const responseByScheduleId = new Map();
+  const integrityByScheduleId = new Map();
+
+  schedules.forEach((schedule) => {
+    const scheduleId = getScheduleValueId(schedule._id);
+    responseByScheduleId.set(scheduleId, {
+      ...schedule,
+      userId: [],
+    });
+    integrityByScheduleId.set(scheduleId, {
+      duplicateScheduleIds: new Set(),
+      duplicateUserIds: new Set(),
+      attendanceConflictUserIds: new Set(),
+    });
+  });
+
+  assignmentGroups.forEach((group) => {
+    const orderedAssignments = [...group].sort(compareScheduleAssignments);
+    const canonicalAssignment = orderedAssignments[0];
+    const canonicalScheduleId = getScheduleValueId(
+      canonicalAssignment.schedule._id,
+    );
+    const responseSchedule = responseByScheduleId.get(canonicalScheduleId);
+    responseSchedule.userId.push(canonicalAssignment.user);
+
+    const duplicateScheduleIds = [
+      ...new Set(
+        orderedAssignments
+          .slice(1)
+          .map(({ schedule }) => getScheduleValueId(schedule._id))
+          .filter((scheduleId) => scheduleId !== canonicalScheduleId),
+      ),
+    ];
+
+    if (!duplicateScheduleIds.length) {
+      return;
+    }
+
+    const integrity = integrityByScheduleId.get(canonicalScheduleId);
+    duplicateScheduleIds.forEach((scheduleId) => {
+      integrity.duplicateScheduleIds.add(scheduleId);
+    });
+    integrity.duplicateUserIds.add(canonicalAssignment.userId);
+
+    const attendanceCount = orderedAssignments.filter(({ user }) => {
+      return hasAttendance(user);
+    }).length;
+    if (attendanceCount > 1) {
+      integrity.attendanceConflictUserIds.add(canonicalAssignment.userId);
+    }
+  });
+
+  return schedules
+    .map((schedule) => {
+      const scheduleId = getScheduleValueId(schedule._id);
+      const responseSchedule = responseByScheduleId.get(scheduleId);
+
+      if (!responseSchedule.userId.length) {
+        return null;
+      }
+
+      const integrity = integrityByScheduleId.get(scheduleId);
+      const duplicateScheduleIds = Array.from(
+        integrity.duplicateScheduleIds,
+      );
+      const duplicateUserIds = Array.from(integrity.duplicateUserIds);
+      const attendanceConflictUserIds = Array.from(
+        integrity.attendanceConflictUserIds,
+      );
+
+      return {
+        ...responseSchedule,
+        dataIntegrity: {
+          isDuplicate: duplicateScheduleIds.length > 0,
+          duplicateCount: duplicateScheduleIds.length + 1,
+          duplicateScheduleIds,
+          duplicateUserIds,
+          attendanceConflict: attendanceConflictUserIds.length > 0,
+          attendanceConflictUserIds,
+        },
+      };
+    })
+    .filter(Boolean);
 }
 
 module.exports = {
